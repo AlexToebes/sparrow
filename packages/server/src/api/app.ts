@@ -5,7 +5,7 @@ import { DomainError } from '../core/errors.js';
 import { defaultStaleAfterHours } from '../core/health-status.js';
 import type { DriveDataProvider } from '../core/provider-port.js';
 import type { AppDb } from '../db/client.js';
-import { createNoneProvider } from '../providers/none/index.js';
+import { noProvider } from './no-provider.js';
 import { routeModules } from './routes.js';
 
 export interface AppDeps {
@@ -16,6 +16,11 @@ export interface AppDeps {
   staleAfterHours?: number | undefined;
   /** R44: directory for the automatic pre-import backup. Defaults to `$DATA_DIR/exports`. */
   backupDir?: string | undefined;
+  /** Turns on Fastify's request and error logging (main.ts does; tests leave it off). */
+  logger?: boolean | undefined;
+  /** Shown read-only by GET /api/config. */
+  pollIntervalMinutes?: number | undefined;
+  dataDir?: string | undefined;
 }
 
 export interface ErrorBody {
@@ -37,13 +42,26 @@ const sendError = (
 const DOMAIN_STATUS = { 'not-found': 404, conflict: 409, invalid: 400 } as const;
 
 export function buildApp(deps: AppDeps): FastifyInstance {
-  const app = Fastify();
+  const app = Fastify({ logger: deps.logger ?? false });
   app.decorate('db', deps.db);
-  app.decorate('provider', deps.provider ?? createNoneProvider());
+  app.decorate('provider', deps.provider ?? noProvider);
   app.decorate('staleAfterHours', deps.staleAfterHours ?? defaultStaleAfterHours(app.provider));
+  app.decorate('pollIntervalMinutes', deps.pollIntervalMinutes ?? 5);
+  app.decorate('dataDir', deps.dataDir ?? process.env.DATA_DIR ?? '/data');
   app.decorate(
     'backupDir',
     deps.backupDir ?? path.join(process.env.DATA_DIR ?? '/data', 'exports'),
+  );
+
+  // An empty body with a JSON content type (a bodyless POST from fetch, curl -H) is {}, not a 400.
+  const parseJson = app.getDefaultJsonParser('error', 'error');
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    if (typeof body === 'string' && body.trim() === '') return done(null, {});
+    parseJson(req, body as string, done);
+  });
+
+  app.setNotFoundHandler((req, reply) =>
+    sendError(reply, 404, 'not-found', `Route ${req.method} ${req.url.split('?')[0]} not found`),
   );
 
   app.setErrorHandler((err: FastifyError | Error, _req, reply) => {
@@ -78,5 +96,7 @@ declare module 'fastify' {
     provider: DriveDataProvider;
     staleAfterHours: number;
     backupDir: string;
+    pollIntervalMinutes: number;
+    dataDir: string;
   }
 }

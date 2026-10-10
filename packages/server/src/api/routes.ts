@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { AppDb } from '../db/client.js';
 import { backupRoutes } from './backup.js';
+import { configInfoRoutes } from './config-info.js';
 import { assignmentRoutes } from './assignment.js';
 import { driveRoutes } from './drives.js';
 import { inboxRoutes } from './inbox.js';
@@ -31,4 +32,6 @@ export const routeModules: FastifyPluginAsync<{ db: AppDb }>[] = [
   statusRoutes,
   // Step 10: export and import routes
   backupRoutes,
+  // Step 14: read-only effective config
+  configInfoRoutes,
 ];

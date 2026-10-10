@@ -11,12 +11,6 @@ function Placeholder({ title, note }: { title: string; note: string }) {
   );
 }
 
-export const DrivesPage = () => (
-  <Placeholder title="Drives" note="The drive list and drive pages arrive in a later step." />
-);
 export const InboxPage = () => (
   <Placeholder title="Inbox" note="New drives found by the provider will be resolved here." />
-);
-export const SettingsPage = () => (
-  <Placeholder title="Settings" note="Layout editing, pools and export arrive in a later step." />
 );
