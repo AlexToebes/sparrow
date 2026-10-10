@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createProvider } from '../../src/providers/index.js';
-import { runProviderContract } from '../../src/providers/contract.js';
+import { runProviderContract } from './contract.js';
 import { createNoneProvider } from '../../src/providers/none/index.js';
 
 runProviderContract('none', createNoneProvider, () => ({

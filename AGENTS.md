@@ -60,11 +60,10 @@ Do not add a dependency that is not in this table without a stated reason in the
     │   │   │   ├── port.ts       # DriveDataProvider interface (R48)
     │   │   │   ├── none/
     │   │   │   ├── scrutiny/     # adapter, mapping, fixtures in test/fixtures
-    │   │   │   ├── contract.ts   # shared contract tests (R57)
     │   │   │   └── index.ts      # registry
     │   │   ├── api/              # Fastify routes, thin: parse, call core, return
     │   │   └── main.ts           # config, wiring, startup
-    │   └── test/
+    │   └── test/             # includes providers/contract.ts, the shared contract tests (R57)
     └── web/
         └── src/                  # pages, components, api hooks
 ```

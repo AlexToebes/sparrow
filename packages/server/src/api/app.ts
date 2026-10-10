@@ -7,6 +7,7 @@ import type { DriveDataProvider } from '../core/provider-port.js';
 import type { AppDb } from '../db/client.js';
 import { noProvider } from './no-provider.js';
 import { routeModules } from './routes.js';
+import { isClientRoute, registerWebBundle } from './static.js';
 
 export interface AppDeps {
   db: AppDb;
@@ -21,6 +22,8 @@ export interface AppDeps {
   /** Shown read-only by GET /api/config. */
   pollIntervalMinutes?: number | undefined;
   dataDir?: string | undefined;
+  /** R16: built web bundle to serve (index.html fallback for client routes). Unset = API only. */
+  webDistDir?: string | undefined;
 }
 
 export interface ErrorBody {
@@ -60,9 +63,17 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     parseJson(req, body as string, done);
   });
 
-  app.setNotFoundHandler((req, reply) =>
-    sendError(reply, 404, 'not-found', `Route ${req.method} ${req.url.split('?')[0]} not found`),
-  );
+  const webEnabled = deps.webDistDir ? registerWebBundle(app, deps.webDistDir) : false;
+
+  app.setNotFoundHandler((req, reply) => {
+    if (webEnabled && isClientRoute(req.method, req.url)) return reply.sendFile('index.html');
+    return sendError(
+      reply,
+      404,
+      'not-found',
+      `Route ${req.method} ${req.url.split('?')[0]} not found`,
+    );
+  });
 
   app.setErrorHandler((err: FastifyError | Error, _req, reply) => {
     if (err instanceof DomainError) {

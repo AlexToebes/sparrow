@@ -8,6 +8,9 @@ import { seedInitialLayout } from './core/layout.js';
 import { openDatabase } from './db/client.js';
 import { createProvider } from './providers/index.js';
 
+/** Repo layout: packages/server/dist/main.js -> packages/web/dist. The image sets WEB_DIST_DIR. */
+const DEFAULT_WEB_DIST_DIR = fileURLToPath(new URL('../../web/dist', import.meta.url));
+
 export const SERVICE_NAME = 'sparrow-server';
 
 export async function start(env: Record<string, string | undefined> = process.env) {
@@ -23,6 +26,7 @@ export async function start(env: Record<string, string | undefined> = process.en
     pollIntervalMinutes: config.POLL_INTERVAL_MINUTES,
     dataDir: config.DATA_DIR,
     logger: true,
+    webDistDir: config.WEB_DIST_DIR ?? DEFAULT_WEB_DIST_DIR,
     backupDir: path.join(config.DATA_DIR, 'exports'),
   });
   const poller = createPoller({

@@ -8,3 +8,4 @@ data
 .github
 *.md
 !README.md
+.claude
