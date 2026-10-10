@@ -1,0 +1,879 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sparrow · ops console (design c)</title>
+<style>
+:root{
+  --bg:#0a0d12;--panel:#10151c;--panel2:#161d27;--line:#243041;
+  --text:#d6dde6;--muted:#7d8896;--dim:#4f5a69;--acc:#4fd1c5;--acc-ink:#04201d;
+  --ok:#3fb950;--warn:#e3a72f;--fail:#f25f5c;--unk:#9aa4b0;--info:#8ab4f8;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono","DejaVu Sans Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: light){
+  /* the console is dark by design; keep the same tokens so both schemes look identical */
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--text)}
+body{margin:0;font:13px/1.4 var(--sans);-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+.dim{color:var(--muted)}
+.sm{font-size:11px}
+kbd{font:11px var(--mono);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;color:var(--muted);background:var(--panel2);line-height:16px;white-space:nowrap}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+/* header */
+.top{position:sticky;top:0;z-index:16;display:flex;align-items:center;gap:14px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.brand{font:600 14px var(--mono);letter-spacing:.3px;white-space:nowrap}
+.brand .logo{color:var(--acc)}
+.tabs{display:none;gap:4px}
+.tabs button{display:flex;align-items:center;gap:6px;background:none;border:1px solid transparent;border-radius:4px;padding:4px 8px;color:var(--muted);cursor:pointer;min-height:30px}
+.tabs button[aria-current="page"]{color:var(--text);border-color:var(--line);background:var(--panel2)}
+.status{margin-left:auto;display:flex;align-items:center;gap:6px;font:11px var(--mono);color:var(--muted);white-space:nowrap;flex-wrap:wrap}
+.status .ok-t{color:var(--ok)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px var(--ok)}
+.badge{font:600 10px var(--mono);background:var(--warn);color:#1d1400;border-radius:8px;padding:0 5px;min-width:16px;text-align:center;display:none}
+.badge.on{display:inline-block}
+
+/* phone bottom nav */
+.bnav{position:fixed;bottom:0;left:0;right:0;z-index:12;display:flex;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+.bnav button{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;background:none;border:0;color:var(--muted);min-height:52px;cursor:pointer;font:11px var(--mono);position:relative}
+.bnav button span.i{font-size:15px;line-height:1}
+.bnav button[aria-current="page"]{color:var(--acc)}
+.bnav button[aria-current="page"]::before{content:"";position:absolute;top:0;left:30%;right:30%;height:2px;background:var(--acc)}
+.bnav .badge{position:absolute;top:6px;margin-left:18px}
+
+/* desktop hint bar */
+.hints{display:none}
+
+main{padding:12px 12px 84px;max-width:1400px;margin:0 auto}
+
+/* generic panels */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:hidden;min-width:0}
+.ph{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);flex-wrap:wrap;font-size:12px}
+.ph b{font:600 12px var(--mono);text-transform:uppercase;letter-spacing:.5px}
+.tag{font:11px var(--mono);color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:0 5px;white-space:nowrap}
+.btn{display:inline-flex;align-items:center;gap:6px;justify-content:center;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:6px 10px;cursor:pointer;min-height:36px;font-size:12px;white-space:nowrap}
+.btn.sm{min-height:28px;padding:3px 8px;font-size:11px}
+.btn.pri{border-color:var(--acc);color:var(--acc)}
+.btn.danger{border-color:var(--fail);color:var(--fail)}
+.btn.solid{background:var(--fail);color:#1a0505;border-color:var(--fail);font-weight:600}
+.btn.solid.pri{background:var(--acc);border-color:var(--acc);color:var(--acc-ink)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn kbd{border-color:currentColor;opacity:.7;background:none}
+.banner{margin:0 0 10px;padding:8px 12px;border:1px solid var(--warn);border-left-width:4px;border-radius:4px;background:rgba(227,167,47,.08);font-size:12px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font:11px var(--mono);color:var(--muted);margin:0 0 10px}
+.legend span{white-space:nowrap}
+
+/* health */
+.hl-ok{color:var(--ok)} .hl-warning{color:var(--warn)} .hl-failed{color:var(--fail)} .hl-unknown{color:var(--unk)}
+.stale-tag{color:var(--warn)}
+
+/* layout / bay grids */
+.grids{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}
+.gcard .bay{display:grid;gap:6px;padding:8px}
+.slot{display:flex;flex-direction:column;gap:2px;text-align:left;background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--unk);border-radius:4px;padding:5px 6px 6px;min-height:92px;cursor:pointer;min-width:0;position:relative}
+.slot .top2{display:flex;justify-content:space-between;align-items:center;gap:4px;font:11px var(--mono);color:var(--muted)}
+.slot .ser{font:600 12px var(--mono);color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slot .sub{font:11px var(--mono);color:var(--muted);white-space:nowrap}
+.slot .hlab{font:600 11px var(--mono);white-space:nowrap}
+.slot.h-ok{border-left-color:var(--ok)}
+.slot.h-warning{border-left-color:var(--warn)}
+.slot.h-failed{border-left-color:var(--fail)}
+.slot.h-unknown{border-left-color:var(--unk)}
+.slot.stale{background-image:repeating-linear-gradient(135deg,transparent 0 6px,rgba(227,167,47,.09) 6px 12px)}
+.slot .flag{margin-top:auto;align-self:flex-start;font:700 10px var(--mono);padding:1px 4px;border-radius:3px;background:rgba(227,167,47,.16);color:var(--warn);white-space:nowrap}
+.slot.missing{border:1px dashed var(--fail);border-left:3px solid var(--fail)}
+.slot.missing .flag{background:rgba(242,95,92,.18);color:var(--fail)}
+.slot.empty{border-style:dashed;border-color:var(--dim);background:transparent;align-items:center;justify-content:center;text-align:center;color:var(--muted)}
+.slot.empty .em{font:12px var(--mono)}
+.slot.empty .add{font:11px var(--mono);color:var(--acc)}
+.slot.sel{outline:2px solid var(--acc);outline-offset:1px}
+
+/* lists (drives, spares, inbox rows) */
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.chips{display:flex;gap:4px;flex-wrap:wrap}
+.chip{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:4px 10px;color:var(--muted);cursor:pointer;font:12px var(--mono);min-height:32px}
+.chip span{color:var(--dim)}
+.chip.on{color:var(--acc);border-color:var(--acc)}
+.search{flex:1;min-width:200px;position:relative}
+.search input{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:7px 10px;min-height:36px;font:13px var(--mono)}
+.search input::placeholder{color:var(--dim)}
+.search kbd{position:absolute;right:6px;top:50%;transform:translateY(-50%)}
+.row{display:grid;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);align-items:center;font:12px var(--mono);cursor:pointer;min-width:0}
+.row:last-child{border-bottom:0}
+.row:hover{background:rgba(255,255,255,.02)}
+.row.cur{background:var(--panel2);box-shadow:inset 2px 0 var(--acc)}
+.row > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .st{grid-area:st} .row .ser{grid-area:ser;font-weight:600} .row .mdl{grid-area:mdl;color:var(--muted)}
+.row .cap{grid-area:cap} .row .loc{grid-area:loc;color:var(--muted)} .row .hl{grid-area:hl}
+.row .age{color:var(--muted);margin-left:4px} .row .age.stale{color:var(--warn)}
+.row.head{cursor:default;font:600 10px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.6px;padding-top:6px;padding-bottom:6px;background:var(--panel2)}
+.row.head:hover{background:var(--panel2)}
+.pill{display:inline-block;font:700 10px var(--mono);text-transform:uppercase;letter-spacing:.4px;border:1px solid currentColor;border-radius:3px;padding:0 4px;line-height:15px}
+.pill.installed{color:var(--acc)}
+.pill.spare{color:var(--info)}
+.pill.retired{color:var(--unk)}
+.empty-note{padding:14px;color:var(--muted);font-size:12px}
+.sec-sub{padding:8px 10px;font:11px var(--mono);color:var(--muted);border-bottom:1px solid var(--line)}
+
+/* inbox */
+.stack{display:grid;gap:12px}
+.irow{display:flex;gap:10px;align-items:flex-start;padding:9px 10px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.irow:last-child{border-bottom:0}
+.ir-main{flex:1 1 220px;min-width:0;font:12px var(--mono)}
+.ir-main .ser{font:600 13px var(--mono)}
+.ir-main .sm{color:var(--muted);font-size:11px;margin-top:2px}
+.sugg{margin-top:4px;color:var(--info);font:12px var(--sans)}
+.ir-act{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.ir-form{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.ir-form select,.ir-form input{flex:1 1 130px;min-height:36px;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:4px 6px;font:12px var(--mono);color:var(--text)}
+.ck{display:flex;align-items:center;min-height:36px;padding-right:2px}
+.ck input{width:18px;height:18px;accent-color:var(--acc)}
+.bulk{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--panel2)}
+.bulk select{min-height:34px;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:4px 6px;font:12px var(--mono);color:var(--text)}
+.bulk label{display:flex;gap:6px;align-items:center;font:12px var(--mono);color:var(--muted);min-height:34px}
+.bulk .spacer{margin-left:auto}
+.unid{font:12px var(--mono);color:var(--muted);padding:9px 10px;display:flex;gap:10px;flex-wrap:wrap;align-items:baseline}
+.unid b{color:var(--text)}
+
+/* detail sheet (side panel on desktop, bottom sheet on phone) */
+.sheet{position:fixed;z-index:15;top:50px;right:0;bottom:30px;width:400px;background:var(--panel);border-left:1px solid var(--line);display:none;overflow:auto;-webkit-overflow-scrolling:touch}
+.sheet.open{display:block}
+.sh-head{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:1}
+.sh-head .ser{font:700 17px var(--mono);letter-spacing:.3px;overflow-wrap:anywhere}
+.sh-head .x{margin-left:auto}
+.sh-body{padding:12px 14px 16px}
+.sh-body h4{margin:16px 0 6px;font:600 10px var(--mono);text-transform:uppercase;letter-spacing:.7px;color:var(--muted)}
+.sh-foot{position:sticky;bottom:0;background:var(--panel);border-top:1px solid var(--line);padding:6px 14px;font:11px var(--mono);color:var(--muted);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.kv{display:grid;grid-template-columns:110px minmax(0,1fr);gap:6px 10px;margin:0;font:12px var(--mono)}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;overflow-wrap:anywhere}
+.mbanner{border:1px dashed var(--fail);border-radius:4px;padding:8px 10px;background:rgba(242,95,92,.07);font-size:12px;margin-bottom:4px}
+.acts{display:flex;gap:6px;flex-wrap:wrap}
+.log{list-style:none;margin:0;padding:0;border-left:1px solid var(--line);font:12px var(--mono)}
+.log li{position:relative;padding:0 0 9px 12px}
+.log li::before{content:"";position:absolute;left:-4px;top:5px;width:7px;height:7px;border-radius:50%;background:var(--line)}
+.log li:first-child::before{background:var(--acc)}
+.log time{display:block;color:var(--muted);font-size:11px}
+
+/* dialogs */
+dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;width:min(480px,calc(100vw - 24px));padding:0;max-height:88vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+dialog::backdrop{background:rgba(3,5,8,.7)}
+.dlgf{padding:16px}
+.dlgf h3{margin:0 0 2px;font:700 15px var(--mono)}
+.dlgf .lead{margin:0 0 12px;font:12px var(--mono);color:var(--muted)}
+.dlgf label.f{display:grid;gap:4px;margin:10px 0;font:11px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.dlgf input,.dlgf select,.dlgf textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:8px;min-height:38px;font:13px var(--mono);color:var(--text);text-transform:none;letter-spacing:0}
+.dlgf textarea{min-height:56px;font-family:var(--sans)}
+fieldset{border:1px solid var(--line);border-radius:6px;padding:8px 10px 6px;margin:10px 0}
+legend{font:11px var(--mono);color:var(--muted);padding:0 4px;text-transform:uppercase;letter-spacing:.4px}
+.radio{display:flex;gap:10px;align-items:flex-start;padding:6px 0;cursor:pointer;min-height:36px}
+.dlgf input[type=radio]{width:18px;height:18px;min-height:0;padding:0;flex:0 0 auto;margin:3px 0 0;accent-color:var(--fail)}
+.dlgf input[type=radio]{-webkit-appearance:none;appearance:none;border-radius:50%;border:1.5px solid var(--muted);background:var(--bg)}
+.dlgf input[type=radio]:checked{border-color:var(--fail);background:radial-gradient(circle,var(--fail) 0 45%,var(--bg) 52%)}
+.dlgf input[type=radio]:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.radio > span{flex:1;min-width:0}
+.radio b{font:600 12px var(--mono)}
+.radio small{display:block;color:var(--muted);font-size:11px}
+.cmp{display:grid;gap:6px;margin:4px 0 8px;font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:8px;background:var(--bg)}
+.cmp .r{display:grid;grid-template-columns:96px 52px 1fr;gap:8px;align-items:center}
+.cmp .bar{height:8px;background:var(--panel2);border-radius:2px;overflow:hidden}
+.cmp .bar i{display:block;height:100%;background:var(--acc)}
+.cmp .bar i.lo{background:var(--muted)}
+.dlg-foot{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.dlg-foot .btn{flex:1 1 auto}
+.shortcuts{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font:12px var(--mono);margin:8px 0 0}
+.shortcuts kbd{justify-self:start}
+.shortcuts span{color:var(--muted);align-self:center}
+.toast{position:fixed;left:50%;transform:translateX(-50%) translateY(20px);bottom:70px;background:var(--panel2);border:1px solid var(--acc);color:var(--text);padding:8px 12px;border-radius:4px;font:12px var(--mono);opacity:0;transition:opacity .15s,transform .15s;pointer-events:none;z-index:40;max-width:calc(100vw - 32px)}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ---------- phone (default) ---------- */
+.row.head{display:none}
+.row{grid-template-columns:1fr auto;grid-template-areas:"ser st" "mdl cap" "loc hl"}
+.row .loc{font-size:11px}
+.row .mdl{font-size:11px}
+.status .hide-sm{display:none}
+.grids .gcard .ph .tag.hide-sm{display:none}
+.bay{grid-template-columns:repeat(4,minmax(0,1fr))}
+
+/* ---------- tablet/desktop ---------- */
+@media (min-width:760px){
+  .tabs{display:flex}
+  .bnav{display:none}
+  main{padding:14px 16px 46px}
+  .status .hide-sm{display:inline}
+  .hints{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:12;height:30px;align-items:center;gap:16px;padding:0 14px;background:var(--panel);border-top:1px solid var(--line);font:11px var(--mono);color:var(--muted);white-space:nowrap;overflow:hidden}
+  .hints span{display:inline-flex;gap:5px;align-items:center}
+  .hints .r{margin-left:auto}
+  .row{grid-template-columns:96px 120px minmax(0,1fr) 70px minmax(0,150px) 140px;grid-template-areas:"st ser mdl cap loc hl"}
+  .row .age{margin-left:6px}
+  .row.head{display:grid}
+  .sheet{width:400px}
+  .ir-form select,.ir-form input{flex:0 0 150px}
+  .ir-main{flex-basis:260px}
+  .sheet .sh-body{padding-bottom:20px}
+  .bay{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media (min-width:960px){
+  .grids{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)}
+  .grids .g-front{grid-row:span 2}
+  .slot{min-height:104px}
+}
+@media (max-width:759px){
+  .sheet{top:auto;left:0;right:0;bottom:0;width:auto;max-height:86vh;border-left:0;border-top:1px solid var(--line);border-radius:12px 12px 0 0;box-shadow:0 -12px 40px rgba(0,0,0,.6);padding-bottom:env(safe-area-inset-bottom)}
+  .sheet .sh-head{border-radius:12px 12px 0 0}
+  .sheet::before{content:"";display:block;width:36px;height:4px;border-radius:2px;background:var(--line);margin:6px auto -2px;position:sticky;top:0;z-index:2}
+  .toolbar .search{min-width:0;flex-basis:100%}
+  .irow .ir-act{width:100%}
+  .ir-form{width:100%;justify-content:stretch}
+  .irow .ir-act .btn{flex:1}
+  .dlg-foot .btn{flex:1 1 40%}
+}
+@media (prefers-reduced-motion: reduce){ .toast{transition:none} }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand"><span class="logo">▣</span> sparrow<span class="dim"> / ops</span></div>
+  <nav class="tabs" aria-label="Screens">
+    <button data-route="layout"><kbd>1</kbd> Layout</button>
+    <button data-route="drives"><kbd>2</kbd> Drives</button>
+    <button data-route="inbox"><kbd>3</kbd> Inbox <span class="badge inboxBadge"></span></button>
+  </nav>
+  <div class="status" aria-live="polite">
+    <span class="dot" aria-hidden="true"></span>
+    <span>Scrutiny</span><span class="ok-t">reachable</span>
+    <span class="sep">·</span>
+    <span>last updated 2 min ago</span>
+    <button class="btn sm hide-sm" data-act="help" title="Keyboard shortcuts">? <kbd>?</kbd></button>
+  </div>
+</header>
+
+<main id="view"></main>
+
+<nav class="bnav" aria-label="Screens">
+  <button data-route="layout"><span class="i">▦</span>Layout</button>
+  <button data-route="drives"><span class="i">☰</span>Drives</button>
+  <button data-route="inbox"><span class="i">✉</span>Inbox<span class="badge inboxBadge"></span></button>
+</nav>
+
+<div class="hints" aria-hidden="true">
+  <span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> screens</span>
+  <span><kbd>/</kbd> search</span>
+  <span><kbd>j</kbd><kbd>k</kbd> move</span>
+  <span><kbd>↵</kbd> open</span>
+  <span><kbd>a</kbd> assign</span>
+  <span><kbd>r</kbd> retire</span>
+  <span><kbd>esc</kbd> close</span>
+  <span class="r"><kbd>?</kbd> all shortcuts</span>
+</div>
+
+<aside id="sheet" class="sheet" aria-label="Drive details"></aside>
+<dialog id="dlg" aria-labelledby="dlgTitle"></dialog>
+<div id="toast" class="toast" role="status"></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ---------------- constants and helpers ---------------- */
+const HOURS_STALE = 36;             // 1.5 x Scrutiny 24h interval (R28)
+const TODAY = '2026-10-10';
+const NOW_TS = '2026-10-10 12:04';
+const H = {
+  ok:{g:'✓',t:'OK',c:'var(--ok)'},
+  warning:{g:'▲',t:'WARN',c:'var(--warn)'},
+  failed:{g:'✕',t:'FAIL',c:'var(--fail)'},
+  unknown:{g:'?',t:'UNKN',c:'var(--unk)'}
+};
+const POOLS = {tank:'raidz2', apps:'mirror', 'boot-pool':'single'};
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const norm = s => String(s || '').trim().toUpperCase();
+
+/* ---------------- grids (one component, rows x cols) ---------------- */
+const grids = [
+  {id:'front', name:'Front bays', rows:2, cols:4, pool:'tank', slots:[
+    {id:'f1',tag:'#1',name:'slot 1'},{id:'f2',tag:'#2',name:'slot 2'},{id:'f3',tag:'#3',name:'slot 3'},{id:'f4',tag:'#4',name:'slot 4'},
+    {id:'f5',tag:'#5',name:'slot 5'},{id:'f6',tag:'#6',name:'slot 6'},{id:'f7',tag:'#7',name:'slot 7'},{id:'f8',tag:'#8',name:'slot 8'}]},
+  {id:'ssd', name:'Internal SSDs', rows:1, cols:2, pool:'apps', slots:[
+    {id:'ssdL',tag:'L',name:'left'},{id:'ssdR',tag:'R',name:'right'}]},
+  {id:'boot', name:'Boot', rows:1, cols:1, pool:'boot-pool', slots:[
+    {id:'boot',tag:'M.2',name:'M.2'}]}
+];
+const slotInfo = sid => {
+  for (const g of grids) { const s = g.slots.find(x => x.id === sid); if (s) return {g, s}; }
+  return null;
+};
+
+/* ---------------- mock data (invented serials) ---------------- */
+let drives = [
+  {id:'d1', serial:'ZL2ABC12', model:'HC-8T CMR', cap:8, type:'HDD', health:'ok', seen:0.03, status:'installed', slot:'f1', pool:'tank', role:'data', condition:'used', purchased:'2024-06-02', warranty:'2029-06-01', missing:false, note:'',
+    events:[['2024-06-14 10:02','installed · Front bays · slot 1 · tank / data'],['2024-06-02 16:40','record created · spare']]},
+  {id:'d2', serial:'ZL2ABD07', model:'HC-8T CMR', cap:8, type:'HDD', health:'ok', seen:0.03, status:'installed', slot:'f2', pool:'tank', role:'data', condition:'used', purchased:'2024-06-02', warranty:'2029-06-01', missing:false, note:'',
+    events:[['2024-06-14 10:05','installed · Front bays · slot 2 · tank / data'],['2024-06-02 16:41','record created · spare']]},
+  {id:'d3', serial:'ZL2ABD31', model:'HC-8T CMR', cap:8, type:'HDD', health:'ok', seen:0.05, status:'installed', slot:'f3', pool:'tank', role:'data', condition:'new', purchased:'2025-02-27', warranty:'2030-02-26', missing:false, note:'',
+    events:[['2025-03-14 11:20','installed · Front bays · slot 3 · tank / data (replaced ZL1RET09)'],['2025-02-27 09:00','record created · spare']]},
+  {id:'d4', serial:'ZL2ABE19', model:'HC-4T CMR', cap:4, type:'HDD', health:'warning', seen:0.03, status:'installed', slot:'f4', pool:'tank', role:'data', condition:'used', purchased:'2021-11-08', warranty:'', missing:false, note:'reallocated sectors 12 (provider)',
+    events:[['2025-06-02 10:30','installed · Front bays · slot 4 · tank / data'],['2021-11-08 12:00','record created · spare']]},
+  {id:'d5', serial:'ZL2ABE44', model:'HC-4T CMR', cap:4, type:'HDD', health:'ok', seen:0.03, status:'installed', slot:'f5', pool:'tank', role:'data', condition:'used', purchased:'2021-11-08', warranty:'', missing:false, note:'',
+    events:[['2025-06-02 10:33','installed · Front bays · slot 5 · tank / data']]},
+  {id:'d6', serial:'ZL2ABF02', model:'HC-4T CMR', cap:4, type:'HDD', health:'failed', seen:0.03, status:'installed', slot:'f6', pool:'tank', role:'data', condition:'used', purchased:'2021-11-08', warranty:'', missing:false, note:'SMART failed 2026-10-08',
+    events:[['2026-10-08 06:00','SMART failed (provider) · health FAIL'],['2025-06-02 10:36','installed · Front bays · slot 6 · tank / data']]},
+  {id:'d7', serial:'ZL2ABF77', model:'HC-8T CMR', cap:8, type:'HDD', health:'ok', seen:96, status:'installed', slot:'f8', pool:'tank', role:'data', condition:'used', purchased:'2024-06-02', warranty:'2029-06-01', missing:true, note:'',
+    events:[['2026-10-06 00:00','provider stopped reporting · flagged missing'],['2024-06-14 10:10','installed · Front bays · slot 8 · tank / data']]},
+  {id:'d8', serial:'PX4TR118', model:'SSD-2T SATA', cap:2, type:'SSD', health:'ok', seen:0.04, status:'installed', slot:'ssdL', pool:'apps', role:'data', condition:'used', purchased:'2025-01-15', warranty:'2028-01-14', missing:false, note:'',
+    events:[['2025-01-20 09:00','installed · Internal SSDs · left · apps / data']]},
+  {id:'d9', serial:'PX4TR133', model:'SSD-2T SATA', cap:2, type:'SSD', health:'ok', seen:0.04, status:'installed', slot:'ssdR', pool:'apps', role:'data', condition:'used', purchased:'2025-01-15', warranty:'2028-01-14', missing:false, note:'',
+    events:[['2025-01-20 09:04','installed · Internal SSDs · right · apps / data']]},
+  {id:'d10', serial:'NV7QC031', model:'NVMe-1T', cap:1, type:'NVMe', health:'ok', seen:72, status:'installed', slot:'boot', pool:'boot-pool', role:'os', condition:'used', purchased:'2025-11-02', warranty:'', missing:false, note:'collector gives no data since 3 days',
+    events:[['2025-11-20 09:00','installed · Boot · M.2 · boot-pool / os']]},
+  {id:'s1', serial:'ZL4NEW01', model:'HC-8T CMR', cap:8, type:'HDD', health:'unknown', seen:null, status:'spare', slot:null, pool:null, role:null, condition:'new', purchased:'2026-08-02', warranty:'2031-08-01', missing:false, note:'',
+    events:[['2026-08-02 14:00','record created · spare · condition new']]},
+  {id:'s2', serial:null, model:'HC-8T CMR', cap:8, type:'HDD', health:'unknown', seen:null, status:'spare', slot:null, pool:null, role:null, condition:'used', tested:'2026-09-20', purchased:'', warranty:'', missing:false, note:'serial not recorded yet',
+    events:[['2026-09-20 18:30','tested · 0 reallocated sectors'],['2026-08-14 10:00','record created · spare (serial not recorded)']]},
+  {id:'s3', serial:'PX7SP002', model:'SSD-1T SATA', cap:1, type:'SSD', health:'unknown', seen:null, status:'spare', slot:null, pool:null, role:null, condition:'tested', tested:'2026-09-28', purchased:'', warranty:'', missing:false, note:'',
+    events:[['2026-09-28 19:00','tested · spare'],['2026-09-01 10:00','record created · spare']]},
+  {id:'r1', serial:'ZL1RET09', model:'HC-4T CMR', cap:4, type:'HDD', health:'failed', seen:null, status:'retired', slot:null, pool:null, role:null, condition:'used', purchased:'', warranty:'', missing:false, note:'SMART failed; pulled from tank',
+    reason:'failed', retiredOn:'2025-03-14', replacedBy:'d3',
+    events:[['2025-03-14 11:00','retired · reason failed · replaced by ZL2ABD31'],['2025-03-14 10:50','removed from Front bays · slot 3'],['2024-03-02 16:00','installed · Front bays · slot 3 · tank / data']]}
+];
+let disc = [
+  {id:'o1', serial:'zl4usd55', model:'HC-8T CMR', cap:8, type:'HDD', health:'ok', seen:0.2, suggest:'s2'},
+  {id:'o2', serial:'ZL5HK990', model:'HC-4T CMR', cap:4, type:'HDD', health:'ok', seen:0.1, suggest:null}
+];
+const unid = [{id:'u1', label:'nvme0', note:'empty record · no serial, no WWN · last report 2026-07-01'}];
+let imp = [
+  {id:'x1', serial:'ZL1OLD33', model:'HC-4T CMR', cap:4, type:'HDD', health:'failed', last:'2025-02-20'},
+  {id:'x2', serial:'ZL1OLD58', model:'HC-4T CMR', cap:3, type:'HDD', health:'warning', last:'2024-11-02'},
+  {id:'x3', serial:'PX3OLD12', model:'SSD-2T SATA', cap:2, type:'SSD', health:'unknown', last:'2025-06-30'}
+];
+
+/* ---------------- state ---------------- */
+const st = {route:'layout', filter:'all', query:'', cursor:0, openId:null, impSel:{}};
+
+/* ---------------- derived ---------------- */
+const byId = id => drives.find(d => d.id === id);
+const occupant = sid => drives.find(d => d.status === 'installed' && d.slot === sid);
+const reporting = () => drives.filter(d => d.status !== 'retired' && d.seen != null);
+const allStale = () => { const r = reporting(); return r.length > 0 && r.every(d => d.seen > HOURS_STALE); };
+const isStale = d => d.seen != null && d.status !== 'retired' && d.seen > HOURS_STALE && !allStale();
+const age = h => {
+  if (h == null) return '—';
+  if (h < 1) return Math.max(1, Math.round(h * 60)) + 'm';
+  if (h < 48) return Math.round(h) + 'h';
+  return Math.round(h / 24) + 'd';
+};
+const lbl = d => d.serial ? d.serial : '(no serial)';
+const where = d => {
+  if (d.status === 'installed' && d.slot) { const {g, s} = slotInfo(d.slot); return g.name + ' · ' + s.name; }
+  if (d.status === 'spare') return 'spare shelf';
+  return 'retired' + (d.retiredOn ? ' ' + d.retiredOn : '');
+};
+const capTxt = c => c + ' TB';
+const rowsCount = f => drives.filter(d => f === 'all' || d.status === f).length;
+const visibleDrives = () => {
+  const q = norm(st.query);
+  return drives.filter(d => (st.filter === 'all' || d.status === st.filter) &&
+    (!q || norm(d.serial).includes(q) || norm(d.model).includes(q)));
+};
+const spareDesc = id => { const s = byId(id); return s ? `${lbl(s)} · ${capTxt(s.cap)} · ${s.model}` : ''; };
+
+/* ---------------- toast ---------------- */
+let toastT;
+function toast(msg){
+  const el = $('#toast');
+  el.textContent = msg; el.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 2600);
+}
+function log(d, text, when = NOW_TS){ d.events.unshift([when, text]); }
+
+/* ---------------- dialogs ---------------- */
+const dlg = $('#dlg');
+function openDlg(html, mount){
+  dlg.innerHTML = html;
+  if (!dlg.open) dlg.showModal();
+  if (mount) mount(dlg);
+  const first = dlg.querySelector('input:not([disabled]),select,button.solid, button.btn');
+  first && first.focus({preventScroll:true});
+}
+function closeDlg(){ if (dlg.open) dlg.close(); }
+dlg.addEventListener('click', e => { if (e.target === dlg) closeDlg(); });
+
+function confirmDlg({title, body, ok, danger=false, fn}){
+  openDlg(`<div class="dlgf">
+    <h3 id="dlgTitle">${esc(title)}</h3>
+    <p class="lead" style="font-family:var(--sans);font-size:13px;color:var(--text)">${body}</p>
+    <div class="dlg-foot">
+      <button class="btn" data-act="closeDlg">Cancel <kbd>esc</kbd></button>
+      <button class="btn ${danger ? 'danger solid' : 'pri solid'}" id="cfOk">${esc(ok)}</button>
+    </div></div>`, d => {
+      d.querySelector('#cfOk').onclick = () => { closeDlg(); fn(); };
+    });
+}
+
+function openRetire(d, preset = ''){
+  const isRma = preset === 'rma';
+  const others = drives.filter(x => x.id !== d.id && x.status !== 'retired');
+  const opts = others.map(x => `<option value="${x.id}">${esc(lbl(x))} · ${capTxt(x.cap)} · ${x.status}</option>`).join('');
+  openDlg(`<form class="dlgf" id="rf" novalidate>
+    <h3 id="dlgTitle">${isRma ? 'Send for RMA' : 'Retire'} ${esc(lbl(d))}</h3>
+    <p class="lead">${esc(d.model)} · ${capTxt(d.cap)} · ${esc(where(d))}</p>
+    <fieldset>
+      <legend>Reason (required)</legend>
+      <label class="radio"><input type="radio" name="reason" value="failed" ${preset ? 'checked' : ''}><span><b>failed</b><small>SMART or provider reports failure</small></span></label>
+      <label class="radio"><input type="radio" name="reason" value="replaced"><span><b>replaced</b><small>swapped for another drive</small></span></label>
+      <label class="radio"><input type="radio" name="reason" value="other"><span><b>other</b><small>write a note below</small></span></label>
+    </fieldset>
+    <label class="f">Retired on
+      <input type="date" name="date" value="${TODAY}"></label>
+    <label class="f">Replaced by (optional)
+      <select name="by"><option value="">— none —</option>${opts}</select></label>
+    <div id="cmp"></div>
+    <label class="f">Note
+      <textarea name="note" rows="2" placeholder="e.g. SMART failed, RMA #…"></textarea></label>
+    <div class="dlg-foot">
+      <button type="button" class="btn" data-act="closeDlg">Cancel <kbd>esc</kbd></button>
+      <button type="submit" class="btn danger solid" id="rgo" disabled>${isRma ? 'Send for RMA & retire' : 'Retire ' + esc(lbl(d))}</button>
+    </div></form>`, root => {
+      const form = root.querySelector('#rf'), go = root.querySelector('#rgo'), by = form.by, cmp = root.querySelector('#cmp');
+      const max = Math.max(d.cap, ...others.map(x => x.cap));
+      const refresh = () => {
+        const reason = form.querySelector('input[name=reason]:checked');
+        go.disabled = !reason;
+        const r = byId(by.value);
+        if (!r) { cmp.innerHTML = ''; return; }
+        const smaller = r.cap < d.cap;
+        cmp.innerHTML = `<div class="cmp" aria-label="capacity comparison">
+          <div class="r"><span class="dim">this drive</span><b>${capTxt(d.cap)}</b><span class="bar"><i class="lo" style="width:${d.cap/max*100}%"></i></span></div>
+          <div class="r"><span class="dim">replacement</span><b>${capTxt(r.cap)}</b><span class="bar"><i style="width:${r.cap/max*100}%"></i></span></div>
+          ${smaller ? `<div class="dim" style="font-size:11px">replacement is ${d.cap - r.cap} TB smaller. Allowed (no size rule is enforced); check the pool.</div>` : ''}
+        </div>`;
+      };
+      form.addEventListener('change', refresh);
+      refresh();
+      form.addEventListener('submit', e => {
+        e.preventDefault();
+        const fd = new FormData(form);
+        const reason = fd.get('reason');
+        if (!reason) return;
+        const date = fd.get('date') || TODAY;
+        const repl = fd.get('by') || null;
+        const note = (fd.get('note') || '').trim();
+        const wasSlot = d.slot ? slotInfo(d.slot) : null;
+        if (isRma) log(d, 'sent for RMA', date);
+        if (wasSlot) log(d, `removed from ${wasSlot.g.name} · ${wasSlot.s.name} (retire frees slot)`, date);
+        d.status = 'retired'; d.slot = null; d.pool = null; d.role = null; d.missing = false;
+        d.reason = reason; d.retiredOn = date; d.replacedBy = repl; if (note) d.note = note;
+        log(d, `retired · reason ${reason}${repl ? ' · replaced by ' + lbl(byId(repl)) : ''}${note ? ' · ' + note : ''}`, date);
+        closeDlg(); closeSheet();
+        toast(`${lbl(d)} retired (${reason}) · logged`);
+        render();
+      });
+    });
+}
+
+function openAssign({slot = null, driveId = null}){
+  let spares = drives.filter(d => d.status === 'spare');
+  const empty = [];
+  grids.forEach(g => g.slots.forEach(s => { if (!occupant(s.id)) empty.push({g, s}); }));
+  if (slot && !spares.length) { toast('No spares to assign'); return; }
+  if (driveId && !empty.length) { toast('No empty slots'); return; }
+  const pickSpare = slot ? `<label class="f">Spare
+      <select name="drive">${spares.map(d => `<option value="${d.id}">${esc(lbl(d))} · ${capTxt(d.cap)} · ${esc(d.model)}</option>`).join('')}</select></label>` : '';
+  const pickSlot = !slot ? `<label class="f">Empty slot
+      <select name="slot">${empty.map(({g, s}) => `<option value="${s.id}">${esc(g.name)} · ${esc(s.name)}</option>`).join('')}</select></label>` : '';
+  const slotName = slot ? (() => { const x = slotInfo(slot); return x.g.name + ' · ' + x.s.name; })() : '';
+  const gDefault = slot ? slotInfo(slot).g.pool : (empty[0] ? empty[0].g.pool : 'tank');
+  openDlg(`<form class="dlgf" id="af">
+    <h3 id="dlgTitle">Assign to slot</h3>
+    <p class="lead">${slot ? esc(slotName) : 'Drive ' + esc(lbl(byId(driveId)))}</p>
+    ${pickSpare}${pickSlot}
+    <label class="f">Pool
+      <select name="pool">${Object.keys(POOLS).map(p => `<option ${p === gDefault ? 'selected' : ''} value="${p}">${p} (${POOLS[p]})</option>`).join('')}<option value="">none</option></select></label>
+    <label class="f">Role
+      <select name="role"><option>data</option><option>hot spare</option><option>os</option><option value="">none</option></select></label>
+    <p class="dim" style="font:11px var(--mono);margin:6px 0 0">Only empty slots are offered. Occupied slots must be resolved first (R37).</p>
+    <div class="dlg-foot">
+      <button type="button" class="btn" data-act="closeDlg">Cancel <kbd>esc</kbd></button>
+      <button type="submit" class="btn pri solid">Assign</button>
+    </div></form>`, root => {
+      root.querySelector('#af').addEventListener('submit', e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const d = slot ? byId(fd.get('drive')) : byId(driveId);
+        const sid = slot || fd.get('slot');
+        const info = slotInfo(sid);
+        d.status = 'installed'; d.slot = sid; d.missing = false;
+        d.pool = fd.get('pool') || null; d.role = fd.get('role') || null;
+        log(d, `installed · ${info.g.name} · ${info.s.name}` + (d.pool ? ` · ${d.pool} / ${d.role || '—'}` : ''));
+        closeDlg(); if (st.openId === d.id) closeSheet();
+        toast(`${lbl(d)} → ${info.g.name} · ${info.s.name}`);
+        render();
+      });
+    });
+}
+
+function openHelp(){
+  const rows = [['1 · 2 · 3','layout · drives · inbox'],['/','search drives'],['j · k','move cursor in list'],['↵','open highlighted drive'],['a','assign (spare in detail)'],['r','retire (drive in detail)'],['esc','close panel or dialog'],['?','this list']];
+  openDlg(`<div class="dlgf"><h3 id="dlgTitle">Keyboard</h3><p class="lead">Desktop shortcuts. Touch works everywhere.</p>
+    <div class="shortcuts">${rows.map(([k, v]) => `<kbd>${k}</kbd><span>${v}</span>`).join('')}</div>
+    <div class="dlg-foot"><button class="btn" data-act="closeDlg">Close <kbd>esc</kbd></button></div></div>`);
+}
+
+/* ---------------- drive actions ---------------- */
+function removeToSpares(d){
+  const w = where(d);
+  d.status = 'spare'; d.slot = null; d.pool = null; d.role = null; d.missing = false;
+  log(d, `removed from ${w} · now spare`);
+  closeSheet(); toast(`${lbl(d)} moved to spares`); render();
+}
+function reinstate(d){
+  d.status = 'spare'; log(d, 'reinstated as spare (reason and date kept in history)');
+  closeSheet(); toast(`${lbl(d)} reinstated as spare`); render();
+}
+
+/* ---------------- views ---------------- */
+function slotHTML(s){
+  const d = occupant(s.id);
+  if (!d) return `<button class="slot empty" data-slot="${s.id}" aria-label="${esc(s.name)} empty, assign a spare">
+    <span class="em">${esc(s.tag)} empty</span><span class="add">+ assign</span></button>`;
+  const h = H[d.health], stale = isStale(d);
+  const cls = ['slot', 'h-' + d.health, stale ? 'stale' : '', d.missing ? 'missing' : '', st.openId === d.id ? 'sel' : ''].join(' ');
+  const flag = d.missing ? `<span class="flag">⚠ MISSING</span>` : stale ? `<span class="flag">STALE ${age(d.seen)}</span>` : '';
+  return `<button class="${cls}" data-drive="${d.id}" aria-label="${esc(s.name)}: ${esc(lbl(d))}, ${h.t}${d.missing ? ', missing' : ''}${stale ? ', stale' : ''}">
+    <span class="top2"><span>${esc(s.tag)}</span><span class="hlab hl-${d.health}">${h.g} ${h.t}</span></span>
+    <span class="ser">${esc(lbl(d))}</span>
+    <span class="sub">${capTxt(d.cap)} · ${d.type}</span>
+    ${flag}
+  </button>`;
+}
+function gridCard(g){
+  const filled = g.slots.filter(s => occupant(s.id)).length;
+  const rot = g.rows !== g.cols ? `<button class="btn sm" data-rotate="${g.id}" title="Swap rows and columns">⇄ ${g.rows}×${g.cols} → ${g.cols}×${g.rows}</button>` : '';
+  return `<section class="panel gcard ${g.id === 'front' ? 'g-front' : ''}" aria-label="${esc(g.name)}">
+    <div class="ph"><b>${esc(g.name)}</b><span class="tag">${g.rows}×${g.cols}</span><span class="tag">pool ${esc(g.pool)} ${POOLS[g.pool]}</span><span class="tag hide-sm">${filled}/${g.slots.length} filled</span>
+      <span style="margin-left:auto"></span>${rot}</div>
+    <div class="bay" style="grid-template-columns:repeat(${g.cols},minmax(0,1fr))">${g.slots.map(slotHTML).join('')}</div>
+  </section>`;
+}
+function rowHTML(d, i){
+  const h = H[d.health], stale = isStale(d);
+  const ageTxt = d.status === 'spare' || d.seen == null ? '—' : age(d.seen);
+  return `<div class="row${i === st.cursor ? ' cur' : ''}" data-drive="${d.id}" data-idx="${i}" tabindex="0" role="button" aria-label="${esc(lbl(d))}, ${h.t}">
+    <span class="st"><span class="pill ${d.status}">${d.status}</span></span>
+    <span class="ser">${esc(lbl(d))}</span>
+    <span class="mdl">${esc(d.model)}</span>
+    <span class="cap">${capTxt(d.cap)}</span>
+    <span class="loc">${esc(where(d))}</span>
+    <span class="hl"><span class="hl-${d.health}">${h.g} ${h.t}</span> <span class="age${stale ? ' stale' : ''}">${stale ? 'STALE ' : ''}${ageTxt}</span></span>
+  </div>`;
+}
+function viewLayout(){
+  const banner = allStale() ? `<div class="banner"><b>Provider data is stale.</b> Last successful poll 2 days ago. Showing last known state; per-slot stale marks are suppressed.</div>` : '';
+  const spares = drives.filter(d => d.status === 'spare');
+  return `${banner}
+  <div class="legend" aria-label="legend">
+    <span class="hl-ok">✓ OK</span><span class="hl-warning">▲ WARN</span><span class="hl-failed">✕ FAIL</span><span class="hl-unknown">? UNKN</span>
+    <span>░ hatched = stale</span><span>⚠ dashed red = missing</span><span>┅ dashed = empty</span>
+  </div>
+  <div class="grids">
+    ${grids.map(gridCard).join('')}
+  </div>
+  <section class="panel" style="margin-top:12px" aria-label="Spares">
+    <div class="ph"><b>Spares</b><span class="tag">${spares.length}</span><span class="dim" style="font-size:11px">cold, not in a slot</span></div>
+    ${spares.map(d => rowHTML(d, -1)).join('') || '<div class="empty-note">No spares.</div>'}
+  </section>`;
+}
+function viewDrives(){
+  const chips = ['all','installed','spare','retired'].map(f =>
+    `<button class="chip${st.filter === f ? ' on' : ''}" data-filter="${f}" aria-pressed="${st.filter === f}">${f} <span>${rowsCount(f)}</span></button>`).join('');
+  return `<div class="toolbar">
+    <div class="chips" role="group" aria-label="Status filter">${chips}</div>
+    <label class="search"><span class="sr" style="position:absolute;left:-9999px">Search serial or model</span>
+      <input id="q" type="search" placeholder="search serial or model" value="${esc(st.query)}" autocomplete="off" spellcheck="false"><kbd>/</kbd></label>
+  </div>
+  <section class="panel" aria-label="Drives">
+    <div class="row head"><span>status</span><span>serial</span><span>model</span><span>cap</span><span>location</span><span>health</span></div>
+    <div id="list"></div>
+  </section>`;
+}
+function renderList(){
+  const list = visibleDrives();
+  st.cursor = Math.min(st.cursor, Math.max(0, list.length - 1));
+  $('#list').innerHTML = list.length ? list.map(rowHTML).join('') : `<div class="empty-note">No drives match${st.query ? ' “' + esc(st.query) + '”' : ''} in ${st.filter}.</div>`;
+}
+function discRow(o){
+  const h = H[o.health];
+  const s = o.suggest ? byId(o.suggest) : null;
+  return `<div class="irow">
+    <div class="ir-main">
+      <div><span class="ser">${esc(o.serial)}</span> <span class="dim">${esc(o.model)} · ${capTxt(o.cap)} · ${o.type}</span></div>
+      <div class="sm"><span class="hl-${o.health}">${h.g} ${h.t}</span> · seen ${age(o.seen)} ago${o.serial !== norm(o.serial) ? ' · normalized ' + norm(o.serial) : ''}</div>
+      ${s ? `<div class="sugg">↳ link to spare? <span class="dim" style="font-family:var(--mono);font-size:11px">${esc(spareDesc(s.id))}</span></div>` : ''}
+    </div>
+    <div class="ir-act">
+      ${s ? `<button class="btn pri sm" data-act="link" data-id="${o.id}">Link to spare…</button>` : ''}
+      <button class="btn sm" data-act="create" data-id="${o.id}">Create record…</button>
+    </div>
+  </div>`;
+}
+function impRow(x){
+  const s = st.impSel[x.id] || {on:false, reason:'', date:x.last};
+  const h = H[x.health];
+  return `<div class="irow">
+    <label class="ck"><input type="checkbox" data-impck="${x.id}" ${s.on ? 'checked' : ''} aria-label="select ${esc(x.serial)}"></label>
+    <div class="ir-main">
+      <div><span class="ser">${esc(x.serial)}</span> <span class="dim">${esc(x.model)} · ${capTxt(x.cap)} · ${x.type}</span></div>
+      <div class="sm">last reported ${x.last} · hint <span class="hl-${x.health}">${h.g} ${h.t}</span> <span class="dim">(not applied)</span></div>
+    </div>
+    <div class="ir-form">
+      <select data-impreason="${x.id}" aria-label="reason for ${esc(x.serial)}">
+        <option value="">reason…</option>
+        ${['failed','replaced','other'].map(r => `<option ${s.reason === r ? 'selected' : ''}>${r}</option>`).join('')}
+      </select>
+      <input type="date" data-impdate="${x.id}" value="${s.date}" aria-label="retired on">
+    </div>
+  </div>`;
+}
+function viewInbox(){
+  const checked = imp.filter(x => st.impSel[x.id] && st.impSel[x.id].on);
+  const ready = checked.length > 0 && checked.every(x => st.impSel[x.id].reason);
+  const bulkNote = checked.length ? `${checked.length} checked` : 'none checked';
+  return `<div class="stack">
+    <section class="panel" aria-label="New drives discovered">
+      <div class="ph"><b>New drives discovered</b><span class="tag">${disc.length}</span><span class="dim" style="font-size:11px">active, no record yet</span></div>
+      ${disc.length ? disc.map(discRow).join('') : '<div class="empty-note">Nothing new. All active drives have a record.</div>'}
+    </section>
+    <section class="panel" aria-label="Unidentified">
+      <div class="ph"><b>Unidentified</b><span class="tag">${unid.length}</span><span class="dim" style="font-size:11px">informational, not linkable</span></div>
+      ${unid.map(u => `<div class="unid"><b>${esc(u.label)}</b><span>${esc(u.note)}</span></div>`).join('')}
+    </section>
+    <section class="panel" aria-label="Import retired">
+      <div class="ph"><b>Import as retired</b><span class="tag">${imp.length}</span><span class="dim" style="font-size:11px">decommissioned, serial known, no record. No default reason.</span></div>
+      <div class="bulk">
+        <label><input type="checkbox" id="impAll" ${checked.length === imp.length && imp.length ? 'checked' : ''}> all</label>
+        <select id="bulkReason" aria-label="bulk reason"><option value="">reason…</option><option>failed</option><option>replaced</option><option>other</option></select>
+        <button class="btn sm" data-act="bulkApply">apply to checked</button>
+        <span class="dim" style="font:11px var(--mono)">${bulkNote}</span>
+        <button class="btn pri spacer" data-act="import" ${ready ? '' : 'disabled'}>Import ${checked.length || ''} as retired…</button>
+      </div>
+      ${imp.map(impRow).join('') || '<div class="empty-note">Nothing to import.</div>'}
+    </section>
+  </div>`;
+}
+
+/* ---------------- detail sheet ---------------- */
+function sheetHTML(d){
+  const h = H[d.health], stale = isStale(d);
+  const pool = d.pool ? `${d.pool} (${POOLS[d.pool]}) · ${d.role || '—'}` : '—';
+  const cond = (d.condition || '—') + (d.tested ? ' · tested ' + d.tested : '');
+  let banner = '';
+  if (d.missing) banner = `<div class="mbanner"><b>⚠ Drive missing.</b> The provider no longer reports this drive (last seen ${age(d.seen)} ago) while others are fresh. The record stays installed until you choose an outcome.</div>`;
+  let acts = '';
+  if (d.status === 'installed' && d.missing) {
+    acts = `<button class="btn" data-act="remove" data-id="${d.id}">Back to spares…</button>
+      <button class="btn danger" data-act="retire" data-id="${d.id}">Retire… <kbd>r</kbd></button>
+      <button class="btn danger" data-act="rma" data-id="${d.id}">Send for RMA…</button>`;
+  } else if (d.status === 'installed') {
+    acts = `<button class="btn" data-act="remove" data-id="${d.id}">Remove to spares…</button>
+      <button class="btn danger" data-act="retire" data-id="${d.id}">Retire… <kbd>r</kbd></button>`;
+  } else if (d.status === 'spare') {
+    acts = `<button class="btn pri" data-act="assign" data-id="${d.id}">Assign to slot… <kbd>a</kbd></button>
+      <button class="btn danger" data-act="retire" data-id="${d.id}">Retire… <kbd>r</kbd></button>`;
+  } else {
+    acts = `<button class="btn pri" data-act="reinstate" data-id="${d.id}">Reinstate as spare…</button>`;
+  }
+  const replaced = d.replacedBy ? byId(d.replacedBy) : null;
+  return `<div class="sh-head">
+      <div style="min-width:0"><div class="ser">${esc(lbl(d))}</div>
+        <div class="dim" style="font:12px var(--mono);margin-top:2px">${esc(d.model)} · ${capTxt(d.cap)} · ${d.type}</div></div>
+      <span class="pill ${d.status}" style="margin-top:4px">${d.status}</span>
+      <button class="btn sm x" data-act="closeSheet" aria-label="Close">✕ <kbd>esc</kbd></button>
+    </div>
+    <div class="sh-body">
+      ${banner}
+      <dl class="kv">
+        <dt>Health</dt><dd><span class="hl-${d.health}">${h.g} ${h.t}</span> <span class="dim">· last reported ${d.seen == null ? 'no provider data' : age(d.seen) + ' ago'}</span>${stale ? ` <span class="stale-tag">· STALE</span>` : ''}</dd>
+        <dt>Location</dt><dd>${esc(where(d))}</dd>
+        <dt>Pool · role</dt><dd>${esc(pool)}</dd>
+        <dt>Condition</dt><dd>${esc(cond)}</dd>
+        <dt>Purchased</dt><dd>${d.purchased ? esc(d.purchased) : '—'}${d.warranty ? ' · warranty to ' + esc(d.warranty) : ''}</dd>
+        ${d.retiredOn ? `<dt>Retired</dt><dd>${esc(d.retiredOn)} · ${esc(d.reason)}${replaced ? ' · replaced by ' + esc(lbl(replaced)) + ' (' + capTxt(replaced.cap) + ')' : ''}</dd>` : ''}
+        ${d.note ? `<dt>Note</dt><dd>${esc(d.note)}</dd>` : ''}
+      </dl>
+      <h4>Actions</h4>
+      <div class="acts">${acts}</div>
+      <h4>Event log</h4>
+      <ol class="log">${d.events.map(([t, x]) => `<li><time>${esc(t)}</time><span>${esc(x)}</span></li>`).join('')}</ol>
+    </div>
+    <div class="sh-foot"><kbd>r</kbd> retire <kbd>a</kbd> assign <kbd>esc</kbd> close</div>`;
+}
+function openDetail(id){
+  st.openId = id;
+  renderSheet();
+  document.querySelectorAll('.slot.sel').forEach(el => el.classList.remove('sel'));
+  document.querySelectorAll(`[data-drive="${id}"].slot`).forEach(el => el.classList.add('sel'));
+}
+function closeSheet(){ st.openId = null; renderSheet(); render(false); }
+function renderSheet(){
+  const el = $('#sheet');
+  const d = st.openId && byId(st.openId);
+  if (!d) { el.classList.remove('open'); el.innerHTML = ''; return; }
+  el.innerHTML = sheetHTML(d);
+  el.classList.add('open');
+  el.scrollTop = 0;
+}
+
+/* ---------------- handlers ---------------- */
+function handleAct(act, id){
+  const d = id ? byId(id) : null;
+  switch (act) {
+    case 'closeSheet': closeSheet(); break;
+    case 'closeDlg': closeDlg(); break;
+    case 'help': openHelp(); break;
+    case 'remove':
+      confirmDlg({title:`Move ${lbl(d)} to spares?`, body:`Frees ${esc(where(d))}. The record stays and the change is logged.`, ok:'Move to spares', danger:true, fn:() => removeToSpares(d)});
+      break;
+    case 'retire': openRetire(d); break;
+    case 'rma': openRetire(d, 'rma'); break;
+    case 'assign': openAssign({driveId: d.id}); break;
+    case 'reinstate': confirmDlg({title:`Reinstate ${lbl(d)} as spare?`, body:'The retirement reason and date stay in the event history.', ok:'Reinstate', fn:() => reinstate(d)}); break;
+    case 'link': {
+      const o = disc.find(x => x.id === id), s = byId(o.suggest);
+      confirmDlg({title:'Link to spare?', body:`Link observation <span style="font-family:var(--mono)">${esc(o.serial)}</span> to spare ${esc(spareDesc(s.id))}. Empty spare fields are filled from the observation. Nothing changes until you confirm.`, ok:'Link', fn:() => {
+        if (!s.serial) s.serial = norm(o.serial);
+        s.health = o.health; s.seen = o.seen;
+        log(s, `linked to observation ${norm(o.serial)} · serial filled from provider`);
+        disc = disc.filter(x => x.id !== o.id);
+        toast(`Linked to spare ${norm(o.serial)}`); render();
+      }});
+      break;
+    }
+    case 'create': {
+      const o = disc.find(x => x.id === id);
+      confirmDlg({title:'Create drive record?', body:`New record for <span style="font-family:var(--mono)">${esc(norm(o.serial))}</span> as a spare. Serial, model and capacity come from the observation.`, ok:'Create record', fn:() => {
+        const nd = {id:'n' + Date.now(), serial:norm(o.serial), model:o.model, cap:o.cap, type:o.type, health:o.health, seen:o.seen, status:'spare', slot:null, pool:null, role:null, condition:'new', purchased:'', warranty:'', missing:false, note:'', events:[]};
+        log(nd, 'record created from discovery · spare');
+        drives.push(nd); disc = disc.filter(x => x.id !== o.id);
+        toast(`Record created for ${nd.serial}`); render();
+      }});
+      break;
+    }
+    case 'bulkApply': {
+      const v = $('#bulkReason') && $('#bulkReason').value;
+      if (!v) { toast('Pick a reason first'); break; }
+      imp.forEach(x => { const s = st.impSel[x.id]; if (s && s.on) s.reason = v; });
+      render(false); break;
+    }
+    case 'import': {
+      const rows = imp.filter(x => st.impSel[x.id] && st.impSel[x.id].on);
+      confirmDlg({title:`Import ${rows.length} drive${rows.length === 1 ? '' : 's'} as retired?`, body:`Each becomes a retired record with the reason and date you set. Serial, model and capacity come from the observation. Logged per drive.`, ok:`Import ${rows.length} as retired`, danger:true, fn:() => {
+        rows.forEach(x => {
+          const s = st.impSel[x.id];
+          const nd = {id:'i' + x.id, serial:x.serial, model:x.model, cap:x.cap, type:x.type, health:x.health, seen:null, status:'retired', slot:null, pool:null, role:null, condition:'used', purchased:'', warranty:'', missing:false, note:'imported from decommissioned observation', reason:s.reason, retiredOn:s.date, replacedBy:null, events:[]};
+          log(nd, `imported as retired · reason ${s.reason} · last reported ${x.last}`, s.date);
+          drives.push(nd);
+          delete st.impSel[x.id];
+        });
+        imp = imp.filter(x => !rows.includes(x));
+        toast(`${rows.length} imported as retired`); render();
+      }});
+      break;
+    }
+  }
+}
+
+function setRoute(r){
+  st.route = r; st.openId = null; st.cursor = 0;
+  renderSheet();
+  render();
+  window.scrollTo(0, 0);
+}
+
+function render(resetSheet = true){
+  document.querySelectorAll('[data-route]').forEach(b => b.setAttribute('aria-current', b.dataset.route === st.route ? 'page' : 'false'));
+  const v = st.route === 'layout' ? viewLayout() : st.route === 'drives' ? viewDrives() : viewInbox();
+  $('#view').innerHTML = v;
+  if (st.route === 'drives') {
+    renderList();
+    const q = $('#q');
+    q.addEventListener('input', () => { st.query = q.value; st.cursor = 0; renderList(); });
+  }
+  const n = disc.length + imp.length;
+  document.querySelectorAll('.inboxBadge').forEach(b => { b.textContent = n; b.classList.toggle('on', n > 0); });
+  if (resetSheet) renderSheet();
+}
+
+/* ---------------- events ---------------- */
+document.addEventListener('click', e => {
+  const t = e.target;
+  const route = t.closest('[data-route]');
+  if (route) { setRoute(route.dataset.route); return; }
+  const act = t.closest('[data-act]');
+  if (act) { handleAct(act.dataset.act, act.dataset.id); return; }
+  const slot = t.closest('[data-slot]');
+  if (slot) { openAssign({slot: slot.dataset.slot}); return; }
+  const rot = t.closest('[data-rotate]');
+  if (rot) {
+    const g = grids.find(x => x.id === rot.dataset.rotate);
+    if (g && g.rows !== g.cols) { [g.rows, g.cols] = [g.cols, g.rows]; render(false); }
+    return;
+  }
+  const f = t.closest('[data-filter]');
+  if (f) { st.filter = f.dataset.filter; st.cursor = 0; render(false); return; }
+  const dr = t.closest('[data-drive]');
+  if (dr) { openDetail(dr.dataset.drive); if (st.route === 'drives') { const i = visibleDrives().findIndex(x => x.id === dr.dataset.drive); if (i >= 0) { st.cursor = i; renderList(); } } return; }
+});
+
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.dataset.impck) { const id = t.dataset.impck; st.impSel[id] = Object.assign({on:false, reason:'', date:(imp.find(x => x.id === id) || {}).last}, st.impSel[id], {on:t.checked}); render(false); }
+  else if (t.dataset.impreason) { const id = t.dataset.impreason; st.impSel[id] = Object.assign({on:false, date:(imp.find(x => x.id === id) || {}).last}, st.impSel[id], {reason:t.value}); render(false); }
+  else if (t.dataset.impdate) { const id = t.dataset.impdate; st.impSel[id] = Object.assign({on:false, reason:''}, st.impSel[id], {date:t.value}); render(false); }
+  else if (t.id === 'impAll') {
+    imp.forEach(x => { st.impSel[x.id] = Object.assign({reason:'', date:x.last}, st.impSel[x.id], {on:t.checked}); });
+    render(false);
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (dlg.open) return;
+  const tag = e.target.tagName || '';
+  if (/INPUT|TEXTAREA|SELECT/.test(tag)) { if (e.key === 'Escape') e.target.blur(); return; }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'Escape') { if (st.openId) closeSheet(); return; }
+  switch (e.key) {
+    case '1': setRoute('layout'); break;
+    case '2': setRoute('drives'); break;
+    case '3': setRoute('inbox'); break;
+    case '/': e.preventDefault(); if (st.route !== 'drives') setRoute('drives'); { const q = $('#q'); q && q.focus(); } break;
+    case 'j': case 'k': {
+      if (st.route !== 'drives') break;
+      const n = visibleDrives().length; if (!n) break;
+      st.cursor = Math.max(0, Math.min(n - 1, st.cursor + (e.key === 'j' ? 1 : -1)));
+      renderList();
+      const row = document.querySelector('.row.cur'); row && row.scrollIntoView({block:'nearest'});
+      break;
+    }
+    case 'Enter': {
+      if (st.route !== 'drives' || st.openId) break;
+      const d = visibleDrives()[st.cursor]; if (d) openDetail(d.id);
+      break;
+    }
+    case 'a': { const d = st.openId && byId(st.openId); if (d && d.status === 'spare') openAssign({driveId: d.id}); break; }
+    case 'r': { const d = st.openId && byId(st.openId); if (d && d.status !== 'retired') openRetire(d); break; }
+    case '?': openHelp(); break;
+  }
+});
+
+render();
+})();
+</script>
+</body>
+</html>

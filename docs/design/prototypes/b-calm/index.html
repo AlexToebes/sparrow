@@ -1,0 +1,992 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Sparrow · Calm status board</title>
+<style>
+:root{
+  --bg:#f5f6f4; --surface:#ffffff; --surface-2:#eef0ed; --text:#1b1d21; --muted:#5f6670; --line:#e3e5e1;
+  --accent:#3658d6; --accent-soft:#e9edff; --accent-ink:#2a44b0; --on-accent:#ffffff;
+  --ok:#22764f; --ok-soft:#e6f3ec; --warn:#a16207; --warn-soft:#fbf1dc; --fail:#b93a31; --fail-soft:#fbe8e6;
+  --unk:#6b7079; --unk-soft:#eceded;
+  --radius:18px; --shadow:0 1px 2px rgba(20,24,30,.04),0 6px 20px rgba(20,24,30,.05);
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#101214; --surface:#181b1f; --surface-2:#20242a; --text:#eceef1; --muted:#9aa1ab; --line:#2a2f36;
+    --accent:#8fa6ff; --accent-soft:#222a4a; --accent-ink:#c3cdff; --on-accent:#0d1126;
+    --ok:#6fd1a0; --ok-soft:#1a2e25; --warn:#ecb85a; --warn-soft:#352b15; --fail:#ff8077; --fail-soft:#381f1d;
+    --unk:#a3aab4; --unk-soft:#262a30; --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
+h1{font-size:24px;margin:0;font-weight:650;letter-spacing:-.01em}
+h2{font-size:16px;margin:0;font-weight:600}
+h3{font-size:13px;margin:22px 0 10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+p{margin:0}
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono);font-size:13px;letter-spacing:.02em}
+.ic{width:18px;height:18px;flex:none;color:inherit}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* ---------- shell ---------- */
+.app{min-height:100vh}
+.sidebar{display:none}
+.main{padding:16px 16px 112px}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+.meta{display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;margin-top:4px;font-size:13px;color:var(--muted)}
+.scrubbed{color:var(--muted)}
+.pill-ok{display:inline-flex;gap:6px;align-items:center;color:var(--ok)}
+.pill-ok span{color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block}
+
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:8px 12px calc(8px + env(safe-area-inset-bottom));background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(12px);border-top:1px solid var(--line)}
+.tab{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px;border-radius:14px;color:var(--muted);text-decoration:none;font-size:12px;font-weight:500}
+.tab .ic{width:22px;height:22px}
+.tab[aria-current=page]{color:var(--accent-ink)}
+.tab[aria-current=page] .tab-ic{background:var(--accent-soft);}
+.tab-ic{display:grid;place-items:center;width:52px;height:30px;border-radius:999px}
+.count{position:absolute;top:2px;left:calc(50% + 6px);min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-size:11px;font-weight:650;line-height:18px;text-align:center}
+
+/* ---------- home: summary + grids ---------- */
+.lead{font-size:21px;font-weight:600;letter-spacing:-.01em}
+.lead-sub{margin-top:4px;color:var(--muted)}
+.strip{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 26px}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:7px 13px 7px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:14px;box-shadow:var(--shadow)}
+.chip b{font-weight:650;color:var(--text)}
+.chip span{color:var(--text)}
+.chip.zero{opacity:.5}
+.chip.c-ok{color:var(--ok)} .chip.c-warn{color:var(--warn)} .chip.c-fail{color:var(--fail)}
+.chip.c-missing{color:var(--warn)} .chip.c-stale{color:var(--unk)} .chip.c-spare{color:var(--accent-ink)} .chip.c-unk{color:var(--unk)}
+
+.cards{display:grid;gap:18px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);min-width:0}
+.card-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.bay{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));grid-template-rows:repeat(var(--rows),auto);gap:10px}
+
+.slot{appearance:none;display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0;min-height:112px;padding:10px;margin:0;text-align:left;cursor:pointer;background:var(--surface);border:1px solid var(--line);border-radius:14px;color:var(--text);transition:border-color .15s,box-shadow .15s}
+.slot:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.slot[aria-current=true]{box-shadow:0 0 0 2px var(--accent)}
+.slot-top{display:flex;justify-content:space-between;align-items:center;width:100%;font-size:12px;color:var(--muted);font-weight:500}
+.slot-top .ic{width:16px;height:16px}
+.slot-state{font-size:14px;font-weight:600;margin-top:auto}
+.slot-sub{font-size:12px;color:var(--muted)}
+.slot-serial{font-family:var(--mono);font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.slot-serial.keep{font-family:inherit;font-size:12px}
+@media (max-width:899px){.slot-serial:not(.keep){display:none}}
+.s-ok .slot-state,.s-ok .slot-top .ic{color:var(--ok)}
+.s-warning{background:var(--warn-soft);border-color:transparent}
+.s-warning .slot-state,.s-warning .slot-top .ic{color:var(--warn)}
+.s-failed{background:var(--fail-soft);border-color:transparent}
+.s-failed .slot-state,.s-failed .slot-top .ic{color:var(--fail)}
+.s-missing{background:var(--surface);border:1.5px dashed var(--warn)}
+.s-missing .slot-state,.s-missing .slot-top .ic{color:var(--warn)}
+.s-stale{background:repeating-linear-gradient(135deg,var(--surface-2) 0 7px,var(--surface) 7px 14px);border-style:solid}
+.s-stale .slot-state,.s-stale .slot-top .ic{color:var(--unk)}
+.s-unknown .slot-state,.s-unknown .slot-top .ic{color:var(--unk)}
+.s-empty{background:transparent;border:1.5px dashed var(--line);box-shadow:none}
+.s-empty .slot-state{color:var(--muted);font-weight:500}
+.s-empty .slot-sub{visibility:hidden}
+.s-empty .slot-top{color:var(--muted)}
+
+/* ---------- lists, filters, inbox ---------- */
+.section{margin-top:30px}
+.section-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:12px}
+.count-badge{font-size:13px;color:var(--muted)}
+.stack{display:grid;gap:12px}
+.item{display:grid;gap:12px;padding:16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.item-title{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline}
+.suggest{display:flex;gap:10px;align-items:flex-start;padding:11px 12px;border-radius:12px;background:var(--accent-soft);color:var(--accent-ink);font-size:14px}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.notice{display:flex;gap:12px;align-items:flex-start;padding:14px;border-radius:14px;margin:0 0 18px;background:var(--surface-2)}
+.notice p{color:var(--muted);font-size:14px;margin-top:2px}
+.notice b{font-weight:600}
+.notice.n-warn{background:var(--warn-soft);color:var(--warn)}
+.notice.n-fail{background:var(--fail-soft);color:var(--fail)}
+.notice.n-unk{background:var(--unk-soft);color:var(--unk)}
+.notice > div{color:var(--text)}
+.notice .ic{margin-top:1px}
+
+.list{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+.list > li + li{border-top:1px solid var(--line)}
+.rowbtn{appearance:none;width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;background:none;border:0;text-align:left;cursor:pointer}
+.rowbtn:hover{background:var(--surface-2)}
+.rowmain{display:flex;flex-direction:column;min-width:0}
+.rowmain .muted{font-size:13px}
+.rowside{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none}
+.pill{font-size:12px;padding:2px 9px;border-radius:999px;background:var(--surface-2);color:var(--muted);white-space:nowrap}
+.hs{display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:600;white-space:nowrap}
+.hs-ok{color:var(--ok)} .hs-warning,.hs-missing{color:var(--warn)} .hs-failed{color:var(--fail)} .hs-stale,.hs-unknown{color:var(--unk)}
+.empty-row{padding:20px 16px;color:var(--muted)}
+.toolbar{display:grid;gap:12px;margin-bottom:16px}
+.search{position:relative}
+.search .ic{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted)}
+.search input{width:100%;padding:11px 14px 11px 40px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font-size:15px}
+.seg{display:inline-flex;flex-wrap:wrap;gap:4px;padding:4px;border-radius:14px;background:var(--surface-2);width:max-content;max-width:100%}
+.seg button{appearance:none;border:0;background:none;padding:7px 12px;border-radius:10px;cursor:pointer;color:var(--muted);font-size:14px}
+.seg button[aria-pressed=true]{background:var(--surface);color:var(--text);box-shadow:var(--shadow);font-weight:600}
+.seg small{font-size:12px;opacity:.8;margin-left:4px}
+
+.imp-row{display:grid;grid-template-columns:auto 1fr;gap:10px 12px;align-items:start;padding:14px 16px}
+.imp-row input[type=checkbox]{margin-top:4px;width:18px;height:18px;accent-color:var(--accent)}
+.imp-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.bulk{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.bulk label.check{display:inline-flex;gap:8px;align-items:center;font-size:14px;margin-right:auto}
+.bulk input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
+.import-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;border-top:1px solid var(--line)}
+
+/* ---------- inputs & buttons ---------- */
+input[type=text],input[type=date],select,textarea{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-size:15px}
+select{appearance:auto}
+.field{display:grid;gap:6px;font-size:13px;color:var(--muted)}
+.field select,.field input,.field textarea{color:var(--text)}
+.field.inline{grid-template-columns:1fr}
+.btn{appearance:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:42px;padding:9px 16px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--text);font-size:14px;font-weight:550;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:color-mix(in srgb,var(--text) 25%,var(--line))}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--accent);color:var(--on-accent);border-color:transparent}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--fail);border-color:color-mix(in srgb,var(--fail) 40%,var(--line))}
+.btn.danger.solid{background:var(--fail);color:#fff;border-color:transparent}
+.btn.sm{min-height:34px;padding:6px 12px;font-size:13px}
+.btn.block{width:100%}
+.icon-btn{appearance:none;width:40px;height:40px;display:grid;place-items:center;border-radius:12px;border:0;background:var(--surface-2);color:var(--text);cursor:pointer;flex:none}
+.radio{display:flex;gap:10px;align-items:center;font-size:15px;color:var(--text);padding:8px 10px;border:1px solid var(--line);border-radius:12px;cursor:pointer}
+.radio input{accent-color:var(--accent);width:18px;height:18px}
+fieldset{border:0;padding:0;margin:0;display:grid;gap:8px}
+legend{font-size:13px;color:var(--muted);padding:0;margin-bottom:6px}
+.cmp{font-size:14px;padding:10px 12px;border-radius:12px;background:var(--surface-2);color:var(--text)}
+
+/* ---------- panel (side on desktop, sheet on phone) ---------- */
+.scrim{position:fixed;inset:0;z-index:25;background:rgba(10,12,16,.28);opacity:0;pointer-events:none;transition:opacity .2s}
+.scrim.open{opacity:1;pointer-events:auto}
+.panel{position:fixed;z-index:30;background:var(--surface);color:var(--text);overflow:auto;padding:20px 20px 32px;visibility:hidden;transition:transform .25s ease,visibility .25s;outline:none}
+.panel.open{visibility:visible;transform:none!important}
+.panel-phone{left:0;right:0;bottom:0;max-height:88vh;border-radius:22px 22px 0 0;box-shadow:0 -10px 40px rgba(0,0,0,.18);transform:translateY(105%)}
+.panel-phone::before{content:"";display:block;width:40px;height:5px;border-radius:3px;background:var(--line);margin:-10px auto 14px}
+.ph{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px}
+.ph-t{font-size:20px;font-weight:650;letter-spacing:-.01em;margin:0}
+.ph-s{color:var(--muted);font-size:14px;margin-top:4px}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:10px 18px;font-size:14px;margin:0 0 6px}
+.facts dt{color:var(--muted)}
+.facts dd{margin:0;text-align:right;min-width:0;overflow-wrap:anywhere}
+.panel-actions{display:grid;gap:8px;margin-top:20px}
+.events{list-style:none;margin:0;padding:0 0 0 4px;border-left:2px solid var(--line)}
+.events li{position:relative;padding:0 0 14px 18px;font-size:14px}
+.events li::before{content:"";position:absolute;left:-6px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--surface);border:2px solid var(--accent)}
+.events time{display:block;font-size:12px;color:var(--muted);font-family:var(--mono)}
+.assign-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.assign-row:first-child{border-top:0}
+
+/* ---------- dialog & toast ---------- */
+.dlg{border:0;border-radius:22px;padding:0;background:var(--surface);color:var(--text);width:min(460px,calc(100vw - 32px));max-height:calc(100vh - 32px);box-shadow:0 24px 70px rgba(0,0,0,.28)}
+.dlg::backdrop{background:rgba(10,12,16,.4)}
+.dlg-body{padding:24px;display:grid;gap:16px}
+.dlg-body h2{font-size:20px;font-weight:650}
+.dlg-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:4px}
+.toast{position:fixed;left:50%;bottom:104px;transform:translate(-50%,20px);z-index:50;background:var(--text);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;white-space:nowrap;max-width:calc(100vw - 32px);overflow:hidden;text-overflow:ellipsis}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* ---------- desktop ---------- */
+@media (min-width:900px){
+  .app{display:grid;grid-template-columns:232px minmax(0,1fr)}
+  .sidebar{display:flex;flex-direction:column;position:sticky;top:0;height:100vh;padding:26px 16px;background:var(--surface);border-right:1px solid var(--line)}
+  .brand{display:flex;gap:10px;align-items:center;font-weight:650;font-size:17px;padding:0 10px;margin-bottom:28px}
+  .logo{width:26px;height:26px;border-radius:8px;background:var(--accent);position:relative}
+  .logo::after{content:"";position:absolute;left:7px;top:7px;width:12px;height:12px;border-radius:3px;border:2px solid var(--on-accent);opacity:.9}
+  .nav{display:grid;gap:4px}
+  .navlink{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;color:var(--muted);text-decoration:none;font-weight:500}
+  .navlink:hover{background:var(--surface-2);color:var(--text)}
+  .navlink[aria-current=page]{background:var(--accent-soft);color:var(--accent-ink)}
+  .navlink .count{position:static;margin-left:auto;background:var(--accent);}
+  .side-foot{margin-top:auto;padding:0 10px;font-size:13px;color:var(--muted);line-height:1.6}
+  .main{padding:36px 44px 72px;max-width:1120px;width:100%}
+  h1{font-size:28px}
+  .lead{font-size:24px}
+  .tabbar{display:none}
+  .toast{bottom:28px}
+  .cards{grid-template-columns:1fr 1fr}
+  .card.wide{grid-column:1/-1}
+  .slot{min-height:124px}
+  .panel{top:0;right:0;bottom:0;width:min(420px,100vw);border-left:1px solid var(--line);transform:translateX(104%);box-shadow:-12px 0 40px rgba(0,0,0,.08);padding:28px 28px 36px}
+  .panel-phone{left:auto}
+  .panel-phone::before{display:none}
+  .scrim{display:none}
+  .toolbar{grid-template-columns:1fr auto;align-items:center}
+  .list .rowbtn{padding:16px 20px}
+}
+@media (max-width:899px){
+  .imp-fields{grid-template-columns:1fr}
+}
+@media (max-width:389px){
+  .slot{padding:8px}
+  .slot-state{font-size:13px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3.5 10.5 12 3.8l8.5 6.7V19a1.5 1.5 0 0 1-1.5 1.5h-4v-5.5h-6V20.5H5A1.5 1.5 0 0 1 3.5 19z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></symbol>
+  <symbol id="i-drive" viewBox="0 0 24 24"><rect x="3" y="5.5" width="18" height="13" rx="3" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M6.5 12h5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="16.5" cy="12" r="1.3" fill="currentColor"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3.5 13.5 6 6.5A1.8 1.8 0 0 1 7.7 5.3h8.6A1.8 1.8 0 0 1 18 6.5l2.5 7v4.2a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5z M3.5 13.5h4.7l1.2 2.2h5.2l1.2-2.2h4.7" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="m8 12.4 2.7 2.6L16 9.6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.8 21.2 19.5H2.8z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M12 9.8v4.6M12 16.9v.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="m9 9 6 6M15 9l-6 6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .9-1 1.6M12 16.8v.1" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-missing" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.9" stroke-dasharray="3 2.6"/><path d="M8 12h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="M4 7.5 12 3.5l8 4v9l-8 4-8-4z M4 7.5l8 4 8-4M12 11.5v9" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+</svg>
+
+<div class="app">
+  <aside class="sidebar" aria-label="Main">
+    <div class="brand"><span class="logo" aria-hidden="true"></span>Sparrow</div>
+    <nav class="nav" id="nav-side"></nav>
+    <div class="side-foot">
+      <span class="dot" aria-hidden="true"></span> Scrutiny reachable<br>
+      Last updated 2 min ago
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <div>
+        <h1 id="title">Home</h1>
+        <div class="meta" id="meta"></div>
+      </div>
+    </header>
+    <main id="view"></main>
+  </div>
+</div>
+
+<nav class="tabbar" id="nav-tab" aria-label="Main"></nav>
+<div class="scrim" id="scrim"></div>
+<aside class="panel" id="panel" tabindex="-1" aria-hidden="true" aria-label="Details"></aside>
+<dialog class="dlg" id="dlg" aria-labelledby="dlg-title"></dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ================= mock data ================= */
+const NOW = Date.parse('2026-10-10T09:00:00');
+const TODAY = '2026-10-10';
+const STALE_MS = 36 * 3600 * 1000;
+
+const GRIDS = [
+  { id: 'front', name: 'Front bays', rows: 2, cols: 4, orientation: 'across', labels: ['Slot 1','Slot 2','Slot 3','Slot 4','Slot 5','Slot 6','Slot 7','Slot 8'], pool: 'tank', role: 'data' },
+  { id: 'ssd',   name: 'Internal SSDs', rows: 1, cols: 2, orientation: 'across', labels: ['Left','Right'], pool: 'apps', role: 'data' },
+  { id: 'boot',  name: 'Boot', rows: 1, cols: 1, orientation: 'across', labels: ['NVMe'], pool: 'boot-pool', role: 'boot' }
+];
+
+function rec(serial, model, type, tb, status, o = {}) {
+  return Object.assign({
+    serial, model, type, tb, status,
+    slot: null, health: 'unknown', seen: null, absent: false,
+    pool: null, role: null, note: '', condition: '',
+    retiredOn: null, reason: null, replacedBy: null, events: []
+  }, o);
+}
+
+let drives = [
+  rec('ZL2ABC01', 'NAS HDD', 'HDD', 8, 'installed', { slot: 'front:1', health: 'ok', seen: '2026-10-10T08:58', pool: 'tank', role: 'data',
+    events: [['2025-11-04', 'Installed in Front bays, Slot 1'], ['2025-11-04', 'Joined pool tank as data']] }),
+  rec('ZL2ABC02', 'NAS HDD', 'HDD', 8, 'installed', { slot: 'front:2', health: 'ok', seen: '2026-10-10T08:58', pool: 'tank', role: 'data',
+    events: [['2025-11-04', 'Installed in Front bays, Slot 2'], ['2025-11-04', 'Joined pool tank as data']] }),
+  rec('ZL2ABC03', 'NAS HDD', 'HDD', 4, 'installed', { slot: 'front:3', health: 'ok', seen: '2026-10-10T08:58', pool: 'tank', role: 'data',
+    events: [['2024-06-12', 'Installed in Front bays, Slot 3'], ['2024-06-12', 'Joined pool tank as data']] }),
+  rec('ZL2ABC04', 'NAS HDD', 'HDD', 4, 'installed', { slot: 'front:4', health: 'warning', seen: '2026-10-10T08:58', pool: 'tank', role: 'data',
+    note: 'Reallocated sectors: 12, up from 4 last month. Watch it and plan a replacement.',
+    events: [['2026-09-01', 'Health changed to warning'], ['2024-06-12', 'Installed in Front bays, Slot 4']] }),
+  rec('ZL2ABC05', 'NAS HDD', 'HDD', 4, 'installed', { slot: 'front:5', health: 'ok', seen: '2026-10-10T08:58', pool: 'tank', role: 'data',
+    events: [['2024-06-12', 'Installed in Front bays, Slot 5']] }),
+  rec('ZL2ABC06', 'NAS HDD', 'HDD', 4, 'installed', { slot: 'front:6', health: 'failed', seen: '2026-10-10T08:58', pool: 'tank', role: 'data',
+    note: 'SMART self-test failed. Pending sectors above the limit.',
+    events: [['2026-10-02', 'Health changed to failed'], ['2024-06-12', 'Installed in Front bays, Slot 6']] }),
+  rec('ZL2ABC08', 'NAS HDD', 'HDD', 8, 'installed', { slot: 'front:8', health: 'ok', seen: '2026-10-02T04:00', absent: true, pool: 'tank', role: 'data',
+    events: [['2026-10-02', 'Provider stopped reporting this drive'], ['2025-03-15', 'Installed in Front bays, Slot 8 (replaced ZL4OLD03)']] }),
+  rec('ZL1SSD01', 'SSD SATA', 'SSD', 1, 'installed', { slot: 'ssd:1', health: 'ok', seen: '2026-10-10T08:58', pool: 'apps', role: 'data',
+    events: [['2025-08-20', 'Installed in Internal SSDs, Left'], ['2025-08-20', 'Joined pool apps as data']] }),
+  rec('ZL1SSD02', 'SSD SATA', 'SSD', 1, 'installed', { slot: 'ssd:2', health: 'ok', seen: '2026-10-10T08:58', pool: 'apps', role: 'data',
+    events: [['2025-08-20', 'Installed in Internal SSDs, Right'], ['2025-08-20', 'Joined pool apps as data']] }),
+  rec('ZLNVME01', 'NVMe M.2', 'NVMe', 1, 'installed', { slot: 'boot:1', health: 'ok', seen: '2026-10-07T09:00', pool: 'boot-pool', role: 'boot',
+    events: [['2025-01-15', 'Installed in Boot slot'], ['2025-01-15', 'Joined boot-pool as boot']] }),
+
+  rec('ZL2SPR01', 'NAS HDD', 'HDD', 8, 'spare', { condition: 'New, bought 2026-06-02',
+    events: [['2026-06-02', 'Added as spare (new)']] }),
+  rec('ZL2SPR02', 'NAS HDD', 'HDD', 8, 'spare', { condition: 'Used, tested 2026-08-14',
+    events: [['2026-08-14', 'Passed long SMART self-test'], ['2026-07-20', 'Added as spare (used)']] }),
+  rec('ZL1SSD09', 'SSD SATA', 'SSD', 1, 'spare', { condition: 'New',
+    events: [['2026-09-12', 'Added as spare (new)']] }),
+
+  rec('ZL4OLD03', 'NAS HDD', 'HDD', 4, 'retired', { retiredOn: '2025-03-14', reason: 'failed', replacedBy: 'ZL2ABC08',
+    events: [['2025-03-14', 'Retired · failed, replaced by ZL2ABC08'], ['2025-03-14', 'Removed from Front bays, Slot 8'], ['2019-02-01', 'Installed in Front bays, Slot 8']] })
+];
+
+// Observations not yet linked to a record
+let inbox = [
+  { serial: 'ZL2SPR02', model: 'NAS HDD', tb: 8, type: 'HDD', health: 'ok', seen: '2026-10-10T08:57', match: 'ZL2SPR02' },
+  { serial: 'ZL4NEW10', model: 'NAS HDD', tb: 4, type: 'HDD', health: 'ok', seen: '2026-10-10T08:55', match: null }
+];
+let unidentified = [
+  { model: 'NVMe device', type: 'NVMe', seen: '2026-10-10T08:50' }
+];
+let imports = [
+  { serial: 'ZL4OLD11', model: 'NAS HDD', tb: 4, type: 'HDD', seen: '2025-01-09T12:00', hint: 'failed' },
+  { serial: 'ZL3OLD07', model: 'NAS HDD', tb: 3, type: 'HDD', seen: '2024-11-20T12:00', hint: 'warning' },
+  { serial: 'ZL1SSD05', model: 'SSD SATA', tb: 1, type: 'SSD', seen: '2025-06-30T12:00', hint: 'ok' }
+];
+
+/* ================= state & helpers ================= */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ic = n => `<svg class="ic" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const WORDS = ['Zero','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten'];
+
+const STATE = {
+  ok:      { t: 'Healthy', i: 'check' },
+  warning: { t: 'Warning', i: 'alert' },
+  failed:  { t: 'Failed',  i: 'x' },
+  unknown: { t: 'Unknown', i: 'help' },
+  stale:   { t: 'Stale',   i: 'clock' },
+  missing: { t: 'Missing', i: 'missing' },
+  empty:   { t: 'Empty',   i: null }
+};
+
+const fmtAgo = iso => {
+  if (!iso) return 'no data';
+  const m = Math.round((NOW - Date.parse(iso)) / 60000);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `${h} h ago`;
+  return `${Math.round(h / 24)} d ago`;
+};
+
+const gridOf = key => GRIDS.find(g => g.id === key.split(':')[0]);
+const labelOf = key => gridOf(key).labels[Number(key.split(':')[1]) - 1];
+const locText = d => d.slot ? `${gridOf(d.slot).name} · ${labelOf(d.slot)}` : 'Installed, no slot yet';
+const occupant = key => drives.find(d => d.slot === key && d.status === 'installed');
+const find = serial => drives.find(d => d.serial === serial);
+
+function stateOf(d) {
+  if (!d) return 'empty';
+  if (d.status === 'spare') return 'spare';
+  if (d.status === 'retired') return 'retired';
+  if (d.absent) return 'missing';
+  if (d.seen && NOW - Date.parse(d.seen) > STALE_MS) return 'stale';
+  return d.health;
+}
+
+function summary() {
+  const c = { healthy: 0, warning: 0, failed: 0, missing: 0, stale: 0, unknown: 0, spares: 0 };
+  drives.forEach(d => {
+    const s = stateOf(d);
+    if (s === 'spare') c.spares++;
+    else if (s === 'ok') c.healthy++;
+    else if (s in c) c[s]++;
+  });
+  return c;
+}
+
+/* ================= state ================= */
+let route = 'home';
+let driveFilter = 'all';
+let driveQuery = '';
+let panelState = null;             // { serial } | { key }
+let impSel = new Set();
+let impReason = {};
+let impDate = {};
+
+/* ================= rendering: shell ================= */
+const ROUTES = [
+  { id: 'home', label: 'Home', icon: 'home', title: 'Home' },
+  { id: 'drives', label: 'Drives', icon: 'drive', title: 'Drives' },
+  { id: 'inbox', label: 'Inbox', icon: 'inbox', title: 'Inbox' }
+];
+
+function renderNav() {
+  const badge = inbox.length + unidentified.length + imports.length;
+  const newCount = inbox.length;
+  const side = ROUTES.map(r => `
+    <a class="navlink" href="#/${r.id}" ${r.id === route ? 'aria-current="page"' : ''}>
+      ${ic(r.icon)}<span>${r.label}</span>${r.id === 'inbox' && newCount ? `<span class="count" aria-label="${newCount} new">${newCount}</span>` : ''}
+    </a>`).join('');
+  const tab = ROUTES.map(r => `
+    <a class="tab" href="#/${r.id}" ${r.id === route ? 'aria-current="page"' : ''}>
+      <span class="tab-ic">${ic(r.icon)}</span>${r.label}
+      ${r.id === 'inbox' && newCount ? `<span class="count" aria-label="${newCount} new">${newCount}</span>` : ''}
+    </a>`).join('');
+  $('#nav-side').innerHTML = side;
+  $('#nav-tab').innerHTML = tab;
+  return badge;
+}
+
+/* ================= home ================= */
+function slotHtml(g, i) {
+  const key = `${g.id}:${i + 1}`;
+  const d = occupant(key);
+  const st = d ? stateOf(d) : 'empty';
+  const s = STATE[st];
+  const pos = g.orientation === 'down'
+    ? { r: (i % g.rows) + 1, c: Math.floor(i / g.rows) + 1 }
+    : { r: Math.floor(i / g.cols) + 1, c: (i % g.cols) + 1 };
+  const label = g.labels[i];
+  const current = panelState && ((panelState.key === key) || (d && panelState.serial === d.serial));
+  let sub = '';
+  let extra = '';
+  if (d) {
+    sub = `${d.tb} TB`;
+    extra = st === 'stale' ? `<span class="slot-serial keep">seen ${fmtAgo(d.seen)}</span>` : `<span class="slot-serial">${d.serial}</span>`;
+  }
+  const stateText = st === 'stale' ? 'Stale' : st === 'unknown' ? 'Unknown' : s.t;
+  return `
+    <button class="slot s-${st}" style="grid-row:${pos.r};grid-column:${pos.c}" data-slot="${key}"
+      aria-current="${current ? 'true' : 'false'}"
+      aria-label="${esc(label)}: ${stateText}${d ? ', ' + d.serial + ', ' + d.tb + ' TB' : ', empty'}">
+      <span class="slot-top"><span>${esc(label)}</span>${s.i ? ic(s.i) : ''}</span>
+      <span class="slot-state">${stateText}</span>
+      <span class="slot-sub">${sub || '&nbsp;'}</span>
+      ${extra}
+    </button>`;
+}
+
+function gridCard(g) {
+  const total = g.rows * g.cols;
+  const occ = g.labels.filter((_, i) => occupant(`${g.id}:${i + 1}`)).length;
+  const slots = g.labels.map((_, i) => slotHtml(g, i)).join('');
+  return `
+    <section class="card ${total > 4 ? 'wide' : ''}" aria-labelledby="g-${g.id}">
+      <div class="card-h">
+        <h2 id="g-${g.id}">${esc(g.name)}</h2>
+        <span class="muted" style="font-size:13px">${g.cols} × ${g.rows} · ${occ} of ${total} occupied</span>
+      </div>
+      <div class="bay" style="--cols:${g.cols};--rows:${g.rows}">${slots}</div>
+    </section>`;
+}
+
+function homeView() {
+  const c = summary();
+  const need = c.warning + c.failed + c.missing + c.stale;
+  const head = need
+    ? `${need > 10 ? need : WORDS[need]} ${need === 1 ? 'thing needs' : 'things need'} a look`
+    : 'Everything looks fine';
+  const sub = (need ? 'Everything else is healthy.' : 'All installed drives are reporting healthy.')
+    + (inbox.length ? ` ${inbox.length} new drives are waiting in Inbox.` : '');
+  const chips = [
+    ['c-ok', 'check', c.healthy, 'healthy'],
+    ['c-warn', 'alert', c.warning, 'warning'],
+    ['c-fail', 'x', c.failed, 'failed'],
+    ['c-missing', 'missing', c.missing, 'missing'],
+    ['c-stale', 'clock', c.stale, 'stale'],
+    ...(c.unknown ? [['c-unk', 'help', c.unknown, 'unknown']] : []),
+    ['c-spare', 'box', c.spares, 'spares on hand']
+  ].map(([cls, icon, n, label]) =>
+    `<div class="chip ${cls} ${n ? '' : 'zero'}">${ic(icon)}<span><b>${n}</b> ${label}</span></div>`).join('');
+  return `
+    <p class="lead">${head}</p>
+    <p class="lead-sub">${sub}</p>
+    <div class="strip" role="group" aria-label="Summary">${chips}</div>
+    <div class="cards">${GRIDS.map(gridCard).join('')}</div>`;
+}
+
+/* ================= drives ================= */
+function driveRows() {
+  const q = driveQuery.trim().toLowerCase();
+  const rows = drives.filter(d =>
+    (driveFilter === 'all' || d.status === driveFilter) &&
+    (!q || (d.serial + ' ' + d.model).toLowerCase().includes(q)));
+  if (!rows.length) return `<li class="empty-row">No drives match.</li>`;
+  return rows.map(d => {
+    const s = stateOf(d);
+    const hs = d.status === 'installed' ? STATE[s] : null;
+    const loc = d.status === 'installed' ? locText(d)
+      : d.status === 'spare' ? d.condition
+      : `Retired ${d.retiredOn} · ${d.reason}`;
+    const pill = { installed: 'Installed', spare: 'Spare', retired: 'Retired' }[d.status];
+    return `<li><button class="rowbtn" data-drive="${esc(d.serial)}">
+      <span class="rowmain"><span class="mono">${esc(d.serial)}</span><span class="muted">${esc(d.model)} · ${d.tb} TB · ${esc(loc)}</span></span>
+      <span class="rowside"><span class="pill">${pill}</span>${hs ? `<span class="hs hs-${s}">${ic(hs.i)}${hs.t}</span>` : ''}</span>
+    </button></li>`;
+  }).join('');
+}
+
+function drivesView() {
+  const counts = { all: drives.length, spare: 0, installed: 0, retired: 0 };
+  drives.forEach(d => counts[d.status]++);
+  const seg = [['all', 'All'], ['spare', 'Spare'], ['installed', 'Installed'], ['retired', 'Retired']]
+    .map(([v, l]) => `<button type="button" data-filter="${v}" aria-pressed="${driveFilter === v}">${l}<small>${counts[v]}</small></button>`).join('');
+  return `
+    <div class="toolbar">
+      <label class="search"><span class="sr">Search drives</span>${ic('search')}
+        <input type="text" id="dq" placeholder="Search serial or model" value="${esc(driveQuery)}" autocomplete="off"></label>
+      <div class="seg" role="group" aria-label="Status filter">${seg}</div>
+    </div>
+    <ul class="list" id="dlist">${driveRows()}</ul>`;
+}
+
+/* ================= inbox ================= */
+function importRowHtml(i) {
+  const checked = impSel.has(i.serial);
+  return `<li class="imp-row">
+    <input type="checkbox" data-imp-sel="${esc(i.serial)}" ${checked ? 'checked' : ''} aria-label="Select ${esc(i.serial)}">
+    <div>
+      <div class="mono">${esc(i.serial)}</div>
+      <div class="muted" style="font-size:13px">${esc(i.model)} · ${i.tb} TB · last seen ${i.seen.slice(0, 10)} · Last health: ${esc(i.hint)}</div>
+      <div class="imp-fields" style="margin-top:10px">
+        <label class="field">Reason
+          <select data-imp-reason="${esc(i.serial)}">
+            <option value="">Choose a reason…</option>
+            ${['failed', 'replaced', 'other'].map(r => `<option value="${r}" ${impReason[i.serial] === r ? 'selected' : ''}>${cap(r)}</option>`).join('')}
+          </select></label>
+        <label class="field">Retired on
+          <input type="date" data-imp-date="${esc(i.serial)}" value="${impDate[i.serial] || i.seen.slice(0, 10)}"></label>
+      </div>
+    </div>
+  </li>`;
+}
+
+function inboxView() {
+  const discovered = inbox.length ? inbox.map(i => `
+    <article class="item">
+      <div class="item-title">
+        <span class="mono">${esc(i.serial)}</span>
+        <span class="hs hs-${i.health}">${ic(STATE[i.health].i)}${STATE[i.health].t}</span>
+      </div>
+      <div class="muted" style="font-size:14px">${esc(i.model)} · ${i.tb} TB · seen ${fmtAgo(i.seen)}</div>
+      ${i.match ? `<div class="suggest">${ic('box')}<span>Matches spare <b class="mono">${esc(i.match)}</b>. <b>Link to spare?</b> Nothing changes until you confirm.</span></div>` : ''}
+      <div class="actions">
+        ${i.match
+          ? `<button class="btn primary" data-act="link" data-serial="${esc(i.serial)}">Link to spare</button>`
+          : `<button class="btn primary" data-act="create" data-serial="${esc(i.serial)}">Create drive record</button>`}
+      </div>
+    </article>`).join('') : `<p class="muted">No new drives. Nothing is waiting for you.</p>`;
+
+  const unid = unidentified.length ? unidentified.map(u => `
+    <div class="item" style="box-shadow:none">
+      <div class="suggest" style="background:var(--surface-2);color:var(--muted)">${ic('help')}
+        <span><b style="color:var(--text)">Unidentified ${esc(u.type)} device</b> · no serial reported. Informational only, it can't be linked.</span>
+      </div>
+    </div>`).join('') : '';
+
+  const imp = imports.length ? `
+    <div class="list" style="overflow:visible">
+      <div class="bulk">
+        <label class="check"><input type="checkbox" id="imp-all" aria-label="Select all"> Select all</label>
+        <select id="bulk-reason" style="width:auto;min-width:180px" aria-label="Reason for selected">
+          <option value="">Reason for selected…</option>
+          <option value="failed">Failed</option><option value="replaced">Replaced</option><option value="other">Other</option>
+        </select>
+        <button class="btn sm" id="bulk-apply" type="button">Apply to selected</button>
+      </div>
+      <ul style="list-style:none;margin:0;padding:0">${imports.map(importRowHtml).join('')}</ul>
+      <div class="import-foot">
+        <span class="muted" style="font-size:14px">Creates retired records only. No slots or pools change.</span>
+        <button class="btn primary" id="imp-go" type="button">Import as retired</button>
+      </div>
+    </div>` : `<p class="muted">No decommissioned drives to import.</p>`;
+
+  return `
+    <section class="section" style="margin-top:0">
+      <div class="section-h"><h2>New drives discovered</h2><span class="count-badge">${inbox.length}</span></div>
+      <div class="stack">${discovered}</div>
+    </section>
+    <section class="section">
+      <div class="section-h"><h2>Unidentified</h2><span class="count-badge">${unidentified.length}</span></div>
+      <div class="stack">${unid || '<p class="muted">None.</p>'}</div>
+    </section>
+    <section class="section">
+      <div class="section-h"><h2>Import retired drives</h2><span class="count-badge">${imports.length} decommissioned</span></div>
+      <p class="muted" style="font-size:14px;margin:-4px 0 14px">Skippable and available any time. Each drive needs a reason you pick; the last health is a hint only.</p>
+      ${imp}
+    </section>`;
+}
+
+/* ================= panel ================= */
+function notice(tone, icon, title, text) {
+  return `<div class="notice n-${tone}">${ic(icon)}<div><b>${title}</b><p>${text}</p></div></div>`;
+}
+
+function ph(title, sub) {
+  return `<div class="ph"><div><h2 class="ph-t" id="panel-title" tabindex="-1">${esc(title)}</h2><p class="ph-s">${sub}</p></div>
+    <button class="icon-btn" data-act="close" aria-label="Close">${ic('close')}</button></div>`;
+}
+
+function eventsHtml(d) {
+  if (!d.events.length) return '';
+  return `<h3>History</h3><ol class="events">${d.events.map(([date, text]) =>
+    `<li><time datetime="${date}">${date}</time>${esc(text)}</li>`).join('')}</ol>`;
+}
+
+function drivePanel(d) {
+  const st = stateOf(d);
+  const s = STATE[st] || { t: cap(st), i: null };
+  const where = d.status === 'installed' ? locText(d)
+    : d.status === 'spare' ? 'Spare' : `Retired ${d.retiredOn}`;
+  let banner = '';
+  if (st === 'missing') banner = notice('warn', 'missing', 'Drive missing',
+    `The provider no longer reports this drive while other drives are fresh. It stays installed until you choose an outcome: use Remove to spares or Retire below.`);
+  else if (st === 'stale') banner = notice('unk', 'clock', 'Stale data',
+    `Last reported ${fmtAgo(d.seen)}. Showing last known health, not live status.`);
+  else if (d.note && (st === 'warning' || st === 'failed')) banner = notice(st === 'failed' ? 'fail' : 'warn', st === 'failed' ? 'x' : 'alert', s.t, esc(d.note));
+
+  const facts = [
+    ['Serial', `<span class="mono">${esc(d.serial)}</span>`],
+    ['Model', esc(d.model)],
+    ['Type', esc(d.type)],
+    ['Capacity', `${d.tb} TB`],
+    ['Location', esc(where)],
+    ['Pool · role', d.pool ? `${esc(d.pool)} · ${esc(d.role)}` : '—'],
+    ['Condition', esc(d.condition || '—')],
+    ['Last reported', d.seen ? fmtAgo(d.seen) : '—']
+  ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+
+  let actions = '';
+  if (d.status === 'installed') actions = `
+    <button class="btn block" data-act="spare" data-serial="${esc(d.serial)}">Remove to spares</button>
+    <button class="btn danger block" data-act="retire" data-serial="${esc(d.serial)}">Retire…</button>`;
+  else if (d.status === 'spare') actions = `
+    <button class="btn danger block" data-act="retire" data-serial="${esc(d.serial)}">Retire…</button>`;
+  else actions = `
+    <button class="btn block" data-act="reinstate" data-serial="${esc(d.serial)}">Reinstate as spare</button>`;
+
+  return ph(d.serial, `${esc(d.model)} · ${d.tb} TB · ${s.t}`)
+    + banner
+    + `<dl class="facts">${facts}</dl>`
+    + `<div class="panel-actions">${actions}</div>`
+    + eventsHtml(d);
+}
+
+function slotPanel(key) {
+  const g = gridOf(key);
+  const spares = drives.filter(d => d.status === 'spare');
+  const list = spares.length ? spares.map(d => `
+    <div class="assign-row">
+      <div><div class="mono">${esc(d.serial)}</div><div class="muted" style="font-size:13px">${d.tb} TB · ${esc(d.condition)}</div></div>
+      <button class="btn primary sm" data-act="assign" data-serial="${esc(d.serial)}" data-key="${key}">Assign</button>
+    </div>`).join('') : `<p class="muted">No spares on hand.</p>`;
+  return ph(`${g.name} · ${labelOf(key)}`, 'Empty slot')
+    + `<p class="muted" style="font-size:14px">Assigning a spare fills this slot. Pool and role default to ${esc(g.pool)} · ${esc(g.role)} for this grid.</p>`
+    + `<h3>Spares on hand</h3>${list}`;
+}
+
+function renderPanel() {
+  const el = $('#panel');
+  if (!panelState) return;
+  let html;
+  if (panelState.serial) {
+    const d = find(panelState.serial);
+    html = d ? drivePanel(d) : '';
+  } else {
+    html = slotPanel(panelState.key);
+  }
+  el.innerHTML = html;
+}
+
+function openPanel(state) {
+  panelState = state;
+  renderPanel();
+  const el = $('#panel');
+  el.classList.add('open');
+  el.setAttribute('aria-hidden', 'false');
+  $('#scrim').classList.add('open');
+  el.focus({ preventScroll: true });
+  el.scrollTop = 0;
+}
+
+function closePanel() {
+  panelState = null;
+  const el = $('#panel');
+  el.classList.remove('open');
+  el.setAttribute('aria-hidden', 'true');
+  $('#scrim').classList.remove('open');
+}
+
+/* ================= dialogs ================= */
+const dlg = $('#dlg');
+function confirmBox(title, body, okLabel, onOk, danger = false) {
+  dlg.innerHTML = `<div class="dlg-body">
+      <h2 id="dlg-title">${title}</h2>
+      <p class="muted" style="font-size:15px">${body}</p>
+      <div class="dlg-actions">
+        <button class="btn ghost" type="button" data-act="dlg-cancel">Cancel</button>
+        <button class="btn ${danger ? 'danger solid' : 'primary'}" type="button" id="dlg-ok">${okLabel}</button>
+      </div></div>`;
+  $('#dlg-ok').onclick = () => { dlg.close(); onOk(); };
+  dlg.showModal();
+  $('#dlg-ok').focus();
+}
+
+function openRetire(serial) {
+  const d = find(serial);
+  const others = drives.filter(x => x !== d && x.status !== 'retired');
+  const opts = others.map(o => `<option value="${esc(o.serial)}">${o.tb} TB · ${esc(o.serial)} · ${o.status === 'spare' ? 'spare' : esc(locText(o))}</option>`).join('');
+  dlg.innerHTML = `
+    <form class="dlg-body" id="retire-form" method="dialog" novalidate>
+      <h2 id="dlg-title">Retire ${esc(d.serial)}?</h2>
+      <p class="muted" style="font-size:14px">${d.slot ? `It leaves ${esc(locText(d))} and frees the slot.` : 'It leaves the spares list.'} Its history is kept. Nothing is deleted.</p>
+      <fieldset>
+        <legend>Reason (required)</legend>
+        ${['failed', 'replaced', 'other'].map(r => `<label class="radio"><input type="radio" name="reason" value="${r}"> ${cap(r)}</label>`).join('')}
+      </fieldset>
+      <label class="field">Retired on
+        <input type="date" name="date" value="${TODAY}"></label>
+      <label class="field">Replaced by
+        <select name="repl"><option value="">No replacement</option>${opts}</select></label>
+      <div class="cmp" id="cmp" aria-live="polite">No replacement linked.</div>
+      <label class="field">Note
+        <textarea name="note" rows="2" placeholder="Optional"></textarea></label>
+      <div class="dlg-actions">
+        <button class="btn ghost" type="button" data-act="dlg-cancel">Cancel</button>
+        <button class="btn danger solid" type="button" id="retire-ok" disabled>Retire drive</button>
+      </div>
+    </form>`;
+  const form = $('#retire-form');
+  const update = () => {
+    const reason = form.reason.value ? form.reason.value : null;
+    const r = find(form.repl.value);
+    if (r) {
+      const diff = r.tb - d.tb;
+      $('#cmp').innerHTML = `<b>Capacity</b> ${d.tb} TB → ${r.tb} TB (${diff === 0 ? 'same size' : (diff > 0 ? '+' : '') + diff + ' TB'}). Sizes are shown, not enforced.`;
+    } else {
+      $('#cmp').textContent = 'No replacement linked.';
+    }
+    $('#retire-ok').disabled = !reason;
+  };
+  form.addEventListener('change', update);
+  $('#retire-ok').onclick = () => {
+    const reason = form.reason.value;
+    if (!reason) return;
+    doRetire(serial, reason, form.date.value || TODAY, form.repl.value || null, form.note.value.trim());
+    dlg.close();
+  };
+  dlg.showModal();
+}
+
+/* ================= mutations ================= */
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+function refresh() {
+  render();
+  if (panelState) {
+    const still = panelState.serial ? find(panelState.serial) : true;
+    if (!still) closePanel(); else renderPanel();
+  }
+}
+
+function toSpare(serial) {
+  const d = find(serial);
+  const from = d.slot ? labelOf(d.slot) : '';
+  d.events.unshift([TODAY, `Removed${from ? ' from ' + gridOf(d.slot).name + ', ' + from : ''}, back to spares`]);
+  d.status = 'spare'; d.slot = null; d.absent = false; d.condition = d.condition || 'Used';
+  toast(`${serial} is back in spares`);
+  refresh();
+}
+
+function assign(serial, key) {
+  const d = find(serial);
+  const g = gridOf(key);
+  d.status = 'installed'; d.slot = key; d.absent = false;
+  d.pool = g.pool; d.role = g.role;
+  d.events.unshift([TODAY, `Installed in ${g.name}, ${labelOf(key)} · pool ${g.pool} as ${g.role}`]);
+  toast(`${serial} assigned to ${labelOf(key)}`);
+  panelState = { serial };
+  refresh();
+}
+
+function doRetire(serial, reason, date, repl, note) {
+  const d = find(serial);
+  const wasSlot = d.slot ? `Removed from ${gridOf(d.slot).name}, ${labelOf(d.slot)}. ` : '';
+  d.status = 'retired'; d.reason = reason; d.retiredOn = date; d.replacedBy = repl; d.slot = null; d.absent = false;
+  d.events.unshift([date, `${wasSlot}Retired · ${reason}${repl ? `, replaced by ${repl}` : ''}${note ? ' · ' + note : ''}`]);
+  toast(`${serial} retired`);
+  panelState = { serial };
+  refresh();
+}
+
+function reinstate(serial) {
+  const d = find(serial);
+  d.status = 'spare'; d.retiredOn = null; d.replacedBy = null; d.reason = null;
+  d.events.unshift([TODAY, 'Reinstated as spare']);
+  toast(`${serial} reinstated as spare`);
+  refresh();
+}
+
+function linkSpare(serial) {
+  const obs = inbox.find(i => i.serial === serial);
+  const d = find(serial);
+  d.status = 'installed'; d.slot = null; d.health = obs.health; d.seen = obs.seen; d.absent = false;
+  d.events.unshift([TODAY, 'Linked to a discovered drive, status installed']);
+  inbox = inbox.filter(i => i.serial !== serial);
+  toast(`Linked ${serial}. Assign it to a slot from Home.`);
+  refresh();
+}
+
+function createRecord(serial) {
+  const obs = inbox.find(i => i.serial === serial);
+  drives.push(rec(obs.serial, obs.model, obs.type, obs.tb, 'installed', {
+    health: obs.health, seen: obs.seen,
+    events: [[TODAY, 'Record created from discovered drive, status installed']]
+  }));
+  inbox = inbox.filter(i => i.serial !== serial);
+  toast(`Record created for ${serial}`);
+  refresh();
+}
+
+function doImport() {
+  const picked = imports.filter(i => impSel.has(i.serial));
+  picked.forEach(i => {
+    const date = impDate[i.serial] || i.seen.slice(0, 10);
+    const reason = impReason[i.serial];
+    drives.push(rec(i.serial, i.model, i.type, i.tb, 'retired', {
+      retiredOn: date, reason, seen: i.seen,
+      events: [[date, `Imported as retired · ${reason}`]]
+    }));
+  });
+  imports = imports.filter(i => !impSel.has(i.serial));
+  impSel.clear();
+  toast(`Imported ${picked.length} as retired`);
+  refresh();
+}
+
+function updateImportButton() {
+  const btn = $('#imp-go');
+  if (!btn) return;
+  const sel = [...impSel];
+  const ready = sel.length > 0 && sel.every(s => impReason[s]);
+  btn.disabled = !ready;
+  btn.textContent = sel.length ? `Import ${sel.length} as retired` : 'Select drives to import';
+  const all = $('#imp-all');
+  if (all) { all.checked = imports.length > 0 && sel.length === imports.length; all.indeterminate = sel.length > 0 && sel.length < imports.length; }
+}
+
+/* ================= render & routing ================= */
+const VIEWS = { home: homeView, drives: drivesView, inbox: inboxView };
+const TITLES = { home: 'Home', drives: 'Drives', inbox: 'Inbox' };
+
+function render() {
+  if (!VIEWS[route]) route = 'home';
+  $('#title').textContent = TITLES[route];
+  document.title = `${TITLES[route]} · Sparrow`;
+  $('#meta').innerHTML = `<span>Last updated 2 min ago</span><span class="pill-ok">${ic('check')}<span style="color:var(--ok)">Scrutiny reachable</span></span>`;
+  $('#view').innerHTML = VIEWS[route]();
+  renderNav();
+  if (route === 'inbox') updateImportButton();
+}
+
+function readRoute() {
+  const r = (location.hash.replace(/^#\/?/, '') || 'home');
+  route = VIEWS[r] ? r : 'home';
+}
+
+window.addEventListener('hashchange', () => { readRoute(); closePanel(); render(); });
+
+document.addEventListener('click', e => {
+  const t = e.target;
+  const slotBtn = t.closest('[data-slot]');
+  if (slotBtn) {
+    const key = slotBtn.dataset.slot;
+    const d = occupant(key);
+    openPanel(d ? { serial: d.serial } : { key });
+    render(); return;
+  }
+  const driveBtn = t.closest('[data-drive]');
+  if (driveBtn) { openPanel({ serial: driveBtn.dataset.drive }); render(); return; }
+  const filterBtn = t.closest('[data-filter]');
+  if (filterBtn) { driveFilter = filterBtn.dataset.filter; render(); return; }
+  if (t.closest('#scrim')) { closePanel(); render(); return; }
+
+  const act = t.closest('[data-act]');
+  if (!act) return;
+  const { act: a, serial, key } = act.dataset;
+  switch (a) {
+    case 'close': closePanel(); render(); break;
+    case 'dlg-cancel': dlg.close(); break;
+    case 'spare': toSpare(serial); break;
+    case 'retire': openRetire(serial); break;
+    case 'reinstate': reinstate(serial); break;
+    case 'assign': assign(serial, key); break;
+    case 'link': linkSpare(serial); break;
+    case 'create': createRecord(serial); break;
+  }
+});
+
+document.addEventListener('input', e => {
+  if (e.target.id === 'dq') {
+    driveQuery = e.target.value;
+    const list = $('#dlist');
+    if (list) list.innerHTML = driveRows();
+  }
+});
+
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.matches('[data-imp-sel]')) {
+    t.checked ? impSel.add(t.dataset.impSel) : impSel.delete(t.dataset.impSel);
+    updateImportButton();
+  } else if (t.matches('[data-imp-reason]')) {
+    impReason[t.dataset.impReason] = t.value || undefined;
+    updateImportButton();
+  } else if (t.matches('[data-imp-date]')) {
+    impDate[t.dataset.impDate] = t.value;
+  } else if (t.id === 'imp-all') {
+    impSel = t.checked ? new Set(imports.map(i => i.serial)) : new Set();
+    render();
+  }
+});
+
+document.addEventListener('click', e => {
+  if (e.target.id === 'bulk-apply') {
+    const r = $('#bulk-reason').value;
+    if (!r) { toast('Choose a reason first'); return; }
+    impSel.forEach(s => { impReason[s] = r; });
+    document.querySelectorAll('[data-imp-reason]').forEach(sel => {
+      if (impSel.has(sel.dataset.impReason)) sel.value = r;
+    });
+    updateImportButton();
+    toast(`Reason "${r}" applied to ${impSel.size}`);
+  }
+  if (e.target.id === 'imp-go') {
+    const n = impSel.size;
+    confirmBox(`Import ${n} ${n === 1 ? 'drive' : 'drives'} as retired?`,
+      'Each becomes a retired record with the reason and date you chose. No slots, pools or existing records change.',
+      `Import ${n} as retired`, doImport, false);
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('#panel').classList.contains('open') && !dlg.open) { closePanel(); render(); }
+});
+
+// Tap-to-select on the phone sheet: keep sheet in sync with its open state.
+function syncPanelPlacement() {
+  const phone = window.matchMedia('(max-width: 899px)').matches;
+  $('#panel').classList.toggle('panel-phone', phone);
+}
+window.matchMedia('(max-width: 899px)').addEventListener('change', syncPanelPlacement);
+syncPanelPlacement();
+
+readRoute();
+render();
+})();
+</script>
+</body>
+</html>

@@ -106,6 +106,7 @@ pnpm dev          # server with watch + Vite dev server proxying /api
 - Stale data is shown as stale (hatched or labelled), never hidden (R18, R47).
 - One bay grid component, driven by grid dimensions and orientation (R4, R7). No hardcoded 4x2.
 - Destructive or overwriting actions (import, retire) always confirm first.
+- Visual design direction (approved by the owner): `docs/UI_DESIGN.md`. Prototypes in `docs/design/prototypes/` are reference only.
 
 ## 9. When stuck
 
