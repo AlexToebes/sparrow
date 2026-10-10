@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { buildApp } from './api/app.js';
 import { loadConfig } from './config.js';
 import { createPoller } from './core/poller.js';
+import { seedInitialLayout } from './core/layout.js';
 import { openDatabase } from './db/client.js';
 import { createProvider } from './providers/index.js';
 
@@ -13,6 +14,7 @@ export async function start(env: Record<string, string | undefined> = process.en
   const config = loadConfig(env);
   mkdirSync(config.DATA_DIR, { recursive: true });
   const { db } = openDatabase(path.join(config.DATA_DIR, 'app.db'));
+  seedInitialLayout(db);
   const provider = createProvider(config.PROVIDER, env);
   const app = buildApp({ db, provider });
   const poller = createPoller({

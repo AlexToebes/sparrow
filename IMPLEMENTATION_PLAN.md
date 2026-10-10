@@ -50,7 +50,7 @@ Backend steps 2 to 10 expose their behavior through API routes as they go, so th
 
 ## Phase B: Core domain (no provider involved)
 
-- [ ] **Step 2: Layout management**
+- [x] **Step 2: Layout management**
   - Goal: create and edit enclosures and grids.
   - Requirements: R4, R5, R7, R38, R39, R40.
   - Work: service plus routes for enclosures, grids (rows, columns, orientation), slot labels. Seed the initial layout from R5 on first run only. Stable slot IDs; shrinking or removing an occupied slot is rejected with a clear error.
@@ -160,6 +160,7 @@ Copy from `REQUIREMENTS.md` section 6 and add new ideas here. Do not build these
 
 Short, dated notes from each session (surprises, decisions, deviations). Newest first.
 
+- 2026-10-10, Step 2: Slot position is the only identity that resizing touches (grow adds positions, shrink removes positions at or above the new count, orientation is render-only), so labels follow positions. Grid rows and columns are capped at 100 and enclosure names are not unique, as a smallest-choice default. Conflict 409s carry `details.occupied` and name slots by label or 1-based number. Layout edits write no drive events (R14 is per drive). Seeding runs in `start()` after migrations via `seedInitialLayout`, and sets `layout.seeded` even when enclosures already exist.
 - 2026-10-10, Step 5: `device_status` bits verified against Scrutiny source (webapp/backend/pkg/constants.go, https://github.com/AnalogJ/scrutiny/blob/master/webapp/backend/pkg/constants.go): `DeviceStatusPassed = 0`, `DeviceStatusFailedSmart = 1`, `DeviceStatusFailedScrutiny = 2`, documented as a bitwise flag, so 3 means both. Decisions: an NVMe whose "WWN" equals its serial (case-insensitive) gets no `wwn`; entries without a `smart` block are `unknown` unless a failure bit or risk category says otherwise; `lastReportedAt` is `collector_date`, else the record's `UpdatedAt`, else the epoch (reads as stale); `driveType` is NVMe if protocol or device type says nvme; `detailUrl` is `<SCRUTINY_URL>/web/device/<device_id>` (route assumed from Scrutiny's UI, not verified); `expectedUpdateIntervalHours` is 24 from the collector's default daily cron (stale threshold 36 h); request timeout 15 s; `pools` capability false. The leak test bans snake_case Scrutiny keys found in the fixture, not `wwn` or `form_factor` (legitimate names elsewhere).
 - 2026-10-10, Step 4: Port interface lives in `src/core/provider-port.ts` (re-exported by `src/providers/port.ts`) so core never imports providers; `buildApp({ db, provider? })` defaults to the none adapter; a failed poll writes a row with kept observations/lastSuccessAt, and a first-ever failure stores an empty snapshot with the error; `reachable` is false until a poll has succeeded last; overlapping polls share one in-flight run.
 - 2026-10-10, Step 3: `createDrive`/`updateDrive` run `recordEvent` in the same transaction, so a failing event write rolls back the edit (tested with a trigger). Serial conflicts are checked explicitly and return 409 naming the holder. No-op edits write no event. Empty strings are stored as given; the UI should send `null`. Input schemas reuse `driveSchema.shape`, and `updateDrive` requires `@sparrow/shared` to export `drive-api.ts`.
