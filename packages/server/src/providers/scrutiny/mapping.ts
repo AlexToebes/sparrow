@@ -44,16 +44,22 @@ const STATUS_SCRUTINY_FAILED = 2;
 const NEVER_REPORTED = '1970-01-01T00:00:00.000Z';
 
 /** Appendix B. `hasSmart` false means no SMART data was collected. */
-export function mapHealth(status: number, riskCategory: string | undefined, hasSmart: boolean): Health {
+export function mapHealth(
+  status: number,
+  riskCategory: string | undefined,
+  hasSmart: boolean,
+): Health {
   if ((status & STATUS_SMART_FAILED) !== 0 || riskCategory === 'replace_soon') return 'failed';
-  if ((status & STATUS_SCRUTINY_FAILED) !== 0 || riskCategory === 'plan_replacement') return 'warning';
+  if ((status & STATUS_SCRUTINY_FAILED) !== 0 || riskCategory === 'plan_replacement')
+    return 'warning';
   // Missing SMART data is never "ok" (R59). Explicit failure flags above still win.
   if (!hasSmart) return 'unknown';
   return 'ok';
 }
 
 function mapDriveType(d: RawEntry['device']): DriveType {
-  if (d.device_protocol.toLowerCase() === 'nvme' || d.device_type.toLowerCase() === 'nvme') return 'NVMe';
+  if (d.device_protocol.toLowerCase() === 'nvme' || d.device_type.toLowerCase() === 'nvme')
+    return 'NVMe';
   return d.rotational_speed === 0 ? 'SSD' : 'HDD';
 }
 

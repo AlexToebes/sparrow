@@ -38,7 +38,10 @@ export function createScrutinyProvider(env: Record<string, string | undefined>):
         mapSummary(await getSummary(), config.baseUrl);
         return { ok: true as const };
       } catch (e) {
-        return { ok: false as const, error: e instanceof Error ? e.message || 'Request failed' : 'Request failed' };
+        return {
+          ok: false as const,
+          error: e instanceof Error ? e.message || 'Request failed' : 'Request failed',
+        };
       }
     },
   };

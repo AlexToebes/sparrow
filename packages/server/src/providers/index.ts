@@ -1,13 +1,15 @@
 import { createNoneProvider } from './none/index.js';
 import type { DriveDataProvider } from './port.js';
+import { createScrutinyProvider } from './scrutiny/index.js';
 
 export type { DriveDataProvider } from './port.js';
 
 type Factory = (env: NodeJS.ProcessEnv) => DriveDataProvider;
 
-// Adapter-specific env is parsed inside each adapter (R45). Step 5 adds 'scrutiny' here.
+// Adapter-specific env is parsed inside each adapter (R45).
 const factories: Record<string, Factory> = {
   none: () => createNoneProvider(),
+  scrutiny: (env) => createScrutinyProvider(env),
 };
 
 export const PROVIDER_NAMES = Object.keys(factories);

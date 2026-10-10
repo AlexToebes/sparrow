@@ -2,7 +2,9 @@ import { z } from 'zod';
 
 /** R45: adapter settings are owned and parsed by the adapter, not by core config. */
 const scrutinyConfigSchema = z.object({
-  SCRUTINY_URL: z.url({ error: 'SCRUTINY_URL is required and must be a URL (e.g. http://scrutiny:8080)' }),
+  SCRUTINY_URL: z.url({
+    error: 'SCRUTINY_URL is required and must be a URL (e.g. http://scrutiny:8080)',
+  }),
   SCRUTINY_TOKEN: z
     .string()
     .optional()
@@ -21,7 +23,9 @@ export function loadScrutinyConfig(env: Record<string, string | undefined>): Scr
     SCRUTINY_TOKEN: env.SCRUTINY_TOKEN,
   });
   if (!parsed.success) {
-    throw new Error(`Invalid Scrutiny configuration: ${parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`);
+    throw new Error(
+      `Invalid Scrutiny configuration: ${parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`,
+    );
   }
   const { SCRUTINY_URL, SCRUTINY_TOKEN } = parsed.data;
   return {
