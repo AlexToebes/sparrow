@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import { ZodError } from 'zod';
 import type {
   CreateFromObservationInput,
   Drive,
@@ -78,6 +79,28 @@ function missingFrom(drive: Drive, o: Observation): Filled {
   if (!drive.driveType && o.driveType) filled.driveType = o.driveType;
   if (!drive.formFactor && o.formFactor) filled.formFactor = o.formFactor;
   return filled;
+}
+
+/**
+ * createDrive for values that came from an observation, not from a request. If they fail the drive
+ * schema (for example an over-long model) that is a server-side data problem, not a bad request,
+ * so it surfaces as a plain Error (HTTP 500) instead of a ZodError (HTTP 400).
+ */
+function createDriveFromObservation(
+  tx: AppDb,
+  input: Record<string, unknown>,
+  wwn: string | undefined,
+): Drive {
+  try {
+    return createDrive(tx, input, { wwn });
+  } catch (err) {
+    if (err instanceof ZodError) {
+      throw new Error(`The observation cannot be turned into a drive record: ${err.message}`, {
+        cause: err,
+      });
+    }
+    throw err;
+  }
 }
 
 const placementOf = (input: LinkObservationInput | CreateFromObservationInput) => ({
@@ -160,7 +183,7 @@ export function createFromObservation(
   const entry = requireInboxEntry(db, providerId, observationKey);
   const o = entry.observation;
   return db.transaction((tx) => {
-    const created = createDrive(
+    const created = createDriveFromObservation(
       nested(tx),
       {
         serial: (o.serial ?? '').trim(),
@@ -174,7 +197,7 @@ export function createFromObservation(
         vendor: input.vendor,
         notes: input.notes,
       },
-      { wwn: o.wwn },
+      o.wwn,
     );
     return assignDrive(nested(tx), { driveId: created.id, ...placementOf(input) });
   });
@@ -201,7 +224,7 @@ export function importRetired(db: AppDb, providerId: string, input: ImportRetire
   });
   return db.transaction((tx) =>
     planned.map(({ item, observation: o }) => {
-      const created = createDrive(
+      const created = createDriveFromObservation(
         nested(tx),
         {
           serial: (o.serial ?? '').trim(),
@@ -210,7 +233,7 @@ export function importRetired(db: AppDb, providerId: string, input: ImportRetire
           driveType: o.driveType,
           formFactor: o.formFactor,
         },
-        { wwn: o.wwn },
+        o.wwn,
       );
       return retireDrive(nested(tx), created.id, {
         reason: item.reason,

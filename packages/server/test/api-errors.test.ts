@@ -88,4 +88,42 @@ describe('API error mapping', () => {
 
     await app.close();
   });
+
+  it('answers unknown routes with a 404 in the error shape', async () => {
+    const app = buildApp({ db: opened.db });
+    const res = await app.inject({ method: 'GET', url: '/api/nope' });
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toEqual({
+      error: { code: 'not-found', message: 'Route GET /api/nope not found' },
+    });
+    await app.close();
+  });
+
+  it('treats an empty JSON body as {} and still rejects malformed JSON with a 400', async () => {
+    const app = buildApp({ db: opened.db });
+    app.post('/test/echo', async (req) => ({ body: req.body }));
+    const empty = await app.inject({
+      method: 'POST',
+      url: '/test/echo',
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(empty.statusCode).toBe(200);
+    expect(empty.json()).toEqual({ body: {} });
+    const ok = await app.inject({
+      method: 'POST',
+      url: '/test/echo',
+      headers: { 'content-type': 'application/json' },
+      payload: '{"a":1}',
+    });
+    expect(ok.json()).toEqual({ body: { a: 1 } });
+    const bad = await app.inject({
+      method: 'POST',
+      url: '/test/echo',
+      headers: { 'content-type': 'application/json' },
+      payload: '{nope',
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json()).toMatchObject({ error: { code: 'invalid' } });
+    await app.close();
+  });
 });

@@ -1,5 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { listDrivesQuerySchema } from '@sparrow/shared';
+import {
+  createDriveInputSchema,
+  listDrivesQuerySchema,
+  updateDriveInputSchema,
+} from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
 import { createDrive, getDrive, listDrives, updateDrive } from '../core/drives.js';
 import { listDriveEvents } from '../core/events.js';
@@ -14,7 +18,7 @@ export const driveRoutes: FastifyPluginAsync<{ db: AppDb }> = async (app, opts) 
   });
 
   app.post('/api/drives', async (req, reply) => {
-    const drive = createDrive(db, req.body);
+    const drive = createDrive(db, createDriveInputSchema.parse(req.body));
     return reply.status(201).send(drive);
   });
 
@@ -23,7 +27,7 @@ export const driveRoutes: FastifyPluginAsync<{ db: AppDb }> = async (app, opts) 
   );
 
   app.patch<{ Params: { id: string } }>('/api/drives/:id', async (req) =>
-    updateDrive(db, req.params.id, req.body),
+    updateDrive(db, req.params.id, updateDriveInputSchema.parse(req.body)),
   );
 
   app.get<{ Params: { id: string } }>('/api/drives/:id/events', async (req) => {

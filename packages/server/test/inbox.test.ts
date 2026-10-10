@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ZodError } from 'zod';
 import type { Observation } from '@sparrow/shared';
 import { buildApp } from '../src/api/app.js';
 import { assignDrive } from '../src/core/assignment.js';
@@ -425,6 +426,35 @@ describe('R55: the inbox ignores a snapshot from another provider', () => {
     expect(getInbox(db(), 'other').count).toBe(0);
     expect(getInbox(db(), 'other').retiredCandidates).toEqual([]);
     expect(getInbox(db(), P).count).toBe(1);
+  });
+});
+
+describe('internal parse failures are server errors, not client 400s', () => {
+  it('an observation that yields an invalid drive record fails as a plain Error, nothing written', async () => {
+    const [slot] = slots();
+    snapshot([obs('LONG1', { model: 'm'.repeat(300) })]);
+    const eventsBefore = eventCount();
+    let caught: unknown;
+    try {
+      createFromObservation(db(), P, 'LONG1', { slotId: slot! });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught).not.toBeInstanceOf(ZodError);
+    expect(caught).not.toBeInstanceOf(DomainError);
+    expect(listDrives(db())).toEqual([]);
+    expect(eventCount()).toBe(eventsBefore);
+
+    const app = buildApp({ db: db(), provider: fakeProvider });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/inbox/LONG1/create',
+      payload: { slotId: slot },
+    });
+    expect(res.statusCode).toBe(500);
+    expect(res.json()).toEqual({ error: { code: 'internal', message: 'Internal server error' } });
+    await app.close();
   });
 });
 

@@ -129,6 +129,70 @@ describe('poller', () => {
   });
 });
 
+describe('corrupt snapshot row (R18, R55)', () => {
+  const corrupt = (sqlite: { exec(sql: string): unknown }, providerId = 'fake') =>
+    sqlite.exec(
+      `INSERT OR REPLACE INTO provider_snapshot (id, provider_id, observations) VALUES (1, '${providerId}', '[{"bad":true}]')`,
+    );
+
+  it('snapshot.get() treats an unparseable row as no snapshot instead of throwing', () => {
+    const { db, sqlite } = openDatabase(':memory:');
+    corrupt(sqlite);
+    expect(createRepositories(db).snapshot.get()).toBeNull();
+  });
+
+  it('the next successful poll overwrites a corrupt row, even one from another provider', async () => {
+    const { db, sqlite } = openDatabase(':memory:');
+    corrupt(sqlite, 'old-provider');
+    const p = createPoller({
+      db,
+      provider: fake('fake', async () => [obs('A')]),
+      intervalMs: 1000,
+    });
+    expect(await p.pollOnce()).toEqual({ ok: true, observationCount: 1 });
+    expect(createRepositories(db).snapshot.get()).toMatchObject({
+      providerId: 'fake',
+      observations: [obs('A')],
+      lastError: null,
+    });
+  });
+
+  it('a failing poll over a corrupt row records the error and logs it', async () => {
+    const { db, sqlite } = openDatabase(':memory:');
+    corrupt(sqlite);
+    const log = { warn: vi.fn() };
+    const p = createPoller({
+      db,
+      provider: fake('fake', async () => {
+        throw new Error('down');
+      }),
+      intervalMs: 1000,
+      log,
+    });
+    expect(await p.pollOnce()).toEqual({ ok: false, error: 'down' });
+    expect(createRepositories(db).snapshot.get()).toMatchObject({ lastError: 'down' });
+    expect(log.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failure while discarding a foreign cache is a failed poll, not a thrown one', async () => {
+    const { db, sqlite } = openDatabase(':memory:');
+    createRepositories(db).snapshot.put({ providerId: 'other', observations: [] });
+    sqlite.exec(
+      "CREATE TRIGGER no_delete BEFORE DELETE ON provider_snapshot BEGIN SELECT RAISE(ABORT, 'locked'); END",
+    );
+    const log = { warn: vi.fn() };
+    const p = createPoller({
+      db,
+      provider: fake('fake', async () => [obs('A')]),
+      intervalMs: 1000,
+      log,
+    });
+    const result = await p.pollOnce();
+    expect(result.ok).toBe(false);
+    expect(log.warn).toHaveBeenCalled();
+  });
+});
+
 describe('GET /api/provider/status', () => {
   it('reports before any poll, after success and after failure', async () => {
     const { db } = openDatabase(':memory:');

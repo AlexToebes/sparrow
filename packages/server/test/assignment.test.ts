@@ -603,6 +603,19 @@ describe('assignment API', () => {
     await app.close();
   });
 
+  it('R8: POST remove with a JSON content type and no body works (empty body is {})', async () => {
+    const { slots } = setup();
+    const a = spare('A');
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]! });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/drives/${a.id}/remove`,
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ id: a.id, status: 'spare' });
+  });
+
   it('assign happy path returns { drive, occupant }, and 409 for an occupied slot', async () => {
     const { slots } = setup();
     const a = spare('A');

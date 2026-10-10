@@ -4,8 +4,15 @@ import type { AppDb } from '../db/client.js';
 import { createRepositories } from '../db/repositories.js';
 import type { DriveDataProvider } from './provider-port.js';
 
+/** The slice of a logger the poller uses (the Fastify logger fits). */
+export interface PollLog {
+  warn(obj: object, msg: string): void;
+}
+
 export interface PollerOptions {
   db: AppDb;
+  /** Where poll failures are reported. Optional; failures are always stored in the snapshot too. */
+  log?: PollLog | undefined;
   provider: DriveDataProvider;
   intervalMs: number;
   now?: () => Date;
@@ -22,7 +29,7 @@ export interface Poller {
 const observationsSchema = z.array(observationSchema);
 
 export function createPoller(opts: PollerOptions): Poller {
-  const { db, provider, intervalMs } = opts;
+  const { db, provider, intervalMs, log } = opts;
   const now = opts.now ?? (() => new Date());
   const repos = createRepositories(db);
   let timer: NodeJS.Timeout | undefined;
@@ -35,13 +42,17 @@ export function createPoller(opts: PollerOptions): Poller {
   };
 
   const run = async (): Promise<PollResult> => {
-    discardForeignCache();
     const at = now().toISOString();
     let observations: Observation[];
     try {
+      discardForeignCache();
       observations = observationsSchema.parse(await provider.fetchSnapshot());
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
+      log?.warn(
+        { err, providerId: provider.id },
+        `Poll of provider "${provider.id}" failed: ${error}`,
+      );
       // R18: keep the previous observations and lastSuccessAt; the snapshot goes stale, not empty.
       const prev = repos.snapshot.get();
       repos.snapshot.put({
@@ -66,10 +77,11 @@ export function createPoller(opts: PollerOptions): Poller {
   const pollOnce = (): Promise<PollResult> => {
     // Overlapping polls share one in-flight run.
     running ??= run()
-      .catch((err: unknown): PollResult => ({
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      }))
+      .catch((err: unknown): PollResult => {
+        const error = err instanceof Error ? err.message : String(err);
+        log?.warn({ err, providerId: provider.id }, `Poll could not store its result: ${error}`);
+        return { ok: false, error };
+      })
       .finally(() => {
         running = undefined;
       });

@@ -146,9 +146,13 @@ export function createRepositories(db: AppDb) {
       get(): SnapshotRow | null {
         const row = db.select().from(providerSnapshot).where(eq(providerSnapshot.id, 1)).get();
         if (!row) return null;
+        // A row that no longer parses (damaged, or written by an older version) counts as no
+        // snapshot; the next successful poll overwrites it. The cache is derived data (R18, R55).
+        const observations = observationsSchema.safeParse(row.observations);
+        if (!observations.success) return null;
         return {
           providerId: row.providerId,
-          observations: observationsSchema.parse(row.observations),
+          observations: observations.data,
           lastSuccessAt: row.lastSuccessAt,
           lastAttemptAt: row.lastAttemptAt,
           lastError: row.lastError,
