@@ -10,3 +10,4 @@ export * from './event.js';
 export * from './observation.js';
 export * from './drive-api.js';
 export * from './layout-api.js';
+export * from './assignment-api.js';
