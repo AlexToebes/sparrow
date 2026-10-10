@@ -6,6 +6,11 @@ const configSchema = z.object({
   HOST: z.string().min(1).default('0.0.0.0'),
   PROVIDER: z.string().min(1).default('none'),
   POLL_INTERVAL_MINUTES: z.coerce.number().positive().default(5),
+  /** R28: optional override in hours. Unset means 1.5 x the provider's update interval. */
+  STALE_AFTER_HOURS: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.coerce.number().positive().optional(),
+  ),
 });
 
 export type Config = z.infer<typeof configSchema>;

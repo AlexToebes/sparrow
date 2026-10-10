@@ -1,6 +1,7 @@
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply } from 'fastify';
 import { ZodError } from 'zod';
 import { DomainError } from '../core/errors.js';
+import { defaultStaleAfterHours } from '../core/health-status.js';
 import type { DriveDataProvider } from '../core/provider-port.js';
 import type { AppDb } from '../db/client.js';
 import { createNoneProvider } from '../providers/none/index.js';
@@ -10,6 +11,8 @@ export interface AppDeps {
   db: AppDb;
   /** Active provider (defaults to the none adapter); used by the status route. */
   provider?: DriveDataProvider;
+  /** R28: stale threshold in hours. Defaults to 1.5 x the provider's update interval. */
+  staleAfterHours?: number | undefined;
 }
 
 export interface ErrorBody {
@@ -34,6 +37,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   const app = Fastify();
   app.decorate('db', deps.db);
   app.decorate('provider', deps.provider ?? createNoneProvider());
+  app.decorate('staleAfterHours', deps.staleAfterHours ?? defaultStaleAfterHours(app.provider));
 
   app.setErrorHandler((err: FastifyError | Error, _req, reply) => {
     if (err instanceof DomainError) {
@@ -65,5 +69,6 @@ declare module 'fastify' {
   interface FastifyInstance {
     db: AppDb;
     provider: DriveDataProvider;
+    staleAfterHours: number;
   }
 }
