@@ -19,8 +19,21 @@ function where(p: Record<string, unknown>): string | null {
   return label && grid ? `${grid}, ${label}` : (label ?? grid);
 }
 
-function describe(e: DriveEvent): { title: string; detail: string | null } {
+/** Looks up a pool's name by ID, so the story can say which pool (null when unknown). */
+export type PoolNameLookup = (poolId: string) => string | null;
+
+const roleWord = (role: string | null): string | null =>
+  role === 'hot-spare' ? 'hot spare' : role;
+
+function describe(
+  e: DriveEvent,
+  poolName: PoolNameLookup,
+): { title: string; detail: string | null } {
   const p = e.payload;
+  const pool = () => {
+    const id = str(p.poolId);
+    return id ? poolName(id) : null;
+  };
   const note = str(p.note);
   const join = (...parts: (string | null)[]) => parts.filter(Boolean).join(' · ') || null;
   switch (e.type) {
@@ -48,21 +61,30 @@ function describe(e: DriveEvent): { title: string; detail: string | null } {
     case 'drive-linked':
       return { title: 'Linked to a drive in the NAS', detail: str(p.observationSerial) };
     case 'pool-joined':
-      return { title: 'Joined a pool', detail: str(p.role) };
+      return {
+        title: pool() ? `Joined pool ${pool()}` : 'Joined a pool',
+        detail: roleWord(str(p.role)),
+      };
     case 'pool-left':
-      return { title: 'Left a pool', detail: null };
+      return {
+        title: pool() ? `Left pool ${pool()}` : 'Left a pool',
+        detail: roleWord(str(p.role)),
+      };
     case 'pool-role-changed':
       return { title: 'Pool role changed', detail: join(str(p.from), str(p.to)) };
   }
 }
 
 /** Events newest first (as the API returns) in, oldest-first story out. */
-export function buildStory(eventsNewestFirst: DriveEvent[]): StoryItem[] {
+export function buildStory(
+  eventsNewestFirst: DriveEvent[],
+  poolName: PoolNameLookup = () => null,
+): StoryItem[] {
   const ordered = [...eventsNewestFirst].reverse();
   return ordered.map((e, i) => {
     const prev = ordered[i - 1];
     const ms = prev ? Date.parse(e.at) - Date.parse(prev.at) : 0;
-    const { title, detail } = describe(e);
+    const { title, detail } = describe(e, poolName);
     return {
       id: e.id,
       at: e.at,

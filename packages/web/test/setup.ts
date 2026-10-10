@@ -26,3 +26,10 @@ globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserv
 window.HTMLElement.prototype.scrollIntoView = vi.fn();
 
 afterEach(() => cleanup());
+
+// Mantine's autosizing Textarea listens for font loading events.
+if (!('fonts' in document)) {
+  Object.defineProperty(document, 'fonts', {
+    value: { addEventListener: vi.fn(), removeEventListener: vi.fn() },
+  });
+}

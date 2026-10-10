@@ -1,15 +1,16 @@
 import { Skeleton, Text } from '@mantine/core';
-import { useDriveEvents } from '../api/hooks';
+import { useDriveEvents, usePools } from '../api/hooks';
 import { formatDate, formatDuration } from '../lib/format';
 import { buildStory, summarizeStory } from '../lib/lifeStory';
 
 /** The drive's history as a vertical timeline, oldest first (UI_DESIGN, from E). */
 export function LifeStory({ driveId }: { driveId: string }) {
   const { data, isPending, isError } = useDriveEvents(driveId);
+  const pools = usePools();
   if (isPending) return <Skeleton height={80} />;
   if (isError) return <Text c="red">Could not load the history.</Text>;
   if (data.length === 0) return <Text c="dimmed">No history yet.</Text>;
-  const items = buildStory(data);
+  const items = buildStory(data, (id) => pools.data?.find((p) => p.id === id)?.name ?? null);
   const sum = summarizeStory(data);
   const parts = [
     sum.inService > 0 ? `${formatDuration(sum.inService)} in service` : null,

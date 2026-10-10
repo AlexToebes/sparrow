@@ -1,9 +1,12 @@
-import { Table, Text } from '@mantine/core';
+import { useState } from 'react';
+import { Button, Table, Text } from '@mantine/core';
 import type { Drive } from '@sparrow/shared';
 import { formatBytes } from '../lib/format';
+import { AssignDialog } from './AssignDialog';
 
-/** Spares on the shelf (from C). Read-only for now: assigning arrives in Step 12. */
+/** Spares on the shelf (from C). Each row has an Assign action. */
 export function SparesShelf({ spares }: { spares: Drive[] }) {
+  const [assigning, setAssigning] = useState<string | null>(null);
   return (
     <section className="card" aria-label="Spares shelf">
       <div className="card-head">
@@ -26,6 +29,7 @@ export function SparesShelf({ spares }: { spares: Drive[] }) {
                 <Table.Th>Capacity</Table.Th>
                 <Table.Th>Condition</Table.Th>
                 <Table.Th>Location</Table.Th>
+                <Table.Th />
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -36,12 +40,23 @@ export function SparesShelf({ spares }: { spares: Drive[] }) {
                   <Table.Td className="mono">{formatBytes(d.capacityBytes) || '—'}</Table.Td>
                   <Table.Td>{d.condition ?? '—'}</Table.Td>
                   <Table.Td>{d.storageLocation ?? '—'}</Table.Td>
+                  <Table.Td>
+                    <Button
+                      size="compact-sm"
+                      variant="light"
+                      aria-label={`Assign ${d.serial}`}
+                      onClick={() => setAssigning(d.id)}
+                    >
+                      Assign
+                    </Button>
+                  </Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
           </Table>
         </Table.ScrollContainer>
       )}
+      {assigning ? <AssignDialog driveId={assigning} onClose={() => setAssigning(null)} /> : null}
     </section>
   );
 }
