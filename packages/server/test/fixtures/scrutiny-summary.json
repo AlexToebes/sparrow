@@ -1,0 +1,3292 @@
+{
+  "data": {
+    "summary": {
+      "0ed2911b-4491-5e37-9a38-52a4628efd65": {
+        "smart": {
+          "collector_date": "2026-10-10T00:00:14Z",
+          "risk_score": 0,
+          "risk_category": "healthy",
+          "temp": 42,
+          "power_on_hours": 98607
+        },
+        "temp_history": [
+          {
+            "date": "2026-01-29T16:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-03-01T01:00:00Z",
+            "temp": 45
+          },
+          {
+            "date": "2026-03-01T16:00:00Z",
+            "temp": 45
+          },
+          {
+            "date": "2026-03-31T16:00:00Z",
+            "temp": 44
+          },
+          {
+            "date": "2026-05-01T01:00:00Z",
+            "temp": 45
+          },
+          {
+            "date": "2026-05-31T16:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-07-01T01:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-08-01T01:00:00Z",
+            "temp": 45
+          },
+          {
+            "date": "2026-08-31T16:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-09-17T01:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-09-20T02:00:00Z",
+            "temp": 44
+          },
+          {
+            "date": "2026-10-03T20:00:00Z",
+            "temp": 44
+          },
+          {
+            "date": "2026-10-03T22:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-10-03T23:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-10-04T00:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-10-04T01:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-10-04T22:00:00Z",
+            "temp": 44
+          },
+          {
+            "date": "2026-10-04T23:00:00Z",
+            "temp": 44
+          },
+          {
+            "date": "2026-10-05T00:00:00Z",
+            "temp": 44
+          },
+          {
+            "date": "2026-10-05T01:00:00Z",
+            "temp": 44
+          },
+          {
+            "date": "2026-10-05T22:00:00Z",
+            "temp": 44
+          },
+          {
+            "date": "2026-10-05T23:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-10-06T00:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-10-06T01:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-10-06T22:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-10-06T23:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-10-07T00:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-10-07T01:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-10-07T22:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-10-07T23:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-10-08T00:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-10-08T01:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-10-08T22:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-08T23:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-09T00:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-09T01:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-09T22:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-09T23:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-10T00:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-10T01:00:00Z",
+            "temp": 42
+          }
+        ],
+        "device": {
+          "UpdatedAt": "2026-10-10T00:00:17.162822968Z",
+          "CreatedAt": "2026-01-18T20:16:14.283776654Z",
+          "DeletedAt": null,
+          "interface_speed": "6.0 Gb/s",
+          "firmware": "MJAOA580",
+          "device_id": "0ed2911b-4491-5e37-9a38-52a4628efd65",
+          "wwn": "0x5000cca23dcce24d",
+          "device_name": "sdh",
+          "device_uuid": "",
+          "device_serial_id": "ata-HGST_HUS724040ALE640_PK1334PBGXAMLS",
+          "device_label": "",
+          "manufacturer": "",
+          "model_family": "Hitachi/HGST Ultrastar 7K4000",
+          "model_name": "HGST HUS724040ALE640",
+          "interface_type": "",
+          "smart_display_mode": "scrutiny",
+          "serial_number": "PK1334PBGXAMLS",
+          "collector_version": "1.76.4",
+          "host_id": "",
+          "label": "",
+          "form_factor": "3.5 inches",
+          "smart_support": {
+            "enabled": true,
+            "available": true
+          },
+          "device_protocol": "ATA",
+          "device_type": "scsi",
+          "capacity": 4000787030016,
+          "rotational_speed": 7200,
+          "missed_ping_timeout_override": 0,
+          "muted": false,
+          "archived": false,
+          "device_status": 0,
+          "has_forced_failure": false
+        }
+      },
+      "11a7913f-35b9-507d-a49d-d0d43703533d": {
+        "smart": {
+          "collector_date": "2026-10-10T00:00:17Z",
+          "risk_score": 0,
+          "risk_category": "healthy",
+          "temp": 24,
+          "power_on_hours": 86549
+        },
+        "temp_history": [
+          {
+            "date": "2026-01-29T16:00:00Z",
+            "temp": 23
+          },
+          {
+            "date": "2026-03-01T01:00:00Z",
+            "temp": 24
+          },
+          {
+            "date": "2026-03-01T16:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-03-31T16:00:00Z",
+            "temp": 24
+          },
+          {
+            "date": "2026-05-01T01:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-05-31T16:00:00Z",
+            "temp": 26
+          },
+          {
+            "date": "2026-07-01T01:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-08-01T01:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-08-31T16:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-03T20:00:00Z",
+            "temp": 26
+          },
+          {
+            "date": "2026-10-03T21:00:00Z",
+            "temp": 26
+          },
+          {
+            "date": "2026-10-03T22:00:00Z",
+            "temp": 26
+          },
+          {
+            "date": "2026-10-03T23:00:00Z",
+            "temp": 26
+          },
+          {
+            "date": "2026-10-04T00:00:00Z",
+            "temp": 26
+          },
+          {
+            "date": "2026-10-04T01:00:00Z",
+            "temp": 26
+          },
+          {
+            "date": "2026-10-04T17:00:00Z",
+            "temp": 26
+          },
+          {
+            "date": "2026-10-04T18:00:00Z",
+            "temp": 26
+          },
+          {
+            "date": "2026-10-04T19:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-04T20:00:00Z",
+            "temp": 24
+          },
+          {
+            "date": "2026-10-04T21:00:00Z",
+            "temp": 23
+          },
+          {
+            "date": "2026-10-04T22:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-04T23:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-05T00:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-05T01:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-05T17:00:00Z",
+            "temp": 26
+          },
+          {
+            "date": "2026-10-05T18:00:00Z",
+            "temp": 26
+          },
+          {
+            "date": "2026-10-05T19:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-05T20:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-05T21:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-05T22:00:00Z",
+            "temp": 26
+          },
+          {
+            "date": "2026-10-05T23:00:00Z",
+            "temp": 26
+          },
+          {
+            "date": "2026-10-06T00:00:00Z",
+            "temp": 27
+          },
+          {
+            "date": "2026-10-06T01:00:00Z",
+            "temp": 26
+          },
+          {
+            "date": "2026-10-06T17:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-06T18:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-06T19:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-06T20:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-06T21:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-06T22:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-06T23:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-07T00:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-07T01:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-07T17:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-07T18:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-07T19:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-07T20:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-07T21:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-07T22:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-07T23:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-08T00:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-08T01:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-08T17:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-08T18:00:00Z",
+            "temp": 24
+          },
+          {
+            "date": "2026-10-08T19:00:00Z",
+            "temp": 24
+          },
+          {
+            "date": "2026-10-08T20:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-08T21:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-08T22:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-08T23:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-10-09T00:00:00Z",
+            "temp": 26
+          },
+          {
+            "date": "2026-10-09T01:00:00Z",
+            "temp": 26
+          },
+          {
+            "date": "2026-10-09T17:00:00Z",
+            "temp": 24
+          },
+          {
+            "date": "2026-10-09T18:00:00Z",
+            "temp": 24
+          },
+          {
+            "date": "2026-10-09T19:00:00Z",
+            "temp": 24
+          },
+          {
+            "date": "2026-10-09T20:00:00Z",
+            "temp": 24
+          },
+          {
+            "date": "2026-10-09T21:00:00Z",
+            "temp": 24
+          },
+          {
+            "date": "2026-10-09T22:00:00Z",
+            "temp": 24
+          },
+          {
+            "date": "2026-10-09T23:00:00Z",
+            "temp": 24
+          },
+          {
+            "date": "2026-10-10T00:00:00Z",
+            "temp": 24
+          },
+          {
+            "date": "2026-10-10T01:00:00Z",
+            "temp": 24
+          }
+        ],
+        "device": {
+          "UpdatedAt": "2026-10-10T00:00:17.537323814Z",
+          "CreatedAt": "2026-01-18T20:16:14.286770611Z",
+          "DeletedAt": null,
+          "interface_speed": "6.0 Gb/s",
+          "firmware": "4IWVHPG1",
+          "device_id": "11a7913f-35b9-507d-a49d-d0d43703533d",
+          "wwn": "0x55cd2e404b4559b9",
+          "device_name": "sdi",
+          "device_uuid": "",
+          "device_serial_id": "ata-VK0480GDJXV_BTWL334003NB480QGN",
+          "device_label": "",
+          "manufacturer": "",
+          "model_family": "",
+          "model_name": "VK0480GDJXV",
+          "interface_type": "",
+          "smart_display_mode": "scrutiny",
+          "serial_number": "BTWL334003NB480QGN",
+          "collector_version": "1.76.4",
+          "host_id": "",
+          "label": "",
+          "form_factor": "2.5 inches",
+          "smart_support": {
+            "enabled": true,
+            "available": true
+          },
+          "device_protocol": "ATA",
+          "device_type": "scsi",
+          "capacity": 480103981056,
+          "rotational_speed": 0,
+          "missed_ping_timeout_override": 0,
+          "muted": false,
+          "archived": false,
+          "device_status": 3,
+          "has_forced_failure": false
+        }
+      },
+      "31930250-4d16-51f4-bd03-3746a5e4d1cb": {
+        "smart": {
+          "collector_date": "2026-07-01T00:00:00Z",
+          "risk_score": 100,
+          "risk_category": "replace_soon",
+          "temp": 48,
+          "power_on_hours": 65528
+        },
+        "temp_history": [
+          {
+            "date": "2026-07-01T01:00:00Z",
+            "temp": 45
+          }
+        ],
+        "device": {
+          "UpdatedAt": "2026-06-26T08:38:42.992522543Z",
+          "CreatedAt": "2026-06-14T00:00:07.576006156Z",
+          "DeletedAt": null,
+          "interface_speed": "6.0 Gb/s",
+          "firmware": "CC29",
+          "device_id": "31930250-4d16-51f4-bd03-3746a5e4d1cb",
+          "wwn": "0x5000c50065b61309",
+          "device_name": "sdg",
+          "device_uuid": "",
+          "device_serial_id": "ata-ST3000DM001-1CH166_Z1F4D9P8",
+          "device_label": "",
+          "manufacturer": "",
+          "model_family": "Seagate Barracuda 7200.14 (AF)",
+          "model_name": "ST3000DM001-1CH166",
+          "interface_type": "",
+          "smart_display_mode": "scrutiny",
+          "serial_number": "Z1F4D9P8",
+          "collector_version": "1.62.3",
+          "host_id": "",
+          "label": "",
+          "form_factor": "3.5 inches",
+          "smart_support": {
+            "enabled": true,
+            "available": true
+          },
+          "device_protocol": "ATA",
+          "device_type": "scsi",
+          "capacity": 3000592982016,
+          "rotational_speed": 7200,
+          "missed_ping_timeout_override": 0,
+          "muted": false,
+          "archived": true,
+          "device_status": 2,
+          "has_forced_failure": false
+        }
+      },
+      "39cc14b9-e861-53df-968d-802a7f0d45ea": {
+        "smart": {
+          "collector_date": "2026-07-01T00:00:00Z",
+          "risk_score": 0,
+          "risk_category": "healthy",
+          "temp": 47
+        },
+        "temp_history": [
+          {
+            "date": "2026-07-01T01:00:00Z",
+            "temp": 44
+          }
+        ],
+        "device": {
+          "UpdatedAt": "2026-06-26T08:38:50.170259435Z",
+          "CreatedAt": "2026-06-08T00:00:09.500381049Z",
+          "DeletedAt": null,
+          "interface_speed": "6.0 Gb/s",
+          "firmware": "CC29",
+          "device_id": "39cc14b9-e861-53df-968d-802a7f0d45ea",
+          "wwn": "0x5000c500656affe3",
+          "device_name": "sdg",
+          "device_uuid": "",
+          "device_serial_id": "ata-ST3000DM001-1CH166_Z1F48YQT",
+          "device_label": "",
+          "manufacturer": "",
+          "model_family": "Seagate Barracuda 7200.14 (AF)",
+          "model_name": "ST3000DM001-1CH166",
+          "interface_type": "",
+          "smart_display_mode": "raw",
+          "serial_number": "Z1F48YQT",
+          "collector_version": "1.65.0-beta.1",
+          "host_id": "",
+          "label": "",
+          "form_factor": "3.5 inches",
+          "smart_support": {
+            "enabled": true,
+            "available": true
+          },
+          "device_protocol": "ATA",
+          "device_type": "scsi",
+          "capacity": 3000592982016,
+          "rotational_speed": 7200,
+          "missed_ping_timeout_override": 0,
+          "muted": false,
+          "archived": true,
+          "device_status": 2,
+          "has_forced_failure": false
+        }
+      },
+      "40852412-2d14-57e3-9bbc-82d7cdc9df16": {
+        "smart": {
+          "collector_date": "2026-07-01T00:00:00Z",
+          "risk_score": 38,
+          "risk_category": "monitor",
+          "temp": 45,
+          "power_on_hours": 67253
+        },
+        "temp_history": [
+          {
+            "date": "2026-01-29T16:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-03-01T01:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-03-01T16:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-03-31T16:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-05-01T01:00:00Z",
+            "temp": 44
+          },
+          {
+            "date": "2026-05-31T16:00:00Z",
+            "temp": 45
+          },
+          {
+            "date": "2026-07-01T01:00:00Z",
+            "temp": 44
+          }
+        ],
+        "device": {
+          "UpdatedAt": "2026-06-07T20:22:52.300565966Z",
+          "CreatedAt": "2026-01-18T20:16:14.28458494Z",
+          "DeletedAt": null,
+          "interface_speed": "6.0 Gb/s",
+          "firmware": "PT05",
+          "device_id": "40852412-2d14-57e3-9bbc-82d7cdc9df16",
+          "wwn": "0x5000c5004dfe2218",
+          "device_name": "sdc",
+          "device_uuid": "",
+          "device_serial_id": "ata-ST2000NM0011_Z1P3GMFD",
+          "device_label": "",
+          "manufacturer": "",
+          "model_family": "Seagate Constellation ES (SATA 6Gb/s)",
+          "model_name": "ST2000NM0011",
+          "interface_type": "",
+          "smart_display_mode": "scrutiny",
+          "serial_number": "Z1P3GMFD",
+          "collector_version": "1.62.3",
+          "host_id": "",
+          "label": "",
+          "form_factor": "3.5 inches",
+          "smart_support": {
+            "enabled": true,
+            "available": true
+          },
+          "device_protocol": "ATA",
+          "device_type": "scsi",
+          "capacity": 2000398934016,
+          "rotational_speed": 7202,
+          "missed_ping_timeout_override": 0,
+          "muted": false,
+          "archived": true,
+          "device_status": 3,
+          "has_forced_failure": false
+        }
+      },
+      "4bacc143-98a9-59bf-961f-0d6cba4b5701": {
+        "device": {
+          "UpdatedAt": "2026-06-25T12:10:48.935570204Z",
+          "CreatedAt": "2026-06-25T12:10:48.935570204Z",
+          "DeletedAt": null,
+          "interface_speed": "",
+          "firmware": "",
+          "device_id": "4bacc143-98a9-59bf-961f-0d6cba4b5701",
+          "wwn": "",
+          "device_name": "nvme0",
+          "device_uuid": "",
+          "device_serial_id": "",
+          "device_label": "",
+          "manufacturer": "",
+          "model_family": "",
+          "model_name": "",
+          "interface_type": "",
+          "smart_display_mode": "scrutiny",
+          "serial_number": "",
+          "collector_version": "1.76.4",
+          "host_id": "",
+          "label": "",
+          "form_factor": "",
+          "smart_support": {
+            "available": false
+          },
+          "device_protocol": "",
+          "device_type": "nvme",
+          "capacity": 0,
+          "rotational_speed": 0,
+          "missed_ping_timeout_override": 0,
+          "muted": false,
+          "archived": false,
+          "device_status": 0,
+          "has_forced_failure": false
+        }
+      },
+      "4be555c9-62bf-5f4d-a618-ed1b51f81104": {
+        "smart": {
+          "collector_date": "2026-10-10T00:00:07Z",
+          "risk_score": 0,
+          "risk_category": "healthy",
+          "temp": 29,
+          "power_on_hours": 53645
+        },
+        "temp_history": [
+          {
+            "date": "2026-01-29T16:00:00Z",
+            "temp": 27
+          },
+          {
+            "date": "2026-03-01T01:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-03-01T16:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-03-31T16:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-05-01T01:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-05-31T16:00:00Z",
+            "temp": 31
+          },
+          {
+            "date": "2026-07-01T01:00:00Z",
+            "temp": 32
+          },
+          {
+            "date": "2026-08-01T01:00:00Z",
+            "temp": 33
+          },
+          {
+            "date": "2026-08-31T16:00:00Z",
+            "temp": 33
+          },
+          {
+            "date": "2026-09-17T01:00:00Z",
+            "temp": 34
+          },
+          {
+            "date": "2026-10-03T20:00:00Z",
+            "temp": 31
+          },
+          {
+            "date": "2026-10-03T21:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-03T22:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-03T23:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-04T00:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-04T01:00:00Z",
+            "temp": 33
+          },
+          {
+            "date": "2026-10-04T02:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-04T03:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-04T04:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-04T05:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-04T06:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-04T07:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-04T08:00:00Z",
+            "temp": 34
+          },
+          {
+            "date": "2026-10-04T09:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-04T10:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-04T11:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-04T12:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-04T13:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-04T14:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-04T15:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-04T16:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-04T17:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-04T18:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-04T19:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-04T20:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-04T21:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-04T22:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-04T23:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-05T00:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-05T01:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-05T02:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-05T03:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-05T04:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-05T05:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-05T06:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-05T07:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-05T08:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-05T09:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-05T10:00:00Z",
+            "temp": 31
+          },
+          {
+            "date": "2026-10-05T11:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-05T12:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-05T13:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-05T14:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-05T15:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-05T16:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-05T17:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-05T18:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-05T19:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-05T20:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-05T21:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-05T22:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-05T23:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-06T00:00:00Z",
+            "temp": 37
+          },
+          {
+            "date": "2026-10-06T01:00:00Z",
+            "temp": 34
+          },
+          {
+            "date": "2026-10-06T02:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-06T03:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-06T04:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-06T05:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-06T06:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-06T07:00:00Z",
+            "temp": 34
+          },
+          {
+            "date": "2026-10-06T08:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-06T09:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-06T10:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-06T11:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-06T12:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-06T13:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-06T14:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-06T15:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-06T16:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-06T17:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-06T18:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-06T19:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-06T20:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-06T21:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-06T22:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-06T23:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T00:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T01:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T02:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T03:00:00Z",
+            "temp": 31
+          },
+          {
+            "date": "2026-10-07T04:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T05:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T06:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T07:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T08:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T09:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T10:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T11:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T12:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T13:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T14:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T15:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T16:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T17:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T18:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T19:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T20:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T21:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T22:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-07T23:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T00:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T01:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T02:00:00Z",
+            "temp": 31
+          },
+          {
+            "date": "2026-10-08T03:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T04:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T05:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T06:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-08T07:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-08T08:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T09:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T10:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T11:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T12:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T13:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T14:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T15:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T16:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T17:00:00Z",
+            "temp": 31
+          },
+          {
+            "date": "2026-10-08T18:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T19:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T20:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T21:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T22:00:00Z",
+            "temp": 31
+          },
+          {
+            "date": "2026-10-08T23:00:00Z",
+            "temp": 32
+          },
+          {
+            "date": "2026-10-09T00:00:00Z",
+            "temp": 32
+          },
+          {
+            "date": "2026-10-09T01:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-09T02:00:00Z",
+            "temp": 31
+          },
+          {
+            "date": "2026-10-09T03:00:00Z",
+            "temp": 31
+          },
+          {
+            "date": "2026-10-09T04:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-09T05:00:00Z",
+            "temp": 32
+          },
+          {
+            "date": "2026-10-09T06:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-09T07:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-09T08:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-09T09:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-09T10:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-09T11:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-09T12:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-09T13:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-09T14:00:00Z",
+            "temp": 31
+          },
+          {
+            "date": "2026-10-09T15:00:00Z",
+            "temp": 31
+          },
+          {
+            "date": "2026-10-09T16:00:00Z",
+            "temp": 31
+          },
+          {
+            "date": "2026-10-09T17:00:00Z",
+            "temp": 31
+          },
+          {
+            "date": "2026-10-09T18:00:00Z",
+            "temp": 31
+          },
+          {
+            "date": "2026-10-09T19:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-09T20:00:00Z",
+            "temp": 23
+          },
+          {
+            "date": "2026-10-09T22:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-09T23:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-10T00:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-10T01:00:00Z",
+            "temp": 29
+          }
+        ],
+        "device": {
+          "UpdatedAt": "2026-10-10T00:00:07.915687555Z",
+          "CreatedAt": "2026-01-18T20:16:14.279814065Z",
+          "DeletedAt": null,
+          "interface_speed": "6.0 Gb/s",
+          "firmware": "SC60",
+          "device_id": "4be555c9-62bf-5f4d-a618-ed1b51f81104",
+          "wwn": "0x5000c500b0e56bb3",
+          "device_name": "sdd",
+          "device_uuid": "",
+          "device_serial_id": "ata-ST4000VN008-2DR166_ZGY28D5L",
+          "device_label": "",
+          "manufacturer": "",
+          "model_family": "Seagate IronWolf",
+          "model_name": "ST4000VN008-2DR166",
+          "interface_type": "",
+          "smart_display_mode": "scrutiny",
+          "serial_number": "ZGY28D5L",
+          "collector_version": "1.76.4",
+          "host_id": "",
+          "label": "",
+          "form_factor": "3.5 inches",
+          "smart_support": {
+            "enabled": true,
+            "available": true
+          },
+          "device_protocol": "ATA",
+          "device_type": "scsi",
+          "capacity": 4000787030016,
+          "rotational_speed": 5980,
+          "missed_ping_timeout_override": 0,
+          "muted": false,
+          "archived": false,
+          "device_status": 0,
+          "has_forced_failure": false
+        }
+      },
+      "7ec5aca1-a888-5d48-ab4e-b668ce68d156": {
+        "smart": {
+          "collector_date": "2026-01-29T15:00:00Z",
+          "risk_score": 0,
+          "risk_category": "healthy",
+          "temp": 20,
+          "power_on_hours": 77929
+        },
+        "temp_history": [
+          {
+            "date": "2026-01-29T16:00:00Z",
+            "temp": 20
+          }
+        ],
+        "device": {
+          "UpdatedAt": "2026-02-20T11:17:16.570766065Z",
+          "CreatedAt": "2026-01-18T20:16:14.286015732Z",
+          "DeletedAt": null,
+          "interface_speed": "6.0 Gb/s",
+          "firmware": "4IWVHPG1",
+          "device_id": "7ec5aca1-a888-5d48-ab4e-b668ce68d156",
+          "wwn": "0x55cd2e404b4ecce4",
+          "device_name": "sdh",
+          "device_uuid": "",
+          "device_serial_id": "ata-VK0480GDJXV_BTWL342107E8480QGN",
+          "device_label": "",
+          "manufacturer": "",
+          "model_family": "",
+          "model_name": "VK0480GDJXV",
+          "interface_type": "",
+          "smart_display_mode": "scrutiny",
+          "serial_number": "BTWL342107E8480QGN",
+          "collector_version": "",
+          "host_id": "",
+          "label": "",
+          "form_factor": "2.5 inches",
+          "smart_support": {
+            "available": false
+          },
+          "device_protocol": "ATA",
+          "device_type": "sat",
+          "capacity": 480103981056,
+          "rotational_speed": 0,
+          "missed_ping_timeout_override": 0,
+          "muted": false,
+          "archived": true,
+          "device_status": 1,
+          "has_forced_failure": false
+        }
+      },
+      "7f61b9b4-fd41-5c6b-b77f-08d401878b3e": {
+        "smart": {
+          "collector_date": "2026-10-10T00:00:18Z",
+          "risk_score": 0,
+          "risk_category": "healthy",
+          "temp": 28,
+          "power_on_hours": 6183
+        },
+        "temp_history": [
+          {
+            "date": "2026-01-29T16:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-03-01T01:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-03-01T16:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-03-31T16:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-05-01T01:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-05-31T16:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-07-01T01:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-08-01T01:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-08-31T16:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-09-17T01:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-03T20:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-03T21:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-03T22:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-03T23:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-04T00:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-04T01:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-04T17:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-04T18:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-04T19:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-04T20:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-04T21:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-04T22:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-04T23:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-05T00:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-05T01:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-05T17:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-05T18:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-05T19:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-05T20:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-05T21:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-05T22:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-05T23:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-06T00:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-06T01:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-06T17:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-06T18:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-06T19:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-06T20:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-06T21:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-06T22:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-06T23:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-07T00:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-07T01:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-07T17:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-07T18:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-07T19:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-07T20:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-07T21:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-07T22:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-07T23:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-08T00:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-08T01:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-08T17:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-08T18:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-08T19:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-08T20:00:00Z",
+            "temp": 30
+          },
+          {
+            "date": "2026-10-08T21:00:00Z",
+            "temp": 29
+          },
+          {
+            "date": "2026-10-08T22:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-08T23:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-09T00:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-09T01:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-09T17:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-09T18:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-09T19:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-09T20:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-09T21:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-09T22:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-09T23:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-10T00:00:00Z",
+            "temp": 28
+          },
+          {
+            "date": "2026-10-10T01:00:00Z",
+            "temp": 28
+          }
+        ],
+        "device": {
+          "UpdatedAt": "2026-10-10T00:00:18.649841126Z",
+          "CreatedAt": "2026-01-25T00:00:07.330491586Z",
+          "DeletedAt": null,
+          "interface_speed": "6.0 Gb/s",
+          "firmware": "V1.4.2",
+          "device_id": "7f61b9b4-fd41-5c6b-b77f-08d401878b3e",
+          "wwn": "0x53a5a275221331a5",
+          "device_name": "sdj",
+          "device_uuid": "",
+          "device_serial_id": "ata-Lexar_SSD_NS100_1TB_QJL522R0029130S326",
+          "device_label": "",
+          "manufacturer": "",
+          "model_family": "",
+          "model_name": "Lexar SSD NS100 1TB",
+          "interface_type": "",
+          "smart_display_mode": "scrutiny",
+          "serial_number": "QJL522R0029130S326",
+          "collector_version": "1.76.4",
+          "host_id": "",
+          "label": "",
+          "form_factor": "2.5 inches",
+          "smart_support": {
+            "enabled": true,
+            "available": true
+          },
+          "device_protocol": "ATA",
+          "device_type": "scsi",
+          "capacity": 1024209543168,
+          "rotational_speed": 0,
+          "missed_ping_timeout_override": 0,
+          "muted": false,
+          "archived": false,
+          "device_status": 0,
+          "has_forced_failure": false
+        }
+      },
+      "a0e54f4e-4581-5970-9679-46ea058a407f": {
+        "smart": {
+          "collector_date": "2026-10-10T00:00:08Z",
+          "risk_score": 0,
+          "risk_category": "healthy",
+          "temp": 37,
+          "power_on_hours": 7204
+        },
+        "temp_history": [
+          {
+            "date": "2026-01-29T16:00:00Z",
+            "temp": 37
+          },
+          {
+            "date": "2026-03-01T01:00:00Z",
+            "temp": 37
+          },
+          {
+            "date": "2026-03-01T16:00:00Z",
+            "temp": 37
+          },
+          {
+            "date": "2026-03-31T16:00:00Z",
+            "temp": 37
+          },
+          {
+            "date": "2026-05-01T01:00:00Z",
+            "temp": 37
+          },
+          {
+            "date": "2026-05-31T16:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-07-01T01:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-08-01T01:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-08-31T16:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-03T20:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-04T01:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-05T01:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-06T01:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-07T01:00:00Z",
+            "temp": 37
+          },
+          {
+            "date": "2026-10-08T01:00:00Z",
+            "temp": 37
+          },
+          {
+            "date": "2026-10-09T01:00:00Z",
+            "temp": 37
+          },
+          {
+            "date": "2026-10-10T01:00:00Z",
+            "temp": 37
+          }
+        ],
+        "device": {
+          "UpdatedAt": "2026-10-10T00:00:08.339436566Z",
+          "CreatedAt": "2026-01-18T20:16:14.282209416Z",
+          "DeletedAt": null,
+          "interface_speed": "6.0 Gb/s",
+          "firmware": "CC4H",
+          "device_id": "a0e54f4e-4581-5970-9679-46ea058a407f",
+          "wwn": "0x5000c5005bb53c89",
+          "device_name": "sde",
+          "device_uuid": "",
+          "device_serial_id": "ata-ST2000DM001-9YN164_S1E16KGM",
+          "device_label": "",
+          "manufacturer": "",
+          "model_family": "Seagate Barracuda 7200.14 (AF)",
+          "model_name": "ST2000DM001-9YN164",
+          "interface_type": "",
+          "smart_display_mode": "scrutiny",
+          "serial_number": "S1E16KGM",
+          "collector_version": "1.76.4",
+          "host_id": "",
+          "label": "",
+          "form_factor": "",
+          "smart_support": {
+            "enabled": true,
+            "available": true
+          },
+          "device_protocol": "ATA",
+          "device_type": "scsi",
+          "capacity": 2000398934016,
+          "rotational_speed": 7200,
+          "missed_ping_timeout_override": 0,
+          "muted": false,
+          "archived": false,
+          "device_status": 0,
+          "has_forced_failure": false
+        }
+      },
+      "a8ff433b-5f38-5644-bce5-31949f13c9a3": {
+        "smart": {
+          "collector_date": "2026-10-10T00:00:09Z",
+          "risk_score": 0,
+          "risk_category": "healthy",
+          "temp": 37,
+          "power_on_hours": 78979
+        },
+        "temp_history": [
+          {
+            "date": "2026-01-29T16:00:00Z",
+            "temp": 36
+          },
+          {
+            "date": "2026-03-01T01:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-03-01T16:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-03-31T16:00:00Z",
+            "temp": 37
+          },
+          {
+            "date": "2026-05-01T01:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-05-31T16:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-07-01T01:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-08-01T01:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-08-31T16:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-09-17T01:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-09-20T02:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-09-24T01:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-09-27T02:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-03T20:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-03T21:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-03T22:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-03T23:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-04T00:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-04T01:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-04T17:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-04T18:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-04T19:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-04T20:00:00Z",
+            "temp": 35
+          },
+          {
+            "date": "2026-10-04T21:00:00Z",
+            "temp": 35
+          },
+          {
+            "date": "2026-10-04T22:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-04T23:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-05T00:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-05T01:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-05T17:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-05T18:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-05T19:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-05T20:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-05T21:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-05T22:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-05T23:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-06T00:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-06T01:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-06T17:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-06T18:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-06T19:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-06T20:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-06T21:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-06T22:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-06T23:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-07T00:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-07T01:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-07T17:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-07T18:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-07T19:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-07T20:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-07T21:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-07T22:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-07T23:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-08T00:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-08T01:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-08T17:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-08T18:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-08T19:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-08T20:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-08T21:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-08T22:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-08T23:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-09T00:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-09T01:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-09T17:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-09T18:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-09T19:00:00Z",
+            "temp": 37
+          },
+          {
+            "date": "2026-10-09T20:00:00Z",
+            "temp": 37
+          },
+          {
+            "date": "2026-10-09T21:00:00Z",
+            "temp": 37
+          },
+          {
+            "date": "2026-10-09T22:00:00Z",
+            "temp": 37
+          },
+          {
+            "date": "2026-10-09T23:00:00Z",
+            "temp": 37
+          },
+          {
+            "date": "2026-10-10T00:00:00Z",
+            "temp": 37
+          },
+          {
+            "date": "2026-10-10T01:00:00Z",
+            "temp": 37
+          }
+        ],
+        "device": {
+          "UpdatedAt": "2026-10-10T00:00:10.475089818Z",
+          "CreatedAt": "2026-01-18T20:16:14.285300624Z",
+          "DeletedAt": null,
+          "interface_speed": "6.0 Gb/s",
+          "firmware": "RR04",
+          "device_id": "a8ff433b-5f38-5644-bce5-31949f13c9a3",
+          "wwn": "0x50014ee00437ea6d",
+          "device_name": "sdf",
+          "device_uuid": "",
+          "device_serial_id": "ata-WDC_WD2004FBYZ-01YCBB1_WD-WMC6N0D7PHZ0",
+          "device_label": "",
+          "manufacturer": "",
+          "model_family": "Western Digital Re",
+          "model_name": "WDC WD2004FBYZ-01YCBB1",
+          "interface_type": "",
+          "smart_display_mode": "scrutiny",
+          "serial_number": "WD-WMC6N0D7PHZ0",
+          "collector_version": "1.76.4",
+          "host_id": "",
+          "label": "",
+          "form_factor": "3.5 inches",
+          "smart_support": {
+            "enabled": true,
+            "available": true
+          },
+          "device_protocol": "ATA",
+          "device_type": "scsi",
+          "capacity": 2000398934016,
+          "rotational_speed": 7200,
+          "missed_ping_timeout_override": 0,
+          "muted": false,
+          "archived": false,
+          "device_status": 0,
+          "has_forced_failure": false
+        }
+      },
+      "b3d55a36-70a7-5b23-93f2-afa7a98eece8": {
+        "smart": {
+          "collector_date": "2026-07-01T00:00:00Z",
+          "percentage_used": 30,
+          "risk_score": 20,
+          "risk_category": "healthy",
+          "temp": 31,
+          "power_on_hours": 49022
+        },
+        "temp_history": [
+          {
+            "date": "2026-01-29T16:00:00Z",
+            "temp": 24
+          },
+          {
+            "date": "2026-03-31T16:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-05-01T01:00:00Z",
+            "temp": 25
+          },
+          {
+            "date": "2026-05-31T16:00:00Z",
+            "temp": 26
+          },
+          {
+            "date": "2026-07-01T01:00:00Z",
+            "temp": 27
+          }
+        ],
+        "device": {
+          "UpdatedAt": "2026-06-25T00:00:20.452698025Z",
+          "CreatedAt": "2026-01-18T20:16:14.283005182Z",
+          "DeletedAt": null,
+          "interface_speed": "",
+          "firmware": "EDFM00.2",
+          "device_id": "b3d55a36-70a7-5b23-93f2-afa7a98eece8",
+          "wwn": "sn195108904754",
+          "device_name": "nvme0",
+          "device_uuid": "",
+          "device_serial_id": "",
+          "device_label": "",
+          "manufacturer": "",
+          "model_family": "",
+          "model_name": "GIGABYTE GP-GSM2NE3256GNTD",
+          "interface_type": "",
+          "smart_display_mode": "scrutiny",
+          "serial_number": "SN195108904754",
+          "collector_version": "1.62.3",
+          "host_id": "",
+          "label": "",
+          "form_factor": "",
+          "smart_support": {
+            "enabled": true,
+            "available": true
+          },
+          "device_protocol": "NVMe",
+          "device_type": "nvme",
+          "capacity": 256060514304,
+          "rotational_speed": 0,
+          "missed_ping_timeout_override": 0,
+          "muted": false,
+          "archived": false,
+          "device_status": 0,
+          "has_forced_failure": false
+        }
+      },
+      "bc5d94c7-991a-5181-93fe-eb4999fd035a": {
+        "smart": {
+          "collector_date": "2026-10-10T00:00:19Z",
+          "risk_score": 0,
+          "risk_category": "healthy",
+          "temp": 40,
+          "power_on_hours": 18373
+        },
+        "temp_history": [
+          {
+            "date": "2026-01-29T16:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-03-01T01:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-03-01T16:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-03-31T16:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-05-01T01:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-05-31T16:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-07-01T01:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-08-01T01:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-08-31T16:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-09-20T02:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-03T20:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-04T01:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-05T01:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-06T01:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-07T01:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-08T01:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-09T01:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-10T01:00:00Z",
+            "temp": 40
+          }
+        ],
+        "device": {
+          "UpdatedAt": "2026-10-10T00:00:19.784091945Z",
+          "CreatedAt": "2026-01-18T20:16:14.278808823Z",
+          "DeletedAt": null,
+          "interface_speed": "6.0 Gb/s",
+          "firmware": "CC29",
+          "device_id": "bc5d94c7-991a-5181-93fe-eb4999fd035a",
+          "wwn": "0x5000c50065b61802",
+          "device_name": "sda",
+          "device_uuid": "",
+          "device_serial_id": "ata-ST3000DM001-1CH166_Z1F4BTTL",
+          "device_label": "",
+          "manufacturer": "",
+          "model_family": "Seagate Barracuda 7200.14 (AF)",
+          "model_name": "ST3000DM001-1CH166",
+          "interface_type": "",
+          "smart_display_mode": "scrutiny",
+          "serial_number": "Z1F4BTTL",
+          "collector_version": "1.76.4",
+          "host_id": "",
+          "label": "",
+          "form_factor": "3.5 inches",
+          "smart_support": {
+            "enabled": true,
+            "available": true
+          },
+          "device_protocol": "ATA",
+          "device_type": "scsi",
+          "capacity": 3000592982016,
+          "rotational_speed": 7200,
+          "missed_ping_timeout_override": 0,
+          "muted": false,
+          "archived": false,
+          "device_status": 0,
+          "has_forced_failure": false
+        }
+      },
+      "e3835766-a95c-52de-b329-8866488e9609": {
+        "smart": {
+          "collector_date": "2026-10-10T00:00:19Z",
+          "risk_score": 0,
+          "risk_category": "healthy",
+          "temp": 39,
+          "power_on_hours": 79216
+        },
+        "temp_history": [
+          {
+            "date": "2026-01-29T16:00:00Z",
+            "temp": 37
+          },
+          {
+            "date": "2026-03-01T01:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-03-01T16:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-03-31T16:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-05-01T01:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-05-31T16:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-07-01T01:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-08-01T01:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-08-31T16:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-09-17T01:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-09-20T02:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-03T20:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-03T21:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-03T22:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-03T23:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-04T00:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-04T01:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-04T17:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-04T18:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-04T19:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-04T20:00:00Z",
+            "temp": 37
+          },
+          {
+            "date": "2026-10-04T21:00:00Z",
+            "temp": 36
+          },
+          {
+            "date": "2026-10-04T22:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-04T23:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-05T00:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-05T01:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-05T17:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-05T18:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-05T19:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-05T20:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-05T21:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-05T22:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-05T23:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-06T00:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-06T01:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-06T17:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-06T18:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-06T19:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-06T20:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-06T21:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-06T22:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-06T23:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-07T00:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-07T01:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-07T17:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-07T18:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-07T19:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-07T20:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-07T21:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-07T22:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-07T23:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-08T00:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-08T01:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-08T17:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-08T18:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-08T19:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-08T20:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-08T21:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-08T22:00:00Z",
+            "temp": 40
+          },
+          {
+            "date": "2026-10-08T23:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-09T00:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-10-09T01:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-09T17:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-09T18:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-09T19:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-09T20:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-09T21:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-09T22:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-09T23:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-10T00:00:00Z",
+            "temp": 39
+          },
+          {
+            "date": "2026-10-10T01:00:00Z",
+            "temp": 39
+          }
+        ],
+        "device": {
+          "UpdatedAt": "2026-10-10T00:00:21.108150525Z",
+          "CreatedAt": "2026-01-18T20:16:14.280520927Z",
+          "DeletedAt": null,
+          "interface_speed": "6.0 Gb/s",
+          "firmware": "RR04",
+          "device_id": "e3835766-a95c-52de-b329-8866488e9609",
+          "wwn": "0x50014ee0aee2aa6b",
+          "device_name": "sdc",
+          "device_uuid": "",
+          "device_serial_id": "ata-WDC_WD2004FBYZ-01YCBB1_WD-WMC6N0D7DHWC",
+          "device_label": "",
+          "manufacturer": "",
+          "model_family": "Western Digital Re",
+          "model_name": "WDC WD2004FBYZ-01YCBB1",
+          "interface_type": "",
+          "smart_display_mode": "scrutiny",
+          "serial_number": "WD-WMC6N0D7DHWC",
+          "collector_version": "1.76.4",
+          "host_id": "",
+          "label": "",
+          "form_factor": "3.5 inches",
+          "smart_support": {
+            "enabled": true,
+            "available": true
+          },
+          "device_protocol": "ATA",
+          "device_type": "scsi",
+          "capacity": 2000398934016,
+          "rotational_speed": 7200,
+          "missed_ping_timeout_override": 0,
+          "muted": false,
+          "archived": false,
+          "device_status": 0,
+          "has_forced_failure": false
+        }
+      },
+      "e750dfd2-3393-5e0a-9e44-9eef56d867cb": {
+        "smart": {
+          "collector_date": "2026-10-10T00:00:11Z",
+          "risk_score": 69,
+          "risk_category": "plan_replacement",
+          "temp": 46,
+          "power_on_hours": 79073
+        },
+        "temp_history": [
+          {
+            "date": "2026-01-29T16:00:00Z",
+            "temp": 44
+          },
+          {
+            "date": "2026-03-01T01:00:00Z",
+            "temp": 45
+          },
+          {
+            "date": "2026-03-01T16:00:00Z",
+            "temp": 45
+          },
+          {
+            "date": "2026-03-31T16:00:00Z",
+            "temp": 44
+          },
+          {
+            "date": "2026-05-01T01:00:00Z",
+            "temp": 45
+          },
+          {
+            "date": "2026-05-31T16:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-07-01T01:00:00Z",
+            "temp": 47
+          },
+          {
+            "date": "2026-08-01T01:00:00Z",
+            "temp": 48
+          },
+          {
+            "date": "2026-08-31T16:00:00Z",
+            "temp": 48
+          },
+          {
+            "date": "2026-09-17T01:00:00Z",
+            "temp": 47
+          },
+          {
+            "date": "2026-09-20T02:00:00Z",
+            "temp": 47
+          },
+          {
+            "date": "2026-10-03T20:00:00Z",
+            "temp": 47
+          },
+          {
+            "date": "2026-10-03T22:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-10-03T23:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-10-04T00:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-10-04T01:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-10-04T22:00:00Z",
+            "temp": 47
+          },
+          {
+            "date": "2026-10-04T23:00:00Z",
+            "temp": 47
+          },
+          {
+            "date": "2026-10-05T00:00:00Z",
+            "temp": 47
+          },
+          {
+            "date": "2026-10-05T01:00:00Z",
+            "temp": 47
+          },
+          {
+            "date": "2026-10-05T22:00:00Z",
+            "temp": 47
+          },
+          {
+            "date": "2026-10-05T23:00:00Z",
+            "temp": 47
+          },
+          {
+            "date": "2026-10-06T00:00:00Z",
+            "temp": 47
+          },
+          {
+            "date": "2026-10-06T01:00:00Z",
+            "temp": 47
+          },
+          {
+            "date": "2026-10-06T22:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-10-06T23:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-10-07T00:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-10-07T01:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-10-07T22:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-10-07T23:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-10-08T00:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-10-08T01:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-10-08T22:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-10-08T23:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-10-09T00:00:00Z",
+            "temp": 45
+          },
+          {
+            "date": "2026-10-09T01:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-10-09T22:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-10-09T23:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-10-10T00:00:00Z",
+            "temp": 46
+          },
+          {
+            "date": "2026-10-10T01:00:00Z",
+            "temp": 46
+          }
+        ],
+        "device": {
+          "UpdatedAt": "2026-10-10T00:00:14.17394508Z",
+          "CreatedAt": "2026-01-18T20:16:14.281363563Z",
+          "DeletedAt": null,
+          "interface_speed": "6.0 Gb/s",
+          "firmware": "MJAOA580",
+          "device_id": "e750dfd2-3393-5e0a-9e44-9eef56d867cb",
+          "wwn": "0x5000cca22bdc6cdf",
+          "device_name": "sdg",
+          "device_uuid": "",
+          "device_serial_id": "ata-HGST_HUS724040ALE640_PK1331PAJ0JGWX",
+          "device_label": "",
+          "manufacturer": "",
+          "model_family": "Hitachi/HGST Ultrastar 7K4000",
+          "model_name": "HGST HUS724040ALE640",
+          "interface_type": "",
+          "smart_display_mode": "scrutiny",
+          "serial_number": "PK1331PAJ0JGWX",
+          "collector_version": "1.76.4",
+          "host_id": "",
+          "label": "",
+          "form_factor": "3.5 inches",
+          "smart_support": {
+            "enabled": true,
+            "available": true
+          },
+          "device_protocol": "ATA",
+          "device_type": "scsi",
+          "capacity": 4000787030016,
+          "rotational_speed": 7200,
+          "missed_ping_timeout_override": 0,
+          "muted": false,
+          "archived": false,
+          "device_status": 2,
+          "has_forced_failure": false
+        }
+      },
+      "fd1ac5f3-1179-5d77-a7bd-d2b2922df83f": {
+        "smart": {
+          "collector_date": "2026-10-10T00:00:08Z",
+          "risk_score": 0,
+          "risk_category": "healthy",
+          "temp": 41,
+          "power_on_hours": 26753
+        },
+        "temp_history": [
+          {
+            "date": "2026-07-01T01:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-08-01T01:00:00Z",
+            "temp": 44
+          },
+          {
+            "date": "2026-08-31T16:00:00Z",
+            "temp": 45
+          },
+          {
+            "date": "2026-09-17T01:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-03T20:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-03T21:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-03T22:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-03T23:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-04T00:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-04T01:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-04T17:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-04T18:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-04T19:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-04T20:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-04T21:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-04T22:00:00Z",
+            "temp": 38
+          },
+          {
+            "date": "2026-10-04T23:00:00Z",
+            "temp": 36
+          },
+          {
+            "date": "2026-10-05T00:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-05T01:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-05T17:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-05T18:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-05T19:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-05T20:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-05T21:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-05T22:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-05T23:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-06T00:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-06T01:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-06T17:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-06T18:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-06T19:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-06T20:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-06T21:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-06T22:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-06T23:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-07T00:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-07T01:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-07T17:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-07T18:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-07T19:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-07T20:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-07T21:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-07T22:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-07T23:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-08T00:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-08T01:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-08T17:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-10-08T18:00:00Z",
+            "temp": 44
+          },
+          {
+            "date": "2026-10-08T19:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-08T20:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-08T21:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-08T22:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-08T23:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-09T00:00:00Z",
+            "temp": 43
+          },
+          {
+            "date": "2026-10-09T01:00:00Z",
+            "temp": 42
+          },
+          {
+            "date": "2026-10-09T17:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-09T18:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-09T19:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-09T20:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-09T21:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-09T22:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-09T23:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-10T00:00:00Z",
+            "temp": 41
+          },
+          {
+            "date": "2026-10-10T01:00:00Z",
+            "temp": 41
+          }
+        ],
+        "device": {
+          "UpdatedAt": "2026-10-10T00:00:08.529928197Z",
+          "CreatedAt": "2026-06-26T08:43:44.035964498Z",
+          "DeletedAt": null,
+          "interface_speed": "6.0 Gb/s",
+          "firmware": "82.00A82",
+          "device_id": "fd1ac5f3-1179-5d77-a7bd-d2b2922df83f",
+          "wwn": "0x50014ee2b7fae2d9",
+          "device_name": "sdb",
+          "device_uuid": "",
+          "device_serial_id": "ata-WDC_WD40EFRX-68WT0N0_WD-WCC4E1VVCSXJ",
+          "device_label": "",
+          "manufacturer": "",
+          "model_family": "Western Digital Red (CMR)",
+          "model_name": "WDC WD40EFRX-68WT0N0",
+          "interface_type": "",
+          "smart_display_mode": "scrutiny",
+          "serial_number": "WD-WCC4E1VVCSXJ",
+          "collector_version": "1.76.4",
+          "host_id": "",
+          "label": "",
+          "form_factor": "",
+          "smart_support": {
+            "enabled": true,
+            "available": true
+          },
+          "device_protocol": "ATA",
+          "device_type": "scsi",
+          "capacity": 4000787030016,
+          "rotational_speed": 5400,
+          "missed_ping_timeout_override": 0,
+          "muted": false,
+          "archived": false,
+          "device_status": 0,
+          "has_forced_failure": false
+        }
+      }
+    }
+  },
+  "success": true
+}
