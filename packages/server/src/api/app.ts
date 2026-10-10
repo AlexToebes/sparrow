@@ -1,3 +1,4 @@
+import path from 'node:path';
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply } from 'fastify';
 import { ZodError } from 'zod';
 import { DomainError } from '../core/errors.js';
@@ -13,6 +14,8 @@ export interface AppDeps {
   provider?: DriveDataProvider;
   /** R28: stale threshold in hours. Defaults to 1.5 x the provider's update interval. */
   staleAfterHours?: number | undefined;
+  /** R44: directory for the automatic pre-import backup. Defaults to `$DATA_DIR/exports`. */
+  backupDir?: string | undefined;
 }
 
 export interface ErrorBody {
@@ -38,6 +41,10 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   app.decorate('db', deps.db);
   app.decorate('provider', deps.provider ?? createNoneProvider());
   app.decorate('staleAfterHours', deps.staleAfterHours ?? defaultStaleAfterHours(app.provider));
+  app.decorate(
+    'backupDir',
+    deps.backupDir ?? path.join(process.env.DATA_DIR ?? '/data', 'exports'),
+  );
 
   app.setErrorHandler((err: FastifyError | Error, _req, reply) => {
     if (err instanceof DomainError) {
@@ -70,5 +77,6 @@ declare module 'fastify' {
     db: AppDb;
     provider: DriveDataProvider;
     staleAfterHours: number;
+    backupDir: string;
   }
 }

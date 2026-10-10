@@ -16,7 +16,12 @@ export async function start(env: Record<string, string | undefined> = process.en
   const { db } = openDatabase(path.join(config.DATA_DIR, 'app.db'));
   seedInitialLayout(db);
   const provider = createProvider(config.PROVIDER, env);
-  const app = buildApp({ db, provider, staleAfterHours: config.STALE_AFTER_HOURS });
+  const app = buildApp({
+    db,
+    provider,
+    staleAfterHours: config.STALE_AFTER_HOURS,
+    backupDir: path.join(config.DATA_DIR, 'exports'),
+  });
   const poller = createPoller({
     db,
     provider,
