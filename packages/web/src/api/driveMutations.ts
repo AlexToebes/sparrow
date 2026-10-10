@@ -32,13 +32,19 @@ export const useAssignmentDefaults = (slotId: string | null) =>
   });
 
 /** A lifecycle change touches the layout, spares, status, inbox and pool membership views. */
-function useInvalidateAll() {
+export function useInvalidateAll() {
   const qc = useQueryClient();
   return () =>
     Promise.all(
-      [['layout'], ['drives'], ['status'], ['inbox'], ['pools'], ['assignment-defaults']].map(
-        (queryKey) => qc.invalidateQueries({ queryKey }),
-      ),
+      [
+        ['layout'],
+        ['drives'],
+        ['status'],
+        ['inbox'],
+        ['pools'],
+        ['memberships'],
+        ['assignment-defaults'],
+      ].map((queryKey) => qc.invalidateQueries({ queryKey })),
     );
 }
 

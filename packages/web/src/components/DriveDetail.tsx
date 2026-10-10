@@ -9,6 +9,8 @@ import { AssignDialog } from './AssignDialog';
 import { ConfirmDialog } from './ConfirmDialog';
 import { DriveFormDialog } from './DriveFormDialog';
 import { LifeStory } from './LifeStory';
+import { MembershipSection } from './MembershipSection';
+import { MissingDrivePanel } from './MissingDrivePanel';
 import { RetireDialog } from './RetireDialog';
 import { StateIcon, poolColor } from './SlotTile';
 
@@ -117,6 +119,9 @@ export function DriveDetail({ drive, view = null, where = null }: DriveDetailPro
         </Button>
       </div>
 
+      {view?.state === 'missing' && status?.flag && drive.status === 'installed' ? (
+        <MissingDrivePanel drive={drive} reason={status.flag.reason} where={where} />
+      ) : null}
       <dl className="facts">
         <Row
           label="Where"
@@ -180,6 +185,7 @@ export function DriveDetail({ drive, view = null, where = null }: DriveDetailPro
           ) : null}
         </div>
       ) : null}
+      {drive.status === 'installed' ? <MembershipSection drive={drive} /> : null}
       <LifeStory driveId={drive.id} />
 
       {dialog === 'assign' ? <AssignDialog driveId={drive.id} onClose={close} /> : null}

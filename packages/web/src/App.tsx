@@ -2,7 +2,7 @@ import { Route, Routes } from 'react-router';
 import { AppShell } from './components/AppShell';
 import { LayoutPage } from './pages/LayoutPage';
 import { DrivesPage } from './pages/DrivesPage';
-import { InboxPage } from './pages/Placeholders';
+import { InboxPage } from './pages/InboxPage';
 import { SettingsPage } from './pages/SettingsPage';
 
 export function App() {

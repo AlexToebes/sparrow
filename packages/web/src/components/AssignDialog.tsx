@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Alert, Button, Modal, Radio, Select, Text, Textarea, TextInput } from '@mantine/core';
 import type { Drive, MembershipRole, OccupantResolution } from '@sparrow/shared';
 import { ApiError } from '../api/client';
@@ -13,7 +13,32 @@ import {
   type RetireValues,
 } from './RetireFields';
 
+/** Slot, pool, role and occupant resolution: the part of an assignment every flow shares. */
+export interface PlacementInput {
+  slotId: string;
+  poolId: string | null;
+  role?: MembershipRole;
+  occupant?: OccupantResolution;
+}
+
+/**
+ * Replaces the plain assign call, so the inbox can reuse the slot, pool, role and occupant steps (R22, R37).
+ * `run` performs the request and reports back; an occupied-slot 409 is handled by the dialog itself.
+ */
+export interface PlacementTarget {
+  /** What is being placed, shown above the slot picker. */
+  summary: ReactNode;
+  /** Serial for the occupant step's wording. */
+  incomingSerial: string;
+  pending: boolean;
+  run: (
+    input: PlacementInput,
+    callbacks: { onSuccess: () => void; onError: (e: Error) => void },
+  ) => void;
+}
+
 interface AssignDialogProps {
+  placement?: PlacementTarget;
   onClose: () => void;
   /** Fixed target slot (from an empty slot's "+ Assign"), or leave out to pick one. */
   slotId?: string | null;
@@ -30,6 +55,7 @@ const NO_POOL = '__none__';
  * Mount it only while open: its state starts fresh each time.
  */
 export function AssignDialog({
+  placement,
   onClose,
   slotId: fixedSlot = null,
   driveId: fixedDrive = null,
@@ -96,39 +122,39 @@ export function AssignDialog({
   const [rmaNote, setRmaNote] = useState('');
 
   const submit = (resolution?: OccupantResolution) => {
-    if (!slotId || !driveId) return;
+    if (!slotId || (!driveId && !placement)) return;
     setError(null);
-    assign.mutate(
-      {
-        slotId,
-        driveId,
-        poolId: poolValue,
-        ...(poolValue !== null ? { role: roleValue } : {}),
-        ...(resolution ? { occupant: resolution } : {}),
-      },
-      {
-        onSuccess: onClose,
-        onError: (e) => {
-          if (e instanceof ApiError && e.status === 409) {
-            const occ = occupantFromError(e.details);
-            if (occ && !resolution) {
-              setApiOccupantId(occ.driveId);
-              setStep('occupant');
-              return;
-            }
+    const input: PlacementInput = {
+      slotId,
+      poolId: poolValue,
+      ...(poolValue !== null ? { role: roleValue } : {}),
+      ...(resolution ? { occupant: resolution } : {}),
+    };
+    const callbacks = {
+      onSuccess: onClose,
+      onError: (e: Error) => {
+        if (e instanceof ApiError && e.status === 409) {
+          const occ = occupantFromError(e.details);
+          if (occ && !resolution) {
+            setApiOccupantId(occ.driveId);
+            setStep('occupant');
+            return;
           }
-          setError(e instanceof ApiError ? e.message : 'Could not assign the drive.');
-        },
+        }
+        setError(e instanceof ApiError ? e.message : 'Could not assign the drive.');
       },
-    );
+    };
+    if (placement) placement.run(input, callbacks);
+    else assign.mutate({ driveId: driveId!, ...input }, callbacks);
   };
 
   const onAssignClick = () => {
-    if (!slotId || !driveId) {
-      setError('Choose both a slot and a drive.');
+    if (!slotId || (!driveId && !placement)) {
+      setError(placement ? 'Choose a slot.' : 'Choose both a slot and a drive.');
       return;
     }
     if (occupantId) {
+      // Without a driveId (a record not created yet) the server defaults replaced-by to the incoming drive (R62).
       setRetireValues((v) => ({ ...v, replacedByDriveId: driveId }));
       setStep('occupant');
       return;
@@ -174,7 +200,9 @@ export function AssignDialog({
     <Modal opened onClose={onClose} title={title} centered>
       {step === 'form' ? (
         <>
-          {fixedDrive === null ? (
+          {placement ? (
+            <Text>{placement.summary}</Text>
+          ) : fixedDrive === null ? (
             <Select
               label="Drive"
               description="Spares only"
@@ -270,8 +298,10 @@ export function AssignDialog({
             </Button>
             <Button
               onClick={onAssignClick}
-              loading={assign.isPending}
-              disabled={!slotId || !driveId || (slotId !== null && defaults.isPending)}
+              loading={placement ? placement.pending : assign.isPending}
+              disabled={
+                !slotId || (!driveId && !placement) || (slotId !== null && defaults.isPending)
+              }
             >
               {occupantId ? 'Next' : 'Assign'}
             </Button>
@@ -284,7 +314,10 @@ export function AssignDialog({
             {targetSlot?.label ?? 'this slot'}
             {occupant ? ` (${driveLabel(occupant).split(' · ').slice(1).join(' · ')})` : ''}. What
             should happen to it before{' '}
-            <strong className="mono">{incoming?.serial ?? 'the new drive'}</strong> goes in?
+            <strong className="mono">
+              {incoming?.serial ?? placement?.incomingSerial ?? 'the new drive'}
+            </strong>{' '}
+            goes in?
           </Text>
           <Radio.Group value={choice} onChange={(v) => setChoice(v as Choice)} mt="sm">
             <Radio value="spare" label="Back to spares" mb="xs" />
@@ -330,7 +363,7 @@ export function AssignDialog({
             </Button>
             <Button
               color={choice === 'spare' ? 'indigo' : 'red'}
-              loading={assign.isPending}
+              loading={placement ? placement.pending : assign.isPending}
               onClick={submitResolution}
             >
               {choice === 'spare'
