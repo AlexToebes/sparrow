@@ -293,6 +293,97 @@ describe('pool and role defaults (R35)', () => {
   });
 });
 
+describe('previous occupant ordering (R35)', () => {
+  it('R35: the last occupant is the latest by insertion, whatever the event timestamps say', () => {
+    const { slots } = setup();
+    const p1 = makePool('one');
+    const p2 = makePool('two');
+    const a = spare('A');
+    const b = spare('B');
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]!, poolId: p1 });
+    removeToSpares(db(), a.id);
+    assignDrive(db(), { driveId: b.id, slotId: slots[0]!, poolId: p2 });
+    removeToSpares(db(), b.id);
+    opened.sqlite.exec(
+      `UPDATE events SET at = '2099-01-01T00:00:00.000Z' WHERE drive_id = '${a.id}'`,
+    );
+    expect(getAssignmentDefaults(db(), slots[0]!)).toMatchObject({
+      poolId: p2,
+      previousDriveId: b.id,
+    });
+  });
+
+  it('R35: other slots do not leak into the answer', () => {
+    const { slots } = setup();
+    const a = spare('A');
+    const b = spare('B');
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]! });
+    assignDrive(db(), { driveId: b.id, slotId: slots[1]! });
+    removeToSpares(db(), b.id);
+    expect(getAssignmentDefaults(db(), slots[1]!).previousDriveId).toBe(b.id);
+    expect(getAssignmentDefaults(db(), slots[2]!).previousDriveId).toBeNull();
+  });
+});
+
+describe('replacement chains and explicit null (R60, R62)', () => {
+  it('R60: rejects a replacement chain that loops back to the retired drive', () => {
+    const a = spare('A');
+    const b = spare('B');
+    const c = spare('C');
+    retireDrive(db(), a.id, { reason: 'replaced', replacedByDriveId: b.id });
+    expect(
+      thrown(() => retireDrive(db(), b.id, { reason: 'replaced', replacedByDriveId: a.id })).code,
+    ).toBe('invalid');
+    retireDrive(db(), c.id, { reason: 'replaced', replacedByDriveId: a.id }); // a -> b, c -> a: fine
+    expect(getDrive(db(), b.id).status).toBe('spare');
+    expect(
+      thrown(() => retireDrive(db(), b.id, { reason: 'replaced', replacedByDriveId: c.id })).code,
+    ).toBe('invalid');
+  });
+
+  it('R60: the assign-with-retire flow rejects a loop and changes nothing', () => {
+    const { slots } = setup();
+    const a = spare('A');
+    const b = spare('B');
+    const x = spare('X');
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]! });
+    retireDrive(db(), x.id, { reason: 'replaced', replacedByDriveId: a.id });
+    const err = thrown(() =>
+      assignDrive(db(), {
+        driveId: b.id,
+        slotId: slots[0]!,
+        occupant: {
+          action: 'retire',
+          reason: 'replaced',
+          date: '2026-01-02',
+          replacedByDriveId: x.id,
+        },
+      }),
+    );
+    expect(err.code).toBe('invalid');
+    expect(getDrive(db(), a.id).status).toBe('installed');
+    expect(getDrive(db(), b.id).status).toBe('spare');
+  });
+
+  it('R62: an explicit null replacedByDriveId means no replacement; undefined prefills the incoming drive', () => {
+    const { slots } = setup();
+    const a = spare('A');
+    const b = spare('B');
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]! });
+    const res = assignDrive(db(), {
+      driveId: b.id,
+      slotId: slots[0]!,
+      occupant: {
+        action: 'retire',
+        reason: 'replaced',
+        date: '2026-01-02',
+        replacedByDriveId: null,
+      },
+    });
+    expect(res.occupant!.replacedByDriveId).toBeNull();
+  });
+});
+
 describe('remove, retire, RMA, reinstate (R60, R61, R27)', () => {
   it('installed -> spare: clears slot, ends membership, logs pool-left and drive-removed', () => {
     const { slots } = setup();

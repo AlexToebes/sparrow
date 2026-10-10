@@ -186,6 +186,42 @@ describe('join (R29, R33)', () => {
     });
   });
 
+  it('R29: rejects a start date in the future (beyond clock skew)', () => {
+    const { slots } = setup();
+    const pool = createPool(db(), { name: 'tank' });
+    const driveId = install('A', slots[0]!);
+    const future = new Date(Date.now() + 60 * 60_000).toISOString();
+    expect(thrown(() => joinPool(db(), driveId, { poolId: pool.id, startedAt: future })).code).toBe(
+      'invalid',
+    );
+    expect(listMemberships(db(), driveId)).toHaveLength(0);
+    const nearly = new Date(Date.now() + 60_000).toISOString(); // within tolerance
+    expect(joinPool(db(), driveId, { poolId: pool.id, startedAt: nearly }).startedAt).toBe(nearly);
+  });
+
+  it('R33: a user-supplied start date goes into the payload while the event stays stamped now', () => {
+    const { slots } = setup();
+    const pool = createPool(db(), { name: 'tank' });
+    const driveId = install('A', slots[0]!);
+    const before = Date.now();
+    joinPool(db(), driveId, { poolId: pool.id, startedAt: '2026-01-02T03:04:05.000Z' });
+    const ev = eventsOf(driveId, 'pool-joined')[0]!;
+    expect(Date.parse(ev.at)).toBeGreaterThanOrEqual(before);
+    expect(ev.payload.startedAt).toBe('2026-01-02T03:04:05.000Z');
+  });
+
+  it('R29: rejects an end date in the future; a past one is kept in the payload', () => {
+    const { slots } = setup();
+    const pool = createPool(db(), { name: 'tank' });
+    const driveId = install('A', slots[0]!);
+    joinPool(db(), driveId, { poolId: pool.id, startedAt: '2026-01-02T03:04:05.000Z' });
+    const future = new Date(Date.now() + 60 * 60_000).toISOString();
+    expect(thrown(() => leavePool(db(), driveId, { endedAt: future })).code).toBe('invalid');
+    expect(eventsOf(driveId, 'pool-left')).toHaveLength(0);
+    leavePool(db(), driveId, { endedAt: '2026-02-03T00:00:00.000Z' });
+    expect(eventsOf(driveId, 'pool-left')[0]!.payload.endedAt).toBe('2026-02-03T00:00:00.000Z');
+  });
+
   it('role defaults to data and start date to now', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
@@ -327,8 +363,8 @@ describe('leave and history (R29, R33)', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
     const driveId = install('A', slots[0]!);
-    const m = joinPool(db(), driveId, { poolId: pool.id, startedAt: '2030-01-01T00:00:00.000Z' });
-    const ended = leavePool(db(), driveId, { endedAt: '2029-01-01T00:00:00.000Z' });
+    const m = joinPool(db(), driveId, { poolId: pool.id, startedAt: '2026-03-01T00:00:00.000Z' });
+    const ended = leavePool(db(), driveId, { endedAt: '2026-02-01T00:00:00.000Z' });
     expect(ended.endedAt).toBe(m.startedAt);
   });
 

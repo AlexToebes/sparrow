@@ -3,7 +3,7 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { ChangeMembershipInput, JoinPoolInput, MembershipRole } from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
 import { drives, memberships, pools } from '../db/schema.js';
-import { conflict, notFound } from './errors.js';
+import { conflict, invalid, notFound } from './errors.js';
 import { recordEvent, type DbTransaction } from './events.js';
 
 // Pool membership (R29, R33, R35, R36). The membership helpers at the top are shared with the
@@ -19,6 +19,16 @@ const nowIso = () => new Date().toISOString();
 /** Normalizes a timestamp to the stored UTC form so string comparisons with other rows hold. */
 const toIso = (value: string | undefined): string | undefined =>
   value === undefined ? undefined : new Date(value).toISOString();
+
+/** Allowed clock skew between the browser that sends a date and this server. */
+const FUTURE_TOLERANCE_MS = 5 * 60_000;
+
+/** Rejects a user-supplied membership date that lies in the future (beyond a little clock skew). */
+function assertNotFuture(iso: string | undefined, field: 'startedAt' | 'endedAt'): void {
+  if (iso !== undefined && Date.parse(iso) > Date.now() + FUTURE_TOLERANCE_MS) {
+    throw invalid(`${field} must not be in the future`);
+  }
+}
 
 export function loadDriveRow(tx: Tx, id: string) {
   const row = tx.select().from(drives).where(eq(drives.id, id)).get();
@@ -46,18 +56,23 @@ export function endOpenMembership(
   tx: Tx,
   driveId: string,
   at: string,
+  /** True when `at` came from the user: the event is stamped now and carries the date as endedAt. */
+  userSupplied = false,
 ): { poolId: string; role: MembershipRole } | null {
   const open = openMembership(tx, driveId);
   if (!open) return null;
-  tx.update(memberships)
-    .set({ endedAt: at < open.startedAt ? open.startedAt : at })
-    .where(eq(memberships.id, open.id))
-    .run();
+  const endedAt = at < open.startedAt ? open.startedAt : at;
+  tx.update(memberships).set({ endedAt }).where(eq(memberships.id, open.id)).run();
   recordEvent(tx, {
     driveId,
     type: 'pool-left',
-    at,
-    payload: { poolId: open.poolId, role: open.role, membershipId: open.id },
+    at: userSupplied ? nowIso() : at,
+    payload: {
+      poolId: open.poolId,
+      role: open.role,
+      membershipId: open.id,
+      ...(userSupplied ? { endedAt } : {}),
+    },
   });
   return { poolId: open.poolId, role: open.role };
 }
@@ -71,6 +86,8 @@ export function startMembership(
     role: MembershipRole;
     startedAt: string;
     slotId: string | null;
+    /** True when startedAt came from the user: the event is stamped now and carries the date. */
+    userSupplied?: boolean;
   },
 ): Membership {
   const id = randomUUID();
@@ -91,8 +108,14 @@ export function startMembership(
   recordEvent(tx, {
     driveId: input.driveId,
     type: 'pool-joined',
-    at: input.startedAt,
-    payload: { poolId: input.poolId, role: input.role, slotId: input.slotId, membershipId: id },
+    at: input.userSupplied ? nowIso() : input.startedAt,
+    payload: {
+      poolId: input.poolId,
+      role: input.role,
+      slotId: input.slotId,
+      membershipId: id,
+      ...(input.userSupplied ? { startedAt: input.startedAt } : {}),
+    },
   });
   return row;
 }
@@ -106,6 +129,7 @@ function requireInstalled(drive: typeof drives.$inferSelect): void {
 
 /** spare-free join: adds the drive to a pool with an open membership. */
 export function joinPool(db: AppDb, driveId: string, input: JoinPoolInput): Membership {
+  assertNotFuture(input.startedAt, 'startedAt');
   return db.transaction((tx) => {
     const drive = loadDriveRow(tx, driveId);
     requireInstalled(drive);
@@ -120,6 +144,7 @@ export function joinPool(db: AppDb, driveId: string, input: JoinPoolInput): Memb
       role: input.role ?? 'data',
       startedAt: toIso(input.startedAt) ?? nowIso(),
       slotId: drive.slotId,
+      userSupplied: input.startedAt !== undefined,
     });
   });
 }
@@ -179,11 +204,12 @@ export function leavePool(
   driveId: string,
   opts: { endedAt?: string | undefined } = {},
 ): Membership {
+  assertNotFuture(opts.endedAt, 'endedAt');
   return db.transaction((tx) => {
     loadDriveRow(tx, driveId);
     const open = openMembership(tx, driveId);
     if (!open) throw conflict(`Drive ${driveId} is not in a pool`);
-    endOpenMembership(tx, driveId, toIso(opts.endedAt) ?? nowIso());
+    endOpenMembership(tx, driveId, toIso(opts.endedAt) ?? nowIso(), opts.endedAt !== undefined);
     return tx.select().from(memberships).where(eq(memberships.id, open.id)).get()!;
   });
 }

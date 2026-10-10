@@ -1,4 +1,4 @@
-import { desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import type {
   AssignmentDefaults,
   Drive,
@@ -100,6 +100,18 @@ function retireInternal(tx: Tx, driveId: string, opts: RetireOptions): Drive {
     if (!tx.select().from(drives).where(eq(drives.id, opts.replacedByDriveId)).get()) {
       throw notFound(`Replacement drive ${opts.replacedByDriveId} not found`);
     }
+    // Walk the replacement chain: it must never lead back to the drive being retired.
+    const seen = new Set<string>();
+    for (
+      let next: string | null = opts.replacedByDriveId;
+      next !== null && !seen.has(next);
+      next = tx.select().from(drives).where(eq(drives.id, next)).get()?.replacedByDriveId ?? null
+    ) {
+      if (next === drive.id) {
+        throw invalid('Replacement chain would loop back to this drive');
+      }
+      seen.add(next);
+    }
   }
   const slotId = drive.slotId;
   if (drive.status === 'installed') drive = freeSlot(tx, drive, null);
@@ -154,13 +166,20 @@ function previousOccupantOf(
   tx: Tx,
   slotId: string,
 ): { driveId: string; poolId: string | null; role: MembershipRole | null } | null {
-  const rows = tx
+  // Latest install or removal for this slot by insertion order (rowid), not by the `at` text.
+  const hit = tx
     .select()
     .from(events)
-    .where(inArray(events.type, ['drive-installed', 'drive-removed']))
-    .orderBy(desc(events.at), desc(sql`rowid`))
-    .all();
-  const hit = rows.find((e) => e.payload.slotId === slotId && e.driveId !== null);
+    .where(
+      and(
+        inArray(events.type, ['drive-installed', 'drive-removed']),
+        isNotNull(events.driveId),
+        sql`json_extract(${events.payload}, '$.slotId') = ${slotId}`,
+      ),
+    )
+    .orderBy(desc(sql`rowid`))
+    .limit(1)
+    .get();
   if (!hit || hit.driveId === null) return null;
   const poolId = typeof hit.payload.poolId === 'string' ? hit.payload.poolId : null;
   const role =
@@ -232,8 +251,13 @@ export function assignDrive(db: AppDb, input: AssignDriveInput): AssignDriveResu
       if (action.action === 'spare') {
         resolved = freeSlot(tx, occupant, null);
       } else if (action.action === 'retire') {
+        // R62: undefined = prefill the incoming drive for 'replaced'; an explicit null = no replacement.
         const replacedBy =
-          action.replacedByDriveId ?? (action.reason === 'replaced' ? drive.id : null);
+          action.replacedByDriveId === undefined
+            ? action.reason === 'replaced'
+              ? drive.id
+              : null
+            : action.replacedByDriveId;
         resolved = retireInternal(tx, occupant.id, {
           reason: action.reason,
           date: action.date,
