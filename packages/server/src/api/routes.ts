@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { AppDb } from '../db/client.js';
+import { driveRoutes } from './drives.js';
 import { providerStatusRoutes } from './provider-status.js';
 
 /**
@@ -10,6 +11,7 @@ import { providerStatusRoutes } from './provider-status.js';
 export const routeModules: FastifyPluginAsync<{ db: AppDb }>[] = [
   // Step 2: layout routes
   // Step 3: drive and event routes
+  driveRoutes,
   // Step 4: provider status and snapshot routes
   providerStatusRoutes,
   // Step 9: pool routes

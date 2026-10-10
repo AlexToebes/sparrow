@@ -8,3 +8,4 @@ export * from './drive.js';
 export * from './pool.js';
 export * from './event.js';
 export * from './observation.js';
+export * from './drive-api.js';
