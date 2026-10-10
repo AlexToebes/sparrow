@@ -53,7 +53,7 @@ docker compose up -d
 
 Notes:
 
-- **Data directory.** On a NAS, point the volume at a dataset or share (for example `/mnt/<pool>/apps/sparrow/data:/data`) and make sure the container user can write to it.
+- **Data directory.** On a NAS, point the volume at a dataset or share (for example `/mnt/<pool>/apps/sparrow/data:/data`) and make sure the container user can write to it. The image runs as the non-root `node` user (uid and gid 1000), so a bind-mounted directory needs `chown 1000:1000 data` (or set `user:` in the compose file to the owner of the directory). A named volume works without this.
 - **Image access.** A newly published package on GitHub Container Registry may be private. If your NAS cannot pull it, set the package to public in its GitHub settings, or run `docker login ghcr.io` with a personal access token that has `read:packages`.
 - **No authentication.** The app has no login by design. Run it on a trusted LAN only, and do not expose it to the internet.
 
@@ -88,7 +88,7 @@ All app data lives in the SQLite file in `/data`. You can also use **Export** in
 
 ## Images and CI
 
-A GitHub Actions workflow (`.github/workflows/build.yml`) runs lint, type checks and tests, then builds a multi-arch image (`linux/amd64`, `linux/arm64`).
+A GitHub Actions workflow (`.github/workflows/build.yml`) runs lint, type checks, tests and the build, then builds a multi-arch image (`linux/amd64`, `linux/arm64`).
 
 | Event | Published tags |
 |---|---|
@@ -96,13 +96,24 @@ A GitHub Actions workflow (`.github/workflows/build.yml`) runs lint, type checks
 | Version tag `vX.Y.Z` | `X.Y.Z`, `X.Y`, `sha-<short>` |
 | Pull request | built, not pushed |
 
-Images are published to `ghcr.io/<owner>/<repo>`, so name the repository `sparrow` to match the compose example.
+Images are published to `ghcr.io/<owner>/sparrow` (the owner is lowercased automatically).
 
 ## Development
 
-Planned: Node.js and TypeScript, one container serving the API and the web UI. The project uses pnpm. Scripts expected by CI: `pnpm lint`, `pnpm typecheck`, `pnpm test`. Each is skipped by the pipeline until it exists, so tighten the workflow once they do.
+Requirements: Node.js 22.12 or newer (the image uses Node 24) and pnpm (the version is pinned in `package.json`; `corepack enable` picks it up).
 
-See `REQUIREMENTS.md` for the full requirements, and `AGENTS.md` and `IMPLEMENTATION_PLAN.md` once they exist.
+```bash
+pnpm install --frozen-lockfile
+pnpm dev          # compiles shared + server in watch mode, restarts the server, and runs Vite
+pnpm lint && pnpm typecheck && pnpm test && pnpm build
+```
+
+- `pnpm dev` serves the API on `http://localhost:3000` (data in `./data`, override with `DATA_DIR`; other settings are the environment variables above) and the web UI with hot reload on `http://localhost:5173`, which proxies `/api` to the server. Open the 5173 address.
+- `pnpm build` compiles `packages/shared` and `packages/server` to `dist/` and bundles `packages/web` to `packages/web/dist`. After a build, `node packages/server/dist/main.js` serves the API and the UI on one port (`WEB_DIST_DIR` overrides the bundle location; the image sets it to `/app/web`).
+- Tests (`pnpm test`) run against the TypeScript sources through a `source` export condition, so no build is needed first.
+- Build the image locally with `docker build -t sparrow .`. It is multi-stage on `node:24-slim`, runs as the non-root `node` user, listens on `PORT` (3000), keeps data in the `/data` volume and has a health check on `/api/health`.
+
+See `REQUIREMENTS.md` for the full requirements, and `AGENTS.md` and `IMPLEMENTATION_PLAN.md` for how the project is built.
 
 ## License
 
