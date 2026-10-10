@@ -1,8 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
 import type { AppDb } from './client.js';
-import { normalizeSerial } from '@sparrow/shared';
-import { drives, enclosures, events, grids, memberships, pools, slots } from './schema.js';
+import { normalizeSerial, observationSchema, type Observation } from '@sparrow/shared';
+import { z } from 'zod';
+import {
+  appMeta,
+  drives,
+  enclosures,
+  events,
+  grids,
+  memberships,
+  pools,
+  providerSnapshot,
+  slots,
+} from './schema.js';
 
 // Minimal persistence only. Business rules live in services (Step 2+); the DB enforces integrity.
 // Drives deliberately have no delete function (D5).
@@ -18,6 +29,24 @@ export type NewDrive = Omit<typeof drives.$inferInsert, Omitted | 'serialNormali
 export type NewPool = Omit<typeof pools.$inferInsert, Omitted>;
 export type NewMembership = Omit<typeof memberships.$inferInsert, 'id' | 'createdAt'>;
 export type NewEvent = Omit<typeof events.$inferInsert, 'id' | 'at'> & { at?: string };
+
+export interface NewSnapshot {
+  providerId: string;
+  observations: Observation[];
+  lastSuccessAt?: string | null;
+  lastAttemptAt?: string | null;
+  lastError?: string | null;
+}
+
+export interface SnapshotRow {
+  providerId: string;
+  observations: Observation[];
+  lastSuccessAt: string | null;
+  lastAttemptAt: string | null;
+  lastError: string | null;
+}
+
+const observationsSchema = z.array(observationSchema);
 
 export function createRepositories(db: AppDb) {
   const stamp = () => {
@@ -99,6 +128,48 @@ export function createRepositories(db: AppDb) {
           .where(eq(memberships.driveId, driveId))
           .orderBy(asc(memberships.startedAt))
           .all(),
+    },
+    meta: {
+      get(key: string): string | null {
+        const row = db.select().from(appMeta).where(eq(appMeta.key, key)).get();
+        return row?.value ?? null;
+      },
+      set(key: string, value: string): void {
+        db.insert(appMeta)
+          .values({ key, value })
+          .onConflictDoUpdate({ target: appMeta.key, set: { value } })
+          .run();
+      },
+    },
+    // Single-row cache (R18, R55). Observations are validated on the way in and out.
+    snapshot: {
+      get(): SnapshotRow | null {
+        const row = db.select().from(providerSnapshot).where(eq(providerSnapshot.id, 1)).get();
+        if (!row) return null;
+        return {
+          providerId: row.providerId,
+          observations: observationsSchema.parse(row.observations),
+          lastSuccessAt: row.lastSuccessAt,
+          lastAttemptAt: row.lastAttemptAt,
+          lastError: row.lastError,
+        };
+      },
+      put(input: NewSnapshot): void {
+        const values = {
+          providerId: input.providerId,
+          observations: observationsSchema.parse(input.observations),
+          lastSuccessAt: input.lastSuccessAt ?? null,
+          lastAttemptAt: input.lastAttemptAt ?? null,
+          lastError: input.lastError ?? null,
+        };
+        db.insert(providerSnapshot)
+          .values({ id: 1, ...values })
+          .onConflictDoUpdate({ target: providerSnapshot.id, set: values })
+          .run();
+      },
+      clear(): void {
+        db.delete(providerSnapshot).where(eq(providerSnapshot.id, 1)).run();
+      },
     },
     events: {
       create(input: NewEvent) {

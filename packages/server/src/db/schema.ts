@@ -11,6 +11,7 @@ import {
   MEMBERSHIP_SOURCES,
   RETIREMENT_REASONS,
 } from '@sparrow/shared';
+import type { Observation } from '@sparrow/shared';
 
 const inList = (column: string, values: readonly string[]): SQL =>
   sql.raw(`${column} IN (${values.map((v) => `'${v}'`).join(', ')})`);
@@ -176,4 +177,24 @@ export const events = sqliteTable(
     index('events_drive_at_idx').on(t.driveId, t.at),
     check('events_type_enum', inList('type', EVENT_TYPES)),
   ],
+);
+
+// One-time flags such as "layout seeded" (Step 2).
+export const appMeta = sqliteTable('app_meta', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+});
+
+// Single-row cache of the last provider snapshot (Step 4, R18, R55).
+export const providerSnapshot = sqliteTable(
+  'provider_snapshot',
+  {
+    id: integer('id').primaryKey(),
+    providerId: text('provider_id').notNull(),
+    observations: text('observations', { mode: 'json' }).$type<Observation[]>().notNull(),
+    lastSuccessAt: text('last_success_at'),
+    lastAttemptAt: text('last_attempt_at'),
+    lastError: text('last_error'),
+  },
+  (t) => [check('provider_snapshot_singleton', sql`${t.id} = 1`)],
 );

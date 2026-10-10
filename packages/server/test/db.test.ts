@@ -210,6 +210,8 @@ describe('migrations (R16)', () => {
           'pools',
           'memberships',
           'events',
+          'app_meta',
+          'provider_snapshot',
         ]),
       );
       createRepositories(first.db).drives.create({ serial: 'KEEP', status: 'spare' });
