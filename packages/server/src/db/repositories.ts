@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
-import type { AppDatabase } from './client.js';
+import type { AppDb } from './client.js';
 import { normalizeSerial } from '@sparrow/shared';
 import { drives, enclosures, events, grids, memberships, pools, slots } from './schema.js';
 
@@ -19,7 +19,7 @@ export type NewPool = Omit<typeof pools.$inferInsert, Omitted>;
 export type NewMembership = Omit<typeof memberships.$inferInsert, 'id' | 'createdAt'>;
 export type NewEvent = Omit<typeof events.$inferInsert, 'id' | 'at'> & { at?: string };
 
-export function createRepositories(db: AppDatabase) {
+export function createRepositories(db: AppDb) {
   const stamp = () => {
     const t = now();
     return { id: randomUUID(), createdAt: t, updatedAt: t };

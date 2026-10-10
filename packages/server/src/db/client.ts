@@ -4,10 +4,10 @@ import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import * as schema from './schema.js';
 
-export type AppDatabase = BetterSQLite3Database<typeof schema>;
+export type AppDb = BetterSQLite3Database<typeof schema>;
 
 export interface OpenedDatabase {
-  db: AppDatabase;
+  db: AppDb;
   sqlite: Database.Database;
 }
 
