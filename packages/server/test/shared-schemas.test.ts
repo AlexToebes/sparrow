@@ -132,3 +132,20 @@ describe('repository records match shared schemas', () => {
     expect(noDrive.payload).toEqual({});
   });
 });
+
+describe('length caps (R11, R30, R38, R39)', () => {
+  it('pool, label and name caps apply to request schemas and records', async () => {
+    const shared = await import('@sparrow/shared');
+    const long = (n: number) => 'x'.repeat(n);
+    expect(shared.createPoolInputSchema.safeParse({ name: long(101) }).success).toBe(false);
+    expect(shared.createPoolInputSchema.safeParse({ name: long(100) }).success).toBe(true);
+    expect(
+      shared.createPoolInputSchema.safeParse({ name: 'p', layoutLabel: long(51) }).success,
+    ).toBe(false);
+    expect(shared.createEnclosureSchema.safeParse({ name: long(101) }).success).toBe(false);
+    expect(shared.updateSlotSchema.safeParse({ label: long(51) }).success).toBe(false);
+    expect(
+      shared.retireDriveInputSchema.safeParse({ reason: 'other', note: long(5001) }).success,
+    ).toBe(false);
+  });
+});

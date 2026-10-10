@@ -4,7 +4,7 @@ import { membershipRoleSchema, retirementReasonSchema } from './enums.js';
 
 // Request bodies for slot assignment and drive retirement (R8, R35, R37, R60, R61, R62).
 
-const note = z.string().trim().min(1).nullish();
+const note = z.string().trim().min(1).max(5000).nullish();
 
 /** How to deal with the drive already in the slot (R37). */
 export const occupantResolutionSchema = z.discriminatedUnion('action', [

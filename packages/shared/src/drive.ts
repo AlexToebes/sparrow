@@ -10,27 +10,30 @@ import {
 export const driveSchema = z
   .object({
     id: idSchema,
-    serial: z.string().min(1),
+    serial: z.string().min(1).max(100),
     serialNormalized: z.string().min(1),
-    /** R2 fallback identifier. Set only when linking or creating from an observation; not editable. */
-    wwn: z.string().min(1).nullable(),
-    model: z.string().nullable(),
+    /**
+     * R2 fallback identifier, stored on the record. Set when linking or creating from an
+     * observation; editable (or clearable) through PATCH /api/drives/:id.
+     */
+    wwn: z.string().min(1).max(100).nullable(),
+    model: z.string().max(200).nullable(),
     capacityBytes: z.number().int().min(0).nullable(),
     driveType: driveTypeSchema.nullable(),
-    formFactor: z.string().nullable(),
-    storageLocation: z.string().nullable(),
+    formFactor: z.string().max(200).nullable(),
+    storageLocation: z.string().max(200).nullable(),
     condition: driveConditionSchema.nullable(),
     lastTestDate: dateSchema.nullable(),
     purchaseDate: dateSchema.nullable(),
     warrantyExpiry: dateSchema.nullable(),
-    vendor: z.string().nullable(),
-    notes: z.string().nullable(),
+    vendor: z.string().max(200).nullable(),
+    notes: z.string().max(5000).nullable(),
     status: driveStatusSchema,
     slotId: idSchema.nullable(),
     retirementReason: retirementReasonSchema.nullable(),
     retirementDate: dateSchema.nullable(),
     replacedByDriveId: idSchema.nullable(),
-    retirementNote: z.string().nullable(),
+    retirementNote: z.string().max(5000).nullable(),
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
   })

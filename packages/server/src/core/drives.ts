@@ -116,6 +116,27 @@ export function updateDrive(db: AppDb, id: string, input: unknown): Drive {
       values.serialNormalized = serialNormalized;
     }
 
+    if (patch.wwn !== undefined) {
+      const next = patch.wwn;
+      if (next !== current.wwn) {
+        if (next !== null) {
+          const wanted = next.toLowerCase();
+          const holder = tx
+            .select()
+            .from(drives)
+            .all()
+            .find((d) => d.id !== id && d.wwn?.trim().toLowerCase() === wanted);
+          if (holder) {
+            throw conflict(`WWN ${next} is already held by drive ${holder.serial} (${holder.id})`, {
+              driveId: holder.id,
+            });
+          }
+        }
+        changes.wwn = { from: current.wwn, to: next };
+        values.wwn = next;
+      }
+    }
+
     for (const field of EDITABLE_FIELDS as readonly EditableField[]) {
       const to = patch[field];
       if (to === undefined) continue;

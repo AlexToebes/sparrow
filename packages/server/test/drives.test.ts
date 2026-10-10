@@ -226,6 +226,60 @@ describe('editing (R3, R14)', () => {
   });
 });
 
+describe('WWN edit (R2, R14)', () => {
+  it('R2: sets, trims, changes and clears the WWN, logging each change in drive-updated', () => {
+    const d = createDrive(db(), { serial: 'W1' });
+    expect(updateDrive(db(), d.id, { wwn: '  0xAbC  ' }).wwn).toBe('0xAbC');
+    const changed = updateDrive(db(), d.id, { wwn: '0xdef' });
+    expect(changed.wwn).toBe('0xdef');
+    expect(updateDrive(db(), d.id, { wwn: null }).wwn).toBeNull();
+    const changes = listDriveEvents(db(), d.id)
+      .filter((e) => e.type === 'drive-updated')
+      .map((e) => e.payload.changes);
+    expect(changes).toEqual([
+      { wwn: { from: '0xdef', to: null } },
+      { wwn: { from: '0xAbC', to: '0xdef' } },
+      { wwn: { from: null, to: '0xAbC' } },
+    ]);
+    const before = eventCount();
+    updateDrive(db(), d.id, { wwn: null }); // already null: no-op
+    expect(eventCount()).toBe(before);
+  });
+
+  it('R2: rejects a WWN another record holds, case-insensitively, changing nothing', () => {
+    createDrive(db(), { serial: 'W1' }, { wwn: '0xABC' });
+    const d = createDrive(db(), { serial: 'W2' });
+    const before = eventCount();
+    expect(thrown(() => updateDrive(db(), d.id, { wwn: ' 0xabc ' })).code).toBe('conflict');
+    expect(getDrive(db(), d.id).wwn).toBeNull();
+    expect(eventCount()).toBe(before);
+  });
+
+  it('R2: an empty WWN string is rejected (use null to clear)', () => {
+    const d = createDrive(db(), { serial: 'W3' });
+    expect(() => updateDrive(db(), d.id, { wwn: '   ' })).toThrow(ZodError);
+  });
+});
+
+describe('text length caps (R11)', () => {
+  it('R11: rejects over-long serial, model, vendor, formFactor, storageLocation and notes', () => {
+    const long = (n: number) => 'x'.repeat(n);
+    expect(() => createDrive(db(), { serial: long(101) })).toThrow(ZodError);
+    expect(createDrive(db(), { serial: long(100) }).serial).toHaveLength(100);
+    for (const field of ['model', 'vendor', 'formFactor', 'storageLocation']) {
+      expect(() => createDrive(db(), { serial: `C-${field}`, [field]: long(201) })).toThrow(
+        ZodError,
+      );
+    }
+    expect(() => createDrive(db(), { serial: 'C-notes', notes: long(5001) })).toThrow(ZodError);
+    expect(
+      createDrive(db(), { serial: 'C-ok', notes: long(5000), model: long(200) }).notes,
+    ).toHaveLength(5000);
+    const d = createDrive(db(), { serial: 'C-edit' });
+    expect(() => updateDrive(db(), d.id, { notes: long(5001) })).toThrow(ZodError);
+  });
+});
+
 describe('queries (R3)', () => {
   it('R3: lists drives and filters by status', () => {
     const a = createDrive(db(), { serial: 'Q-A' });

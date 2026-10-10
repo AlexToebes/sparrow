@@ -34,6 +34,8 @@ export type CreateDriveInput = z.infer<typeof createDriveInputSchema>;
 /** PATCH /api/drives/:id. Edits R11 fields only; an empty object is a valid no-op. */
 export const updateDriveInputSchema = z.strictObject({
   serial: serialInput.optional(),
+  /** The R2 fallback identifier: trimmed; null clears it. */
+  wwn: z.string().trim().pipe(fields.wwn.unwrap()).nullable().optional(),
   ...editableFields,
 });
 export type UpdateDriveInput = z.infer<typeof updateDriveInputSchema>;

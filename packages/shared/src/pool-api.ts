@@ -4,8 +4,8 @@ import { membershipRoleSchema } from './enums.js';
 
 // Request bodies for pools and pool membership (R29, R30, R35, R36). The source is always manual (R31).
 
-const name = z.string().trim().min(1, 'Name is required');
-const layoutLabel = z.string().trim().min(1).nullish();
+const name = z.string().trim().min(1, 'Name is required').max(100);
+const layoutLabel = z.string().trim().min(1).max(50).nullish();
 
 /** POST /api/pools. */
 export const createPoolInputSchema = z.strictObject({

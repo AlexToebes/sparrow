@@ -4,8 +4,8 @@ import { membershipRoleSchema, membershipSourceSchema } from './enums.js';
 
 export const poolSchema = z.object({
   id: idSchema,
-  name: z.string().min(1),
-  layoutLabel: z.string().nullable(),
+  name: z.string().min(1).max(100),
+  layoutLabel: z.string().max(50).nullable(),
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
 });

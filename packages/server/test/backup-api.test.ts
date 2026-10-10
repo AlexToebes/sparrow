@@ -76,8 +76,10 @@ describe('R43, R44: POST /api/import', () => {
   });
 
   it('accepts a large export body (above the 1 MB default limit)', async () => {
-    const drive = createDrive(opened.db, { serial: 'BIG-1', notes: 'x'.repeat(1_500_000) });
-    expect(drive.id).toBeTruthy();
+    // Notes are capped at 5000 characters, so reach 1 MB+ with many drives.
+    for (let i = 0; i < 400; i++) {
+      createDrive(opened.db, { serial: `BIG-${i}`, notes: 'x'.repeat(4000) });
+    }
     const file = (await exportJson()) as object;
     const res = await app.inject({ method: 'POST', url: '/api/import', payload: file });
     expect(res.statusCode).toBe(200);
