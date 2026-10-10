@@ -19,7 +19,7 @@ Create a `docker-compose.yml`:
 ```yaml
 services:
   sparrow:
-    image: ghcr.io/OWNER/sparrow:latest   # replace OWNER with the GitHub account or org
+    image: ghcr.io/alextoebes/sparrow:latest   # or ...:sha-<short> to pin an exact build
     container_name: sparrow
     restart: unless-stopped
     ports:
@@ -96,7 +96,7 @@ A GitHub Actions workflow (`.github/workflows/build.yml`) runs lint, type checks
 | Version tag `vX.Y.Z` | `X.Y.Z`, `X.Y`, `sha-<short>` |
 | Pull request | built, not pushed |
 
-Images are published to `ghcr.io/<owner>/sparrow` (the owner is lowercased automatically).
+Images are published to `ghcr.io/alextoebes/sparrow`. Use `latest` to follow `main`, or a `sha-<short commit>` tag (for example `sha-250db1a`) to pin a specific build.
 
 ## Development
 
