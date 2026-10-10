@@ -15,6 +15,13 @@
       "when": 1791665264056,
       "tag": "0001_orange_yellow_claw",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791667249732,
+      "tag": "0002_sloppy_leech",
+      "breakpoints": true
     }
   ]
 }

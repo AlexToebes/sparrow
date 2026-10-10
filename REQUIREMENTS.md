@@ -68,7 +68,7 @@ Principles:
 - R14: Every change is logged as a timestamped event (installed in slot X, removed, retired, reinstated, sent for RMA, and so on). The log is browsable per drive.
 - R21: Spares are created manually and can exist without any provider data.
 - R8: Slot assignment is manual, picked from drives that have a record in the app. Retired drives cannot be assigned to a slot.
-- R23: Linking or creating a drive from an observation sets its status to "installed" and writes an event.
+- R23: Linking or creating a drive from an observation sets its status to "installed" and writes an event. Decision (2026-10-10): resolving an inbox entry also picks the slot (with pool and role), so an installed drive always has a slot (D7).
 - R37: Assigning a drive to an occupied slot first requires resolving the current occupant (see R27 and R62). The app never silently replaces it.
 - R60: Retiring a drive requires a reason (failed, replaced, other) and a retirement date (default today, editable). It optionally takes a "replaced by" link to another drive record and a note. The app does not enforce any relation between the two drives' sizes, but shows both capacities when linked (typically the replacement is larger). Retiring a drive that sits in a slot frees the slot and logs the event.
 - R61: A retired drive can be reinstated as a spare. The retirement reason and date stay in the event history.

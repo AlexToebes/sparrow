@@ -52,11 +52,18 @@ function assertSerialFree(
 }
 
 /** Creates a spare (R21). Serial is required; every other R11 field is optional. Logs drive-created (R14). */
-export function createDrive(db: AppDb, input: unknown): Drive {
+export function createDrive(
+  db: AppDb,
+  input: unknown,
+  /** Not part of the public input schema: the WWN only ever comes from an observation (R2). */
+  internal: { wwn?: string | null | undefined } = {},
+): Drive {
+  const wwn = internal.wwn?.trim() || null;
   const parsed = createDriveInputSchema.parse(input);
   const serialNormalized = normalizeSerial(parsed.serial);
   const initial = {
     serial: parsed.serial,
+    ...(wwn === null ? {} : { wwn }),
     ...Object.fromEntries(EDITABLE_FIELDS.map((f) => [f, parsed[f] ?? null])),
   };
   return db.transaction((tx) => {
@@ -68,6 +75,7 @@ export function createDrive(db: AppDb, input: unknown): Drive {
         ...initial,
         id: randomUUID(),
         serialNormalized,
+        wwn,
         status: 'spare' satisfies DriveStatus,
         slotId: null,
         retirementReason: null,

@@ -12,6 +12,8 @@ export const driveSchema = z
     id: idSchema,
     serial: z.string().min(1),
     serialNormalized: z.string().min(1),
+    /** R2 fallback identifier. Set only when linking or creating from an observation; not editable. */
+    wwn: z.string().min(1).nullable(),
     model: z.string().nullable(),
     capacityBytes: z.number().int().min(0).nullable(),
     driveType: driveTypeSchema.nullable(),

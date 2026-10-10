@@ -19,6 +19,7 @@ const drive = {
   id: 'd1',
   serial: 'ABC123',
   serialNormalized: 'ABC123',
+  wwn: null,
   model: null,
   capacityBytes: 8_000_000_000_000,
   driveType: 'HDD',

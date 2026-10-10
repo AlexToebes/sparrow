@@ -1,5 +1,4 @@
-import { randomUUID } from 'node:crypto';
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { desc, eq, inArray, sql } from 'drizzle-orm';
 import type {
   AssignmentDefaults,
   Drive,
@@ -9,9 +8,10 @@ import type {
 } from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
 import { getGrid, getSlot } from '../db/layout-repo.js';
-import { drives, events, memberships, pools } from '../db/schema.js';
+import { drives, events, pools } from '../db/schema.js';
 import { conflict, invalid, notFound } from './errors.js';
 import { recordEvent, type DbTransaction } from './events.js';
+import { endOpenMembership, openMembership, startMembership } from './memberships.js';
 
 // Slot assignment and retirement (R8, R35, R37, R60, R61, R62, D7). Every public function runs in
 // ONE transaction and writes its events through recordEvent in that same transaction (R14), so a
@@ -50,35 +50,6 @@ function slotInfo(tx: Tx, slotId: string): SlotInfo {
     gridId: slot.gridId,
     gridName: grid?.name ?? '',
   };
-}
-
-function openMembership(tx: Tx, driveId: string) {
-  return tx
-    .select()
-    .from(memberships)
-    .where(and(eq(memberships.driveId, driveId), isNull(memberships.endedAt)))
-    .get();
-}
-
-/** Ends the drive's open membership (history kept) and logs pool-left. Returns what it ended. */
-function endOpenMembership(
-  tx: Tx,
-  driveId: string,
-  at: string,
-): { poolId: string; role: MembershipRole } | null {
-  const open = openMembership(tx, driveId);
-  if (!open) return null;
-  tx.update(memberships)
-    .set({ endedAt: at < open.startedAt ? open.startedAt : at })
-    .where(eq(memberships.id, open.id))
-    .run();
-  recordEvent(tx, {
-    driveId,
-    type: 'pool-left',
-    at,
-    payload: { poolId: open.poolId, role: open.role, membershipId: open.id },
-  });
-  return { poolId: open.poolId, role: open.role };
 }
 
 /** installed -> spare. Ends the membership, clears the slot, logs drive-removed. */
@@ -291,24 +262,7 @@ export function assignDrive(db: AppDb, input: AssignDriveInput): AssignDriveResu
       .returning()
       .get();
     if (poolId !== null && role !== null) {
-      tx.insert(memberships)
-        .values({
-          id: randomUUID(),
-          driveId: drive.id,
-          poolId,
-          role,
-          source: 'manual',
-          startedAt: at,
-          endedAt: null,
-          createdAt: at,
-        })
-        .run();
-      recordEvent(tx, {
-        driveId: drive.id,
-        type: 'pool-joined',
-        at,
-        payload: { poolId, role, slotId: input.slotId },
-      });
+      startMembership(tx, { driveId: drive.id, poolId, role, startedAt: at, slotId: input.slotId });
     }
     recordEvent(tx, {
       driveId: drive.id,

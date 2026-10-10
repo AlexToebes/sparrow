@@ -77,6 +77,8 @@ export const drives = sqliteTable(
     id: text('id').primaryKey(),
     serial: text('serial').notNull(),
     serialNormalized: text('serial_normalized').notNull(),
+    // Drive identifier used only as the R2 fallback match; filled from an observation (Step 6).
+    wwn: text('wwn'),
     model: text('model'),
     capacityBytes: integer('capacity_bytes'),
     driveType: text('drive_type', { enum: DRIVE_TYPES }),
