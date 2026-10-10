@@ -13,7 +13,7 @@
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "pnpm -r --if-present run test",
     "build": "pnpm -r --if-present run build",
-    "dev": "echo 'dev script arrives with the server and web packages' && exit 0"
+    "dev": "pnpm --filter @sparrow/web dev"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
