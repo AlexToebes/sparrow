@@ -1,15 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
 import type { AppDatabase } from './client.js';
+import { normalizeSerial } from '@sparrow/shared';
 import { drives, enclosures, events, grids, memberships, pools, slots } from './schema.js';
 
 // Minimal persistence only. Business rules live in services (Step 2+); the DB enforces integrity.
 // Drives deliberately have no delete function (D5).
 
 const now = (): string => new Date().toISOString();
-
-// Local helper; replaced by normalizeSerial from @sparrow/shared in the integration pass.
-export const normalizeSerial = (serial: string): string => serial.trim().toUpperCase();
 
 type Omitted = 'id' | 'createdAt' | 'updatedAt';
 

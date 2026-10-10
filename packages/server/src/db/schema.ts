@@ -10,7 +10,7 @@ import {
   MEMBERSHIP_ROLES,
   MEMBERSHIP_SOURCES,
   RETIREMENT_REASONS,
-} from './enums.js';
+} from '@sparrow/shared';
 
 const inList = (column: string, values: readonly string[]): SQL =>
   sql.raw(`${column} IN (${values.map((v) => `'${v}'`).join(', ')})`);
