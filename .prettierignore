@@ -2,3 +2,4 @@ pnpm-lock.yaml
 *.md
 packages/server/test/fixtures/
 docs/design/prototypes/
+.claude/
