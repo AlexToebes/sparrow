@@ -42,7 +42,7 @@ Backend steps 2 to 10 expose their behavior through API routes as they go, so th
   - Work: root `package.json` (with `packageManager` pinned to a current pnpm version) and `pnpm-workspace.yaml`, with the scripts from `AGENTS.md` section 5; commit `pnpm-lock.yaml`; `tsconfig.base.json` (strict); ESLint (including the `no-restricted-imports` rule that blocks `core` from importing `providers/*`), Prettier, Vitest in each package; `.gitignore`, `.editorconfig`, `.dockerignore`; one trivial passing test per package.
   - Done when: `pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test` passes. Update the CI test job to pnpm first if it is not already (see `build.yml`), keeping `--if-present` until all scripts exist.
 
-- [ ] **Step 1: Shared schemas and database**
+- [x] **Step 1: Shared schemas and database**
   - Goal: the data model exists, migrated and typed.
   - Requirements: R11, R13, R14, R29, R30, R39, D3, D5, D6, D7.
   - Work: zod schemas in `packages/shared` for enclosure, grid, slot (stable ID, label), drive (fields from R11, status spare/installed/retired, retirement reason/date/replacedBy/note), pool, membership (role, start, end, source), event (type, timestamp, drive, payload), and the normalized observation (Appendix A). Drizzle schema and first migration. DB opened with WAL and foreign keys on. Unique serial index on normalized serial (D6). One-drive-per-slot and one-slot-per-drive constraints (D7). Migrations run at startup.
@@ -160,4 +160,5 @@ Copy from `REQUIREMENTS.md` section 6 and add new ideas here. Do not build these
 
 Short, dated notes from each session (surprises, decisions, deviations). Newest first.
 
+- 2026-10-10, Step 1: zod 4 and drizzle-orm 0.45. Slot assignment is `drives.slot_id` with a unique index, which enforces both halves of D7, plus CHECKs tying it to status. Slots have a stable `position`; orientation only changes rendering. `@sparrow/shared` is consumed as TS source via package `exports`, so a build output is needed before the runtime image (Step 15). There is no runnable `pnpm dev` or start for the server yet, because running TS with `.js` specifiers needs a build or a loader. `pnpm-workspace.yaml` uses pnpm 12's `allowBuilds` (not `onlyBuiltDependencies`), so Step 15 should not re-add the old key. The Step 2 to 4 foundation tables were added in migration 0001.
 - 2026-10-10, Step 0: pnpm 12.11.2 pinned. TypeScript is held at 5.9 because typescript-eslint 8.71 does not support TypeScript 7 yet; revisit when it does. Scaffolded and verified on Node 22 (`engines` is `>=22.12`); CI and the image use Node 24. The `core` import boundary rule was verified to fire. Prettier reformatted `build.yml` quotes only.
