@@ -14,7 +14,7 @@ import { assignDrive, retireDrive, type AssignDriveResult } from './assignment.j
 import { createDrive } from './drives.js';
 import { conflict, invalid, notFound } from './errors.js';
 import { recordEvent } from './events.js';
-import { findDriveFor, getMatchState, observationKeyOf } from './matching.js';
+import { getMatchState, matchObservations, normalizeWwn, observationKeyOf } from './matching.js';
 
 // The discovery inbox (R9, R22 to R25, R58, R63). Resolving an entry also picks the slot (decision
 // under R23) and installs the drive through assignDrive, so installed always means "has a slot" (D7).
@@ -26,8 +26,8 @@ import { findDriveFor, getMatchState, observationKeyOf } from './matching.js';
 const nested = (tx: unknown): AppDb => tx as AppDb;
 
 /** GET /api/inbox. Read-only: a suggestion is never applied here (R25). */
-export function getInbox(db: AppDb): InboxResponse {
-  const state = getMatchState(db);
+export function getInbox(db: AppDb, providerId: string): InboxResponse {
+  const state = getMatchState(db, providerId);
   return {
     entries: state.inbox,
     unidentified: state.unidentified,
@@ -36,8 +36,8 @@ export function getInbox(db: AppDb): InboxResponse {
   };
 }
 
-export function listRetiredCandidates(db: AppDb): RetiredCandidate[] {
-  return getMatchState(db).retiredCandidates.map(toRetiredCandidate);
+export function listRetiredCandidates(db: AppDb, providerId: string): RetiredCandidate[] {
+  return getMatchState(db, providerId).retiredCandidates.map(toRetiredCandidate);
 }
 
 function toRetiredCandidate(o: Observation): RetiredCandidate {
@@ -53,8 +53,8 @@ function toRetiredCandidate(o: Observation): RetiredCandidate {
 }
 
 /** The inbox entry for a key, else 404 (no such observation) or 409 (it no longer needs resolving). */
-function requireInboxEntry(db: AppDb, key: string) {
-  const state = getMatchState(db);
+function requireInboxEntry(db: AppDb, providerId: string, key: string) {
+  const state = getMatchState(db, providerId);
   const wanted = key.trim().toUpperCase();
   const entry = state.inbox.find((e) => e.observationKey === wanted);
   if (entry) return entry;
@@ -93,10 +93,11 @@ const placementOf = (input: LinkObservationInput | CreateFromObservationInput) =
  */
 export function linkObservation(
   db: AppDb,
+  providerId: string,
   observationKey: string,
   input: LinkObservationInput,
 ): AssignDriveResult {
-  const entry = requireInboxEntry(db, observationKey);
+  const entry = requireInboxEntry(db, providerId, observationKey);
   return db.transaction((tx) => {
     const drive = tx.select().from(drives).where(eq(drives.id, input.driveId)).get();
     if (!drive) throw notFound(`Drive ${input.driveId} not found`);
@@ -105,16 +106,33 @@ export function linkObservation(
     }
     const filled = missingFrom(drive, entry.observation);
     const linked = { ...drive, ...filled } as Drive;
-    // Once linked, the observation must keep matching this record, or it would stay in the inbox.
-    if (
-      findDriveFor(
-        entry.observation,
-        new Map([[linked.serialNormalized, linked]]),
-        wwnIndex(linked),
-      ) === undefined
-    ) {
-      throw invalid(
-        `Observation ${entry.observationKey} cannot be linked to drive ${drive.serial}: the serials differ and the WWN does not match`,
+    // Never copy a WWN that another record already holds: it would make the WWN ambiguous (R2).
+    if (filled.wwn !== undefined) {
+      const wanted = normalizeWwn(filled.wwn);
+      const holder = tx
+        .select()
+        .from(drives)
+        .all()
+        .find((d) => d.id !== drive.id && normalizeWwn(d.wwn) === wanted);
+      if (holder) {
+        throw conflict(
+          `WWN ${filled.wwn} is already held by drive ${holder.serial}; it cannot be copied to ${drive.serial}`,
+          { driveId: holder.id },
+        );
+      }
+    }
+    // Run the real matching over ALL records with the filled values applied: once linked, the
+    // observation must resolve to this very record, or it would stay in the inbox (R22, R26).
+    const all = tx
+      .select()
+      .from(drives)
+      .all()
+      .map((d) => (d.id === drive.id ? linked : d));
+    const after = matchObservations(all, [entry.observation]).matchedByDriveId.get(drive.id);
+    if (!after) {
+      throw conflict(
+        `This drive's serial doesn't match the observation ${entry.observationKey}; it would stay unmatched`,
+        { driveId: drive.id },
       );
     }
     if (Object.keys(filled).length > 0) {
@@ -132,18 +150,14 @@ export function linkObservation(
   });
 }
 
-function wwnIndex(drive: Drive): Map<string, Drive> {
-  const wwn = drive.wwn?.trim().toLowerCase();
-  return new Map(wwn ? [[wwn, drive]] : []);
-}
-
 /** Creates a drive record from an inbox observation and installs it into the chosen slot (R22, R23). */
 export function createFromObservation(
   db: AppDb,
+  providerId: string,
   observationKey: string,
   input: CreateFromObservationInput,
 ): AssignDriveResult {
-  const entry = requireInboxEntry(db, observationKey);
+  const entry = requireInboxEntry(db, providerId, observationKey);
   const o = entry.observation;
   return db.transaction((tx) => {
     const created = createDrive(
@@ -170,9 +184,9 @@ export function createFromObservation(
  * R63: creates records for decommissioned observations and retires them, all or nothing. Every item
  * carries its own reason (bulk apply is the UI's job). Health is never applied.
  */
-export function importRetired(db: AppDb, input: ImportRetiredInput): Drive[] {
+export function importRetired(db: AppDb, providerId: string, input: ImportRetiredInput): Drive[] {
   const candidates = new Map(
-    getMatchState(db).retiredCandidates.map((o) => [observationKeyOf(o) ?? '', o]),
+    getMatchState(db, providerId).retiredCandidates.map((o) => [observationKeyOf(o) ?? '', o]),
   );
   const seen = new Set<string>();
   const planned = input.items.map((item) => {

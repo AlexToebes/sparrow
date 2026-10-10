@@ -14,9 +14,18 @@ import {
 } from '../src/core/inbox.js';
 import { createLayoutService } from '../src/core/layout.js';
 import { matchObservations } from '../src/core/matching.js';
+import type { DriveDataProvider } from '../src/core/provider-port.js';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
 import { createRepositories } from '../src/db/repositories.js';
 import { events } from '../src/db/schema.js';
+
+const fakeProvider: DriveDataProvider = {
+  id: 'fake',
+  capabilities: { drives: true, pools: false },
+  expectedUpdateIntervalHours: 1,
+  fetchSnapshot: async () => [],
+  checkConnection: async () => ({ ok: true }),
+};
 
 let opened: OpenedDatabase;
 beforeEach(() => {
@@ -24,6 +33,7 @@ beforeEach(() => {
 });
 afterEach(() => opened.sqlite.close());
 const db = () => opened.db;
+const P = 'fake';
 
 function slots(): string[] {
   const layout = createLayoutService(db());
@@ -64,14 +74,14 @@ function thrown(fn: () => unknown): DomainError {
 describe('inbox queries', () => {
   it('R24: on first run every active observation with a serial is in the inbox', () => {
     snapshot([obs('AAA'), obs('bbb'), obs('CCC', { state: 'decommissioned' })]);
-    const inbox = getInbox(db());
+    const inbox = getInbox(db(), P);
     expect(inbox.entries.map((e) => e.observationKey)).toEqual(['AAA', 'BBB']);
     expect(inbox.count).toBe(2);
     expect(inbox.entries.every((e) => e.suggestion === null)).toBe(true);
   });
 
   it('the inbox is empty without a snapshot (R32)', () => {
-    expect(getInbox(db())).toEqual({
+    expect(getInbox(db(), P)).toEqual({
       entries: [],
       unidentified: [],
       retiredCandidates: [],
@@ -83,7 +93,7 @@ describe('inbox queries', () => {
     const spare = createDrive(db(), { serial: 'ab-1' });
     snapshot([obs(' AB-1 ')]);
     const before = eventCount();
-    const inbox = getInbox(db());
+    const inbox = getInbox(db(), P);
     expect(inbox.entries).toHaveLength(1);
     expect(inbox.entries[0]?.suggestion?.id).toBe(spare.id);
     expect(getDrive(db(), spare.id).status).toBe('spare');
@@ -97,12 +107,12 @@ describe('inbox queries', () => {
     createDrive(db(), { serial: 'R1' });
     snapshot([obs('A1'), obs('R1')]);
     // R1 is a spare here, so it is suggested; A1 is installed and not offered.
-    expect(getInbox(db()).entries.map((e) => e.observationKey)).toEqual(['R1']);
+    expect(getInbox(db(), P).entries.map((e) => e.observationKey)).toEqual(['R1']);
   });
 
   it('R58: observations without a serial are unidentified, not in the inbox', () => {
     snapshot([obs(undefined, { model: 'empty' }), obs('   '), obs('A1')]);
-    const inbox = getInbox(db());
+    const inbox = getInbox(db(), P);
     expect(inbox.unidentified).toHaveLength(2);
     expect(inbox.entries.map((e) => e.observationKey)).toEqual(['A1']);
   });
@@ -146,7 +156,7 @@ describe('R63: retired candidates', () => {
       obs('DEAD2', { state: 'decommissioned' }),
     ]);
     createDrive(db(), { serial: 'dead2' });
-    expect(listRetiredCandidates(db())).toEqual([
+    expect(listRetiredCandidates(db(), P)).toEqual([
       {
         observationKey: 'DEAD1',
         serial: 'DEAD1',
@@ -158,8 +168,8 @@ describe('R63: retired candidates', () => {
       },
     ]);
     // DEAD2 matches an existing record (the R10 case), so it is not offered.
-    expect(getInbox(db()).retiredCandidates.map((c) => c.serial)).toEqual(['DEAD1']);
-    expect(getInbox(db()).entries).toEqual([]);
+    expect(getInbox(db(), P).retiredCandidates.map((c) => c.serial)).toEqual(['DEAD1']);
+    expect(getInbox(db(), P).entries).toEqual([]);
   });
 
   it('imports with a reason per item, a prefilled date, and applies no health', () => {
@@ -167,7 +177,7 @@ describe('R63: retired candidates', () => {
       obs('DEAD1', { state: 'decommissioned', health: 'failed', model: 'M1', wwn: '0xAA' }),
       obs('DEAD2', { state: 'decommissioned' }),
     ]);
-    const result = importRetired(db(), {
+    const result = importRetired(db(), P, {
       items: [
         { observationKey: 'DEAD1', reason: 'failed' },
         { observationKey: 'dead2', reason: 'replaced', date: '2025-12-01', note: 'old' },
@@ -183,14 +193,14 @@ describe('R63: retired candidates', () => {
       'drive-retired',
       'drive-created',
     ]);
-    expect(listRetiredCandidates(db())).toEqual([]);
+    expect(listRetiredCandidates(db(), P)).toEqual([]);
   });
 
   it('is all or nothing: an unknown item writes nothing', () => {
     snapshot([obs('DEAD1', { state: 'decommissioned' })]);
     const before = eventCount();
     const err = thrown(() =>
-      importRetired(db(), {
+      importRetired(db(), P, {
         items: [
           { observationKey: 'DEAD1', reason: 'failed' },
           { observationKey: 'NOPE', reason: 'failed' },
@@ -213,7 +223,7 @@ describe('R63: retired candidates', () => {
        BEGIN SELECT RAISE(ABORT, 'boom'); END`,
     );
     expect(() =>
-      importRetired(db(), {
+      importRetired(db(), P, {
         items: [
           { observationKey: 'DEAD1', reason: 'failed' },
           { observationKey: 'DEAD2', reason: 'failed' },
@@ -237,7 +247,7 @@ describe('resolving an inbox entry (R22, R23)', () => {
         driveType: 'HDD',
       }),
     ]);
-    const { drive } = linkObservation(db(), 'ab-1', { driveId: spare.id, slotId: slot! });
+    const { drive } = linkObservation(db(), P, 'ab-1', { driveId: spare.id, slotId: slot! });
     expect(drive).toMatchObject({
       status: 'installed',
       slotId: slot,
@@ -254,13 +264,13 @@ describe('resolving an inbox entry (R22, R23)', () => {
       capacityBytes: 8_000_000_000_000,
       driveType: 'HDD',
     });
-    expect(getInbox(db()).entries).toEqual([]);
+    expect(getInbox(db(), P).entries).toEqual([]);
   });
 
   it('creates a record from the observation and installs it', () => {
     const [slot] = slots();
     snapshot([obs('NEW1', { model: 'M', capacityBytes: 1000, formFactor: '3.5', wwn: '0xBEEF' })]);
-    const { drive } = createFromObservation(db(), 'new1', {
+    const { drive } = createFromObservation(db(), P, 'new1', {
       slotId: slot!,
       vendor: 'Shop',
     });
@@ -278,7 +288,7 @@ describe('resolving an inbox entry (R22, R23)', () => {
       'drive-installed',
       'drive-created',
     ]);
-    expect(getInbox(db()).count).toBe(0);
+    expect(getInbox(db(), P).count).toBe(0);
   });
 
   it('create: an occupied slot fails atomically, with no drive and no event', () => {
@@ -288,11 +298,11 @@ describe('resolving an inbox entry (R22, R23)', () => {
     snapshot([obs('NEW1'), obs('HOLD')]);
     const drivesBefore = listDrives(db()).length;
     const eventsBefore = eventCount();
-    const err = thrown(() => createFromObservation(db(), 'NEW1', { slotId: slot! }));
+    const err = thrown(() => createFromObservation(db(), P, 'NEW1', { slotId: slot! }));
     expect(err.code).toBe('conflict');
     expect(listDrives(db())).toHaveLength(drivesBefore);
     expect(eventCount()).toBe(eventsBefore);
-    expect(getInbox(db()).entries.map((e) => e.observationKey)).toEqual(['NEW1']);
+    expect(getInbox(db(), P).entries.map((e) => e.observationKey)).toEqual(['NEW1']);
   });
 
   it('link: an occupied slot fails atomically, leaving the spare unfilled and unlogged', () => {
@@ -303,7 +313,7 @@ describe('resolving an inbox entry (R22, R23)', () => {
     snapshot([obs('SP1', { model: 'M', wwn: '0x1' })]);
     const eventsBefore = eventCount();
     expect(
-      thrown(() => linkObservation(db(), 'SP1', { driveId: spare.id, slotId: slot! })).code,
+      thrown(() => linkObservation(db(), P, 'SP1', { driveId: spare.id, slotId: slot! })).code,
     ).toBe('conflict');
     expect(getDrive(db(), spare.id)).toMatchObject({ status: 'spare', model: null, wwn: null });
     expect(eventCount()).toBe(eventsBefore);
@@ -315,7 +325,7 @@ describe('resolving an inbox entry (R22, R23)', () => {
     assignDrive(db(), { driveId: holder.id, slotId: slot! });
     const spare = createDrive(db(), { serial: 'SP1' });
     snapshot([obs('SP1')]);
-    const result = linkObservation(db(), 'SP1', {
+    const result = linkObservation(db(), P, 'SP1', {
       driveId: spare.id,
       slotId: slot!,
       occupant: { action: 'spare' },
@@ -331,18 +341,19 @@ describe('resolving an inbox entry (R22, R23)', () => {
     const other = createDrive(db(), { serial: 'OTHER' });
     snapshot([obs('NEW1'), obs('NEW2', { wwn: '0x9' })]);
     expect(
-      thrown(() => linkObservation(db(), 'NEW1', { driveId: installed.id, slotId: slot2! })).code,
+      thrown(() => linkObservation(db(), P, 'NEW1', { driveId: installed.id, slotId: slot2! }))
+        .code,
     ).toBe('conflict');
     expect(
-      thrown(() => linkObservation(db(), 'NEW1', { driveId: 'nope', slotId: slot2! })).code,
+      thrown(() => linkObservation(db(), P, 'NEW1', { driveId: 'nope', slotId: slot2! })).code,
     ).toBe('not-found');
     expect(
-      thrown(() => linkObservation(db(), 'NEW1', { driveId: other.id, slotId: slot2! })).code,
-    ).toBe('invalid');
+      thrown(() => linkObservation(db(), P, 'NEW1', { driveId: other.id, slotId: slot2! })).code,
+    ).toBe('conflict');
     // With a WWN the observation can be linked to a differently numbered spare.
-    const linked = linkObservation(db(), 'NEW2', { driveId: other.id, slotId: slot2! });
+    const linked = linkObservation(db(), P, 'NEW2', { driveId: other.id, slotId: slot2! });
     expect(linked.drive).toMatchObject({ serial: 'OTHER', wwn: '0x9', status: 'installed' });
-    expect(getInbox(db()).entries.map((e) => e.observationKey)).toEqual(['NEW1']);
+    expect(getInbox(db(), P).entries.map((e) => e.observationKey)).toEqual(['NEW1']);
   });
 
   it('requires the observation to be in the inbox', () => {
@@ -350,22 +361,77 @@ describe('resolving an inbox entry (R22, R23)', () => {
     const d = createDrive(db(), { serial: 'INS' });
     assignDrive(db(), { driveId: d.id, slotId: slot! });
     snapshot([obs('INS'), obs('GONE', { state: 'decommissioned' })]);
-    expect(thrown(() => createFromObservation(db(), 'INS', { slotId: slot! })).code).toBe(
+    expect(thrown(() => createFromObservation(db(), P, 'INS', { slotId: slot! })).code).toBe(
       'conflict',
     );
-    expect(thrown(() => createFromObservation(db(), 'GONE', { slotId: slot! })).code).toBe(
+    expect(thrown(() => createFromObservation(db(), P, 'GONE', { slotId: slot! })).code).toBe(
       'conflict',
     );
-    expect(thrown(() => createFromObservation(db(), 'UNKNOWN', { slotId: slot! })).code).toBe(
+    expect(thrown(() => createFromObservation(db(), P, 'UNKNOWN', { slotId: slot! })).code).toBe(
       'not-found',
     );
+  });
+});
+
+describe('R22, R26, R2: linking must leave the observation matched to the linked drive', () => {
+  it('rejects a spare with a different serial and a different WWN, changing nothing', () => {
+    const [slot] = slots();
+    const spare = createDrive(db(), { serial: 'DIFFERENT' }, { wwn: '0x111' });
+    snapshot([obs('OBS-1', { wwn: '0xabc', model: 'M' })]);
+    const eventsBefore = eventCount();
+    const err = thrown(() =>
+      linkObservation(db(), P, 'OBS-1', { driveId: spare.id, slotId: slot! }),
+    );
+    expect(err.code).toBe('conflict');
+    expect(err.message).toMatch(/stay unmatched/);
+    expect(getDrive(db(), spare.id)).toMatchObject({ status: 'spare', model: null, wwn: '0x111' });
+    expect(eventCount()).toBe(eventsBefore);
+  });
+
+  it('rejects when the WWN is already held by another record (case-insensitive), changing nothing', () => {
+    const [slot] = slots();
+    createDrive(db(), { serial: 'HOLDER' }, { wwn: ' 0xABC ' });
+    const spare = createDrive(db(), { serial: 'SP-2' });
+    snapshot([obs('OBS-2', { wwn: '0xabc' })]);
+    const eventsBefore = eventCount();
+    const err = thrown(() =>
+      linkObservation(db(), P, 'OBS-2', { driveId: spare.id, slotId: slot! }),
+    );
+    expect(err.code).toBe('conflict');
+    expect(getDrive(db(), spare.id)).toMatchObject({ status: 'spare', wwn: null });
+    expect(eventCount()).toBe(eventsBefore);
+  });
+
+  it('rejects when the observation would still resolve to a different record', () => {
+    const [slot] = slots();
+    // OBS-3 matches a record by serial, so linking it to another spare (even with a WWN) cannot work.
+    createDrive(db(), { serial: 'OBS-3' });
+    const other = createDrive(db(), { serial: 'OTHER-3' });
+    snapshot([obs('OBS-3', { wwn: '0xdef' })]);
+    const eventsBefore = eventCount();
+    const err = thrown(() =>
+      linkObservation(db(), P, 'OBS-3', { driveId: other.id, slotId: slot! }),
+    );
+    expect(err.code).toBe('conflict');
+    expect(err.message).toMatch(/unmatched|match/);
+    expect(getDrive(db(), other.id)).toMatchObject({ status: 'spare', wwn: null });
+    expect(eventCount()).toBe(eventsBefore);
+  });
+});
+
+describe('R55: the inbox ignores a snapshot from another provider', () => {
+  it('shows nothing while the cache belongs to a different provider', () => {
+    snapshot([obs('AAA')]);
+    expect(getInbox(db(), 'other').count).toBe(0);
+    expect(getInbox(db(), 'other').retiredCandidates).toEqual([]);
+    expect(getInbox(db(), P).count).toBe(1);
   });
 });
 
 describe('inbox API', () => {
   it('serves the inbox, resolves entries, and maps errors', async () => {
     const [slot, slot2] = slots();
-    const app = await buildApp({ db: db() });
+    const app = await buildApp({ db: db(), provider: fakeProvider });
     snapshot([
       obs('A/1', { model: 'M' }),
       obs(undefined),

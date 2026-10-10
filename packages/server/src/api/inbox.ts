@@ -11,19 +11,25 @@ import type { AppDb } from '../db/client.js';
 export const inboxRoutes: FastifyPluginAsync<{ db: AppDb }> = async (app, opts) => {
   const { db } = opts;
 
-  app.get('/api/inbox', async () => getInbox(db));
+  app.get('/api/inbox', async () => getInbox(db, app.provider.id));
 
   app.post('/api/inbox/import-retired', async (req) =>
-    importRetired(db, importRetiredInputSchema.parse(req.body)),
+    importRetired(db, app.provider.id, importRetiredInputSchema.parse(req.body)),
   );
 
   app.post<{ Params: { key: string } }>('/api/inbox/:key/link', async (req) =>
-    linkObservation(db, req.params.key, linkObservationInputSchema.parse(req.body)),
+    linkObservation(
+      db,
+      app.provider.id,
+      req.params.key,
+      linkObservationInputSchema.parse(req.body),
+    ),
   );
 
   app.post<{ Params: { key: string } }>('/api/inbox/:key/create', async (req, reply) => {
     const result = createFromObservation(
       db,
+      app.provider.id,
       req.params.key,
       createFromObservationInputSchema.parse(req.body),
     );

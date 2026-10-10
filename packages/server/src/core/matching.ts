@@ -38,7 +38,7 @@ export function observationKeyOf(observation: Observation): string | undefined {
   return serial ? normalizeSerial(serial) : undefined;
 }
 
-const normalizeWwn = (wwn: string | null | undefined): string | undefined => {
+export const normalizeWwn = (wwn: string | null | undefined): string | undefined => {
   const value = wwn?.trim().toLowerCase();
   return value ? value : undefined;
 };
@@ -115,8 +115,12 @@ export function matchObservations(
   return result;
 }
 
-/** Reads all drives and the cached snapshot and matches them. No snapshot means no observations. */
-export function getMatchState(db: AppDb): MatchResult {
+/**
+ * Reads all drives and the cached snapshot and matches them. No snapshot means no observations, and
+ * a snapshot written by a provider other than the active one is ignored (R55).
+ */
+export function getMatchState(db: AppDb, providerId: string): MatchResult {
   const snapshot = createRepositories(db).snapshot.get();
-  return matchObservations(listDrives(db), snapshot?.observations ?? []);
+  const mine = snapshot && snapshot.providerId === providerId ? snapshot : null;
+  return matchObservations(listDrives(db), mine?.observations ?? []);
 }
