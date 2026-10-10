@@ -1,4 +1,5 @@
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "customConditions": ["source"] },
   "include": ["src", "test"]
 }

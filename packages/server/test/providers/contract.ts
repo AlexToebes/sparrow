@@ -1,6 +1,6 @@
 import { observationSchema } from '@sparrow/shared';
 import { describe, expect, it } from 'vitest';
-import type { DriveDataProvider } from './port.js';
+import type { DriveDataProvider } from '../../src/providers/port.js';
 
 /**
  * Reusable suite every adapter must pass.

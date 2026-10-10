@@ -5,6 +5,7 @@
     "moduleResolution": "Bundler",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
+    "customConditions": ["source"],
     "types": ["vite/client", "@testing-library/jest-dom"]
   },
   "include": ["src", "test", "vite.config.ts"]

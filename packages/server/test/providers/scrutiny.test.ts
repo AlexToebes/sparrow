@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProvider } from '../../src/providers/index.js';
-import { runProviderContract } from '../../src/providers/contract.js';
+import { runProviderContract } from './contract.js';
 import { loadScrutinyConfig } from '../../src/providers/scrutiny/config.js';
 import { createScrutinyProvider } from '../../src/providers/scrutiny/index.js';
 import { mapHealth, mapSummary } from '../../src/providers/scrutiny/mapping.js';
