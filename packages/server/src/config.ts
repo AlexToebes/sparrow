@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 const configSchema = z.object({
   DATA_DIR: z.string().min(1).default('/data'),
+  /** R16: built web bundle. Unset = packages/web/dist next to this package (the image sets it). */
+  WEB_DIST_DIR: z.preprocess((v) => (v === '' ? undefined : v), z.string().min(1).optional()),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   HOST: z.string().min(1).default('0.0.0.0'),
   PROVIDER: z.string().min(1).default('none'),
