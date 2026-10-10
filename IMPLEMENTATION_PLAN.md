@@ -62,7 +62,7 @@ Backend steps 2 to 10 expose their behavior through API routes as they go, so th
   - Work: drive service (create, edit, list with filters by status), serial normalization (trim, case-insensitive), event writer used inside the same transaction as every change, per-drive event query. Spares can be created with no provider data.
   - Done when: tests cover duplicate-serial rejection after normalization, spare creation, edits logged as events, and the absence of any hard delete.
 
-- [ ] **Step 4: Provider port, none adapter, poller**
+- [x] **Step 4: Provider port, none adapter, poller**
   - Goal: the core can consume observations from any provider.
   - Requirements: R1, R18, R19, R32, R48 to R52, R54, R55, R56, R57.
   - Work: `DriveDataProvider` interface (`id`, `capabilities`, `expectedUpdateIntervalHours`, `fetchSnapshot()`, `checkConnection()`), `none` adapter, provider registry chosen by `PROVIDER` at startup, poller on `POLL_INTERVAL_MINUTES`, snapshot cache table tagged with provider ID and discarded when the provider changes, "last updated" and "provider reachable" status endpoint. On failure the last good snapshot is kept and marked stale. Write `contract.ts`: a reusable test suite that any adapter must pass (returns normalized observations, serial normalization contract, never throws on an empty list, reports connectivity failure as a result and not a crash).
@@ -160,5 +160,6 @@ Copy from `REQUIREMENTS.md` section 6 and add new ideas here. Do not build these
 
 Short, dated notes from each session (surprises, decisions, deviations). Newest first.
 
+- 2026-10-10, Step 4: Port interface lives in `src/core/provider-port.ts` (re-exported by `src/providers/port.ts`) so core never imports providers; `buildApp({ db, provider? })` defaults to the none adapter; a failed poll writes a row with kept observations/lastSuccessAt, and a first-ever failure stores an empty snapshot with the error; `reachable` is false until a poll has succeeded last; overlapping polls share one in-flight run.
 - 2026-10-10, Step 1: zod 4 and drizzle-orm 0.45. Slot assignment is `drives.slot_id` with a unique index, which enforces both halves of D7, plus CHECKs tying it to status. Slots have a stable `position`; orientation only changes rendering. `@sparrow/shared` is consumed as TS source via package `exports`, so a build output is needed before the runtime image (Step 15). There is no runnable `pnpm dev` or start for the server yet, because running TS with `.js` specifiers needs a build or a loader. `pnpm-workspace.yaml` uses pnpm 12's `allowBuilds` (not `onlyBuiltDependencies`), so Step 15 should not re-add the old key. The Step 2 to 4 foundation tables were added in migration 0001.
 - 2026-10-10, Step 0: pnpm 12.11.2 pinned. TypeScript is held at 5.9 because typescript-eslint 8.71 does not support TypeScript 7 yet; revisit when it does. Scaffolded and verified on Node 22 (`engines` is `>=22.12`); CI and the image use Node 24. The `core` import boundary rule was verified to fire. Prettier reformatted `build.yml` quotes only.

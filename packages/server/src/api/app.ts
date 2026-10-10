@@ -1,11 +1,15 @@
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply } from 'fastify';
 import { ZodError } from 'zod';
 import { DomainError } from '../core/errors.js';
+import type { DriveDataProvider } from '../core/provider-port.js';
 import type { AppDb } from '../db/client.js';
+import { createNoneProvider } from '../providers/none/index.js';
 import { routeModules } from './routes.js';
 
 export interface AppDeps {
   db: AppDb;
+  /** Active provider (defaults to the none adapter); used by the status route. */
+  provider?: DriveDataProvider;
 }
 
 export interface ErrorBody {
@@ -29,6 +33,7 @@ const DOMAIN_STATUS = { 'not-found': 404, conflict: 409, invalid: 400 } as const
 export function buildApp(deps: AppDeps): FastifyInstance {
   const app = Fastify();
   app.decorate('db', deps.db);
+  app.decorate('provider', deps.provider ?? createNoneProvider());
 
   app.setErrorHandler((err: FastifyError | Error, _req, reply) => {
     if (err instanceof DomainError) {
@@ -59,5 +64,6 @@ export function buildApp(deps: AppDeps): FastifyInstance {
 declare module 'fastify' {
   interface FastifyInstance {
     db: AppDb;
+    provider: DriveDataProvider;
   }
 }
