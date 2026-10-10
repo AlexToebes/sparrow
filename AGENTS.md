@@ -28,7 +28,7 @@ Do not add a dependency that is not in this table without a stated reason in the
 ## 3. Architecture rules (non-negotiable)
 
 1. **Ports and adapters.** `packages/server/src/core` never imports from `packages/server/src/providers/*` (except the registry in `providers/index.ts`, which is wired in `main.ts` only). Enforce with an ESLint `no-restricted-imports` rule.
-2. **No provider vocabulary in the core.** Scrutiny field names (`device_status`, `wwn`, `risk_category`, `collector_date`, and so on), enums and IDs appear only inside `providers/scrutiny/`. The DB schema, API, UI and export never contain them (R53).
+2. **No provider vocabulary in the core.** Scrutiny field names (`device_status`, `risk_category`, `collector_date`, and so on), enums and IDs appear only inside `providers/scrutiny/`. The DB schema, API, UI and export never contain them (R53). The rule is about Scrutiny's raw field names: the normalized observation's `wwn` (Appendix A) is a drive identifier and is stored on drive records for the R2 fallback match.
 3. **Links are computed, never stored.** Match observations to drive records by normalized serial on every read (R2, R26, R54). Never store a provider ID. Never match on `sdX`.
 4. **The app owns its records.** Layout, drives, pools, memberships and events live in SQLite and keep working when the provider is down or `none` (R32).
 5. **Flag, never auto-change.** Missing or stale drives are flagged only. Status changes happen through an explicit user action and write an event (R10, R27).
