@@ -335,3 +335,36 @@ describe('life story of a move between bays (R73)', () => {
     );
   });
 });
+
+describe('life story health entries (R20)', () => {
+  const health = (at: string, from: string | null, to: string, reportedAt: string) =>
+    ev('health-changed', at, { from, to, reportedAt });
+
+  it('R20: words the first report and a change, and carries from/to for the icon', () => {
+    const first = health('2026-03-05T00:00:00.000Z', null, 'ok', '2026-03-04T05:00:00.000Z');
+    const change = health('2026-03-06T00:00:00.000Z', 'ok', 'warning', '2026-03-06T00:00:00.000Z');
+    const items = buildStory(newestFirst(first, change));
+    expect(items.map((i) => i.title)).toEqual([
+      'Health first reported: OK',
+      'Health: OK → Warning',
+    ]);
+    expect(items[1]!.health).toEqual({ from: 'ok', to: 'warning' });
+  });
+
+  it('R20: orders by reportedAt when present, not by when the poll logged it', () => {
+    const created = ev('drive-created', '2026-03-01T00:00:00.000Z');
+    // Logged last, but the provider reported it before the drive was added.
+    const early = health('2026-03-09T00:00:00.000Z', null, 'failed', '2026-02-20T00:00:00.000Z');
+    const items = buildStory(newestFirst(created, early));
+    expect(items.map((i) => i.kind)).toEqual(['health-changed', 'drive-created']);
+    expect(items[0]!.title).toBe('Health first reported: Failed');
+  });
+
+  it('R20: does not change the in-service or shelf totals', () => {
+    const created = ev('drive-created', '2026-10-10T12:00:00.000Z');
+    const h = health('2026-10-11T00:00:00.000Z', null, 'ok', '2026-10-11T00:00:00.000Z');
+    expect(summarizeStory(newestFirst(created, h), NOW)).toEqual(
+      summarizeStory(newestFirst(created), NOW),
+    );
+  });
+});

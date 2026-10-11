@@ -543,6 +543,23 @@ body {
   gap: 8px;
   flex-wrap: wrap;
 }
+.story-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.story-health[data-health='ok'] {
+  color: var(--sp-ok);
+}
+.story-health[data-health='warning'] {
+  color: var(--sp-warn);
+}
+.story-health[data-health='failed'] {
+  color: var(--sp-fail);
+}
+.story-health[data-health='unknown'] {
+  color: var(--sp-dim);
+}
 .story-detail {
   font-size: 13px;
   color: var(--sp-dim);

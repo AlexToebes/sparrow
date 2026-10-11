@@ -1,4 +1,4 @@
-import type { DriveEvent } from '@sparrow/shared';
+import type { DriveEvent, Health } from '@sparrow/shared';
 import { formatDate, formatDuration } from './format';
 import { FIELD_LABEL } from './suggestions';
 
@@ -17,6 +17,8 @@ export interface StoryItem {
   /** R60: a retirement or RMA whose date is unknown; `date` is then the day it was logged ("recorded"). */
   retirementUnrecorded: boolean;
   kind: DriveEvent['type'];
+  /** R20: set on health-changed entries, so the view can add the icon and colour for `to`. */
+  health: { from: Health | null; to: Health } | null;
   title: string;
   detail: string | null;
   /** Gap since the previous item, "after 28 d", or null for the first one. */
@@ -77,6 +79,13 @@ function effective(e: DriveEvent): { at: string; date: string; recorded: string 
       if (on !== e.at.slice(0, 10)) at = midnight(on);
       date = on;
     }
+  } else if (e.type === 'health-changed') {
+    // R20: the event is logged at poll time; the story places it when the provider reported it.
+    const reported = str(e.payload.reportedAt);
+    if (reported !== null && !Number.isNaN(Date.parse(reported))) {
+      at = reported;
+      date = formatDate(reported);
+    }
   } else if (e.type === 'pool-joined') {
     const started = str(e.payload.startedAt);
     if (started !== null && !Number.isNaN(Date.parse(started))) {
@@ -116,6 +125,23 @@ function where(p: Record<string, unknown>): string | null {
 
 /** Looks up a pool's name by ID, so the story can say which pool (null when unknown). */
 export type PoolNameLookup = (poolId: string) => string | null;
+
+const HEALTH_SHORT: Record<Health, string> = {
+  ok: 'OK',
+  warning: 'Warning',
+  failed: 'Failed',
+  unknown: 'Unknown',
+};
+const HEALTH_VALUES = new Set<string>(Object.keys(HEALTH_SHORT));
+const healthOf = (v: unknown): Health | null =>
+  typeof v === 'string' && HEALTH_VALUES.has(v) ? (v as Health) : null;
+
+/** R20: the from/to of a health-changed event, or null when it is not one (or is malformed). */
+function healthChange(e: DriveEvent): { from: Health | null; to: Health } | null {
+  if (e.type !== 'health-changed') return null;
+  const to = healthOf(e.payload.to);
+  return to === null ? null : { from: healthOf(e.payload.from), to };
+}
 
 const roleWord = (role: string | null): string | null =>
   role === 'hot-spare' ? 'hot spare' : role;
@@ -198,8 +224,18 @@ function describe(
       };
     case 'pool-role-changed':
       return { title: 'Pool role changed', detail: join(str(p.from), str(p.to)) };
+    case 'health-changed': {
+      const h = healthChange(e);
+      if (!h) return { title: 'Health changed', detail: null };
+      return {
+        title: h.from
+          ? `Health: ${HEALTH_SHORT[h.from]} → ${HEALTH_SHORT[h.to]}`
+          : `Health first reported: ${HEALTH_SHORT[h.to]}`,
+        detail: null,
+      };
+    }
     default:
-      // Event types added for later batches (health, layout and pool records) have no story text yet.
+      // Event types added for later batches (layout and pool records) have no story text yet.
       return { title: e.type.replace(/-/g, ' '), detail: null };
   }
 }
@@ -255,6 +291,7 @@ export function buildStory(
         removalUnrecorded: false,
         retirementUnrecorded: false,
         kind: 'drive-installed',
+        health: null,
         title: `Moved from ${moveWhere(o.event.payload, pair.event.payload, 'from')} to ${moveWhere(
           o.event.payload,
           pair.event.payload,
@@ -276,6 +313,7 @@ export function buildStory(
       removalUnrecorded: isUnrecordedRemoval(o.event),
       retirementUnrecorded: isUnrecordedRetirement(o.event),
       kind: o.event.type,
+      health: healthChange(o.event),
       title,
       detail,
       gap,
