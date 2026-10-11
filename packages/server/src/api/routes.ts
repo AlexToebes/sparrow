@@ -9,6 +9,7 @@ import { layoutRoutes } from './layout.js';
 import { poolRoutes } from './pools.js';
 import { providerStatusRoutes } from './provider-status.js';
 import { statusRoutes } from './status.js';
+import { suggestionRoutes } from './suggestions.js';
 
 /**
  * Route modules registered by buildApp, each receiving `{ db }`.
@@ -34,4 +35,6 @@ export const routeModules: FastifyPluginAsync<{ db: AppDb }>[] = [
   backupRoutes,
   // Step 14: read-only effective config
   configInfoRoutes,
+  // Post-MVP 5: suggested updates from provider observations (R72)
+  suggestionRoutes,
 ];

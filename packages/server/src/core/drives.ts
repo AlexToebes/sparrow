@@ -100,7 +100,13 @@ export function createDrive(
  * `{ changes: { field: { from, to } } }`. A patch that changes nothing writes no event.
  * The drive update and its event share one transaction, so a failed event write rolls back the edit.
  */
-export function updateDrive(db: AppDb, id: string, input: unknown): Drive {
+export function updateDrive(
+  db: AppDb,
+  id: string,
+  input: unknown,
+  /** `source: 'provider'` marks edits applied from accepted provider suggestions (R72). */
+  opts: { source?: 'provider' } = {},
+): Drive {
   const patch = updateDriveInputSchema.parse(input);
   return db.transaction((tx) => {
     const current = tx.select().from(drives).where(eq(drives.id, id)).get();
@@ -190,7 +196,11 @@ export function updateDrive(db: AppDb, id: string, input: unknown): Drive {
     recordEvent(tx, {
       driveId: id,
       type: 'drive-updated',
-      payload: { changes, ...(membershipStartedAt ? { membershipStartedAt } : {}) },
+      payload: {
+        changes,
+        ...(membershipStartedAt ? { membershipStartedAt } : {}),
+        ...(opts.source ? { source: opts.source } : {}),
+      },
     });
     return updated;
   });
