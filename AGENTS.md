@@ -32,7 +32,7 @@ Do not add a dependency that is not in this table without a stated reason in the
 3. **Links are computed, never stored.** Match observations to drive records by normalized serial on every read (R2, R26, R54). Never store a provider ID. Never match on `sdX`.
 4. **The app owns its records.** Layout, drives, pools, memberships and events live in SQLite and keep working when the provider is down or `none` (R32).
 5. **Flag, never auto-change.** Missing or stale drives are flagged only. Status changes happen through an explicit user action and write an event (R10, R27).
-6. **Every state change writes an event** in the same transaction as the change (R14, R33).
+6. **Every state change writes an event (with its drive/slot/pool links) in the same transaction** as the change (R14, R33). One real action is one event: link every drive, slot and pool it involves instead of writing several events, and never pair events in readers.
 7. **No hard deletes of drives** (D5). Retire instead.
 8. **Timestamps** are stored as UTC ISO strings and displayed in the browser's local time (D3). **Capacities** are decimal units (D4).
 9. **No authentication** (N1). Do not add any.
