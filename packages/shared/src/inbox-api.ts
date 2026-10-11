@@ -41,14 +41,17 @@ export const createFromObservationInputSchema = z.strictObject({
 });
 export type CreateFromObservationInput = z.infer<typeof createFromObservationInputSchema>;
 
-/** POST /api/inbox/import-retired. A reason is required for every item: there is no default (R63). */
+/**
+ * POST /api/inbox/import-retired. A reason is required for every item: there is no default (R63).
+ * `date` omitted = the observation's last-reported day (the prefill); null = not recorded (R60).
+ */
 export const importRetiredInputSchema = z.strictObject({
   items: z
     .array(
       z.strictObject({
         observationKey: z.string().min(1),
         reason: retirementReasonSchema,
-        date: dateSchema.optional(),
+        date: dateSchema.nullable().optional(),
         note,
       }),
     )

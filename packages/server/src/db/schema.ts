@@ -115,8 +115,8 @@ export const drives = sqliteTable(
       sql`${t.installedOn} IS NULL OR ${t.status} = 'installed'`,
     ),
     check(
-      'drives_retired_needs_reason_and_date',
-      sql`${t.status} <> 'retired' OR (${t.retirementReason} IS NOT NULL AND ${t.retirementDate} IS NOT NULL)`,
+      'drives_retired_needs_reason',
+      sql`${t.status} <> 'retired' OR ${t.retirementReason} IS NOT NULL`,
     ),
     check(
       'drives_not_replaced_by_self',

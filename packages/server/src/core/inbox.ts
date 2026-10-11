@@ -239,7 +239,8 @@ export function importRetired(db: AppDb, providerId: string, input: ImportRetire
       );
       return retireDrive(nested(tx), created.id, {
         reason: item.reason,
-        date: item.date ?? o.lastReportedAt.slice(0, 10),
+        // R63: omitted = the last-reported day (the prefill); an explicit null = not recorded (R60).
+        date: item.date === undefined ? o.lastReportedAt.slice(0, 10) : item.date,
         note: item.note,
       });
     }),

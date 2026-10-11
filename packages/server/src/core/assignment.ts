@@ -75,6 +75,16 @@ function removalDateOf(value: string | null | undefined, clock: Date): string | 
   return value === null ? null : parseNotFutureDate('removedOn', value, clock);
 }
 
+/**
+ * R60: the retirement date for a request. Omitted = today (UTC); null = not recorded (never guessed);
+ * otherwise a calendar date that is not in the future. There is deliberately no check against the
+ * installation date (parking lot).
+ */
+function retirementDateOf(value: string | null | undefined, clock: Date): string | null {
+  if (value === undefined) return todayUtc(clock);
+  return value === null ? null : parseNotFutureDate('date', value, clock);
+}
+
 /** R69: a removal date may not precede the installation date or the start of the pool membership. */
 function assertRemovalAfterStart(
   drive: Drive,
@@ -141,7 +151,8 @@ function freeSlot(tx: Tx, drive: Drive, note: string | null, removal: Removal): 
 
 interface RetireOptions {
   reason: RetirementReason;
-  date: string;
+  /** Already validated YYYY-MM-DD, or null = not recorded (R60). */
+  date: string | null;
   replacedByDriveId: string | null;
   note: string | null;
 }
@@ -206,7 +217,7 @@ function retireInternal(tx: Tx, driveId: string, opts: RetireOptions): Drive {
   return updated;
 }
 
-function rmaInternal(tx: Tx, driveId: string, date: string, note: string | null): Drive {
+function rmaInternal(tx: Tx, driveId: string, date: string | null, note: string | null): Drive {
   const slotId = loadDrive(tx, driveId).slotId;
   const updated = retireInternal(tx, driveId, {
     reason: 'failed',
@@ -336,12 +347,17 @@ export function assignDrive(db: AppDb, input: AssignDriveInput): AssignDriveResu
             : action.replacedByDriveId;
         resolved = retireInternal(tx, occupant.id, {
           reason: action.reason,
-          date: action.date,
+          date: retirementDateOf(action.date, clock),
           replacedByDriveId: replacedBy,
           note: action.note ?? null,
         });
       } else {
-        resolved = rmaInternal(tx, occupant.id, action.date ?? todayUtc(), action.note ?? null);
+        resolved = rmaInternal(
+          tx,
+          occupant.id,
+          retirementDateOf(action.date, clock),
+          action.note ?? null,
+        );
       }
     }
 
@@ -408,18 +424,19 @@ export function removeToSpares(
 
 export interface RetireDriveOptions {
   reason: RetirementReason;
-  /** YYYY-MM-DD; defaults to today (UTC). */
-  date?: string | undefined;
+  /** R60: YYYY-MM-DD, never in the future. Omitted = today (UTC); null = not recorded. */
+  date?: string | null | undefined;
   replacedByDriveId?: string | null | undefined;
   note?: string | null | undefined;
 }
 
 /** spare|installed -> retired (R60). */
 export function retireDrive(db: AppDb, driveId: string, opts: RetireDriveOptions): Drive {
+  const date = retirementDateOf(opts.date, new Date());
   return db.transaction((tx) =>
     retireInternal(tx, driveId, {
       reason: opts.reason,
-      date: opts.date ?? todayUtc(),
+      date,
       replacedByDriveId: opts.replacedByDriveId ?? null,
       note: opts.note ?? null,
     }),
@@ -430,11 +447,10 @@ export function retireDrive(db: AppDb, driveId: string, opts: RetireDriveOptions
 export function sendForRma(
   db: AppDb,
   driveId: string,
-  opts: { date?: string | undefined; note?: string | null | undefined } = {},
+  opts: { date?: string | null | undefined; note?: string | null | undefined } = {},
 ): Drive {
-  return db.transaction((tx) =>
-    rmaInternal(tx, driveId, opts.date ?? todayUtc(), opts.note ?? null),
-  );
+  const date = retirementDateOf(opts.date, new Date());
+  return db.transaction((tx) => rmaInternal(tx, driveId, date, opts.note ?? null));
 }
 
 /** retired -> spare (R61). The earlier retirement stays in the history through the event payload. */

@@ -115,10 +115,14 @@ describe('driveSchema', () => {
     expect(driveSchema.safeParse({ ...drive, installedOn: '2024-02-29' }).success).toBe(false);
   });
 
-  it('R60: retired requires reason and date', () => {
+  it('R60: retired requires a reason; the date is optional (null = not recorded)', () => {
     const retired = { ...drive, status: 'retired' };
     expect(driveSchema.safeParse(retired).success).toBe(false);
-    expect(driveSchema.safeParse({ ...retired, retirementReason: 'failed' }).success).toBe(false);
+    expect(driveSchema.safeParse({ ...retired, retirementDate: '2026-03-04' }).success).toBe(false);
+    expect(
+      driveSchema.safeParse({ ...retired, retirementReason: 'failed', retirementDate: null })
+        .success,
+    ).toBe(true);
     expect(
       driveSchema.safeParse({
         ...retired,

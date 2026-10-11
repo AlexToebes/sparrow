@@ -197,6 +197,33 @@ describe('R63: retired candidates', () => {
     expect(listRetiredCandidates(db(), P)).toEqual([]);
   });
 
+  it('R63, R60: an omitted date is the last-reported day, an explicit null is not recorded, a bad one is rejected', () => {
+    snapshot([
+      obs('DEAD1', { state: 'decommissioned' }),
+      obs('DEAD2', { state: 'decommissioned' }),
+      obs('DEAD3', { state: 'decommissioned' }),
+    ]);
+    const result = importRetired(db(), P, {
+      items: [
+        { observationKey: 'DEAD1', reason: 'failed' },
+        { observationKey: 'DEAD2', reason: 'failed', date: null },
+      ],
+    });
+    expect(result.map((d) => d.retirementDate)).toEqual(['2026-03-04', null]);
+    expect(
+      listDriveEvents(db(), result[1]!.id).find((e) => e.type === 'drive-retired')!.payload,
+    ).toMatchObject({ reason: 'failed', date: null });
+    const before = eventCount();
+    expect(
+      thrown(() =>
+        importRetired(db(), P, {
+          items: [{ observationKey: 'DEAD3', reason: 'failed', date: '2999-01-01' }],
+        }),
+      ).code,
+    ).toBe('invalid');
+    expect(eventCount()).toBe(before);
+  });
+
   it('is all or nothing: an unknown item writes nothing', () => {
     snapshot([obs('DEAD1', { state: 'decommissioned' })]);
     const before = eventCount();

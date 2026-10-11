@@ -117,11 +117,15 @@ describe('constraints', () => {
     ).toThrow(/CHECK/);
   });
 
-  it('R13: retired requires reason and date', () => {
+  it('R13, R60: retired requires a reason; the date may be null (not recorded)', () => {
     expect(() => repo.drives.create({ serial: 'A', status: 'retired' })).toThrow(/CHECK/);
     expect(() =>
-      repo.drives.create({ serial: 'B', status: 'retired', retirementReason: 'failed' }),
+      repo.drives.create({ serial: 'B', status: 'retired', retirementDate: '2026-01-02' }),
     ).toThrow(/CHECK/);
+    expect(
+      repo.drives.create({ serial: 'B2', status: 'retired', retirementReason: 'failed' })
+        .retirementDate,
+    ).toBeNull();
     const ok = repo.drives.create({
       serial: 'C',
       status: 'retired',

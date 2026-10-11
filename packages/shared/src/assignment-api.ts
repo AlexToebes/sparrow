@@ -22,18 +22,24 @@ export const installedOnSchema = dateSchema.nullable();
  */
 export const removedOnSchema = dateSchema.nullable();
 
+/**
+ * R60: the day a drive was retired (or sent for RMA), or null for "retirement date not recorded".
+ * The server rejects future dates. Omitted = today (UTC); null = not recorded.
+ */
+export const retirementDateSchema = dateSchema.nullable();
+
 /** How to deal with the drive already in the slot (R37). */
 export const occupantResolutionSchema = z.discriminatedUnion('action', [
   z.strictObject({ action: z.literal('spare'), removedOn: removedOnSchema.optional() }),
   z.strictObject({
     action: z.literal('retire'),
     reason: retirementReasonSchema,
-    date: dateSchema,
+    date: retirementDateSchema.optional(),
     note,
     /** For reason 'replaced' this defaults to the incoming drive (R62). */
     replacedByDriveId: idSchema.nullish(),
   }),
-  z.strictObject({ action: z.literal('rma'), date: dateSchema.optional(), note }),
+  z.strictObject({ action: z.literal('rma'), date: retirementDateSchema.optional(), note }),
 ]);
 export type OccupantResolution = z.infer<typeof occupantResolutionSchema>;
 
@@ -58,17 +64,17 @@ export const removeDriveInputSchema = z.strictObject({
 });
 export type RemoveDriveInput = z.infer<typeof removeDriveInputSchema>;
 
-/** POST /api/drives/:id/retire. The date defaults to today (UTC). */
+/** POST /api/drives/:id/retire. `date` omitted = today (UTC); null = not recorded (R60). */
 export const retireDriveInputSchema = z.strictObject({
   reason: retirementReasonSchema,
-  date: dateSchema.optional(),
+  date: retirementDateSchema.optional(),
   replacedByDriveId: idSchema.nullish(),
   note,
 });
 export type RetireDriveInput = z.infer<typeof retireDriveInputSchema>;
 
 /** POST /api/drives/:id/rma. */
-export const rmaInputSchema = z.strictObject({ date: dateSchema.optional(), note });
+export const rmaInputSchema = z.strictObject({ date: retirementDateSchema.optional(), note });
 export type RmaInput = z.infer<typeof rmaInputSchema>;
 
 /** GET /api/slots/:id/assignment-defaults. */

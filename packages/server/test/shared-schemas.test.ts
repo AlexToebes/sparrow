@@ -148,4 +148,27 @@ describe('length caps (R11, R30, R38, R39)', () => {
       shared.retireDriveInputSchema.safeParse({ reason: 'other', note: long(5001) }).success,
     ).toBe(false);
   });
+
+  it('R60: retire, RMA, occupant and import-retired dates are optional and nullable', async () => {
+    const shared = await import('@sparrow/shared');
+    const ok = (schema: { safeParse: (v: unknown) => { success: boolean } }, v: unknown) =>
+      schema.safeParse(v).success;
+    expect(ok(shared.retireDriveInputSchema, { reason: 'other' })).toBe(true);
+    expect(ok(shared.retireDriveInputSchema, { reason: 'other', date: null })).toBe(true);
+    expect(ok(shared.retireDriveInputSchema, { reason: 'other', date: '2026-01-02' })).toBe(true);
+    expect(ok(shared.retireDriveInputSchema, { reason: 'other', date: '02/01/2026' })).toBe(false);
+    expect(ok(shared.retireDriveInputSchema, { date: null })).toBe(false);
+    expect(ok(shared.rmaInputSchema, { date: null })).toBe(true);
+    expect(ok(shared.occupantResolutionSchema, { action: 'retire', reason: 'failed' })).toBe(true);
+    expect(
+      ok(shared.occupantResolutionSchema, { action: 'retire', reason: 'failed', date: null }),
+    ).toBe(true);
+    expect(ok(shared.occupantResolutionSchema, { action: 'rma', date: null })).toBe(true);
+    const item = { observationKey: 'K', reason: 'failed' };
+    expect(ok(shared.importRetiredInputSchema, { items: [item] })).toBe(true);
+    expect(ok(shared.importRetiredInputSchema, { items: [{ ...item, date: null }] })).toBe(true);
+    expect(
+      ok(shared.importRetiredInputSchema, { items: [{ observationKey: 'K', date: null }] }),
+    ).toBe(false);
+  });
 });

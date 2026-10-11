@@ -31,6 +31,7 @@ export const driveSchema = z
     status: driveStatusSchema,
     slotId: idSchema.nullable(),
     retirementReason: retirementReasonSchema.nullable(),
+    /** R60: calendar date of the retirement; null on a retired drive means "not recorded". */
     retirementDate: dateSchema.nullable(),
     replacedByDriveId: idSchema.nullable(),
     retirementNote: z.string().max(5000).nullable(),
@@ -64,21 +65,13 @@ export const driveSchema = z
         message: 'installedOn is only allowed when installed',
       });
     }
-    if (d.status === 'retired') {
-      if (d.retirementReason === null) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['retirementReason'],
-          message: 'required when retired',
-        });
-      }
-      if (d.retirementDate === null) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['retirementDate'],
-          message: 'required when retired',
-        });
-      }
+    // R60: a retired drive needs its reason; the date may be null ("not recorded", never guessed).
+    if (d.status === 'retired' && d.retirementReason === null) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['retirementReason'],
+        message: 'required when retired',
+      });
     }
     if (d.replacedByDriveId !== null && d.replacedByDriveId === d.id) {
       ctx.addIssue({
