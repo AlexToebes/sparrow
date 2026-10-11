@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import {
   assignDriveInputSchema,
+  moveDriveInputSchema,
   noteInputSchema,
   removeDriveInputSchema,
   retireDriveInputSchema,
@@ -14,6 +15,7 @@ import {
   retireDrive,
   sendForRma,
 } from '../core/assignment.js';
+import { moveDrive } from '../core/move.js';
 import type { AppDb } from '../db/client.js';
 
 interface IdParams {
@@ -34,6 +36,11 @@ export const assignmentRoutes: FastifyPluginAsync<{ db: AppDb }> = async (app, o
 
   app.post<{ Params: IdParams }>('/api/drives/:id/remove', async (req) =>
     removeToSpares(db, req.params.id, removeDriveInputSchema.parse(req.body ?? {})),
+  );
+
+  // R73: one Move for an installed drive.
+  app.post<{ Params: IdParams }>('/api/drives/:id/move', async (req) =>
+    moveDrive(db, req.params.id, moveDriveInputSchema.parse(req.body)),
   );
 
   app.post<{ Params: IdParams }>('/api/drives/:id/retire', async (req) =>
