@@ -6,6 +6,7 @@ import {
   dateSchema,
   driveSchema,
   occupantResolutionSchema,
+  type ApplySuggestionsInput,
   type AssignDriveInput,
   type CreateDriveInput,
   type OccupantResolution,
@@ -111,6 +112,16 @@ export function useDriveAction(driveId: string, action: Action) {
   return useMutation({
     mutationFn: (body: RetireDriveInput | RmaInput | RemoveInput) =>
       apiSend('POST', `/api/drives/${driveId}/${action}`, body, driveSchema),
+    onSuccess: invalidate,
+  });
+}
+
+/** R72: apply the selected suggested values (one drive-updated event on the server). */
+export function useApplySuggestions(driveId: string) {
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: (input: ApplySuggestionsInput) =>
+      apiSend('POST', `/api/drives/${driveId}/suggestions/apply`, input, driveSchema),
     onSuccess: invalidate,
   });
 }

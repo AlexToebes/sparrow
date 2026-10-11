@@ -3,9 +3,11 @@ import { z } from 'zod';
 import {
   driveSchema,
   eventSchema,
+  driveSuggestionsResponseSchema,
   inboxResponseSchema,
   layoutSchema,
   statusResponseSchema,
+  suggestionSummaryResponseSchema,
   type DriveStatus,
 } from '@sparrow/shared';
 import { apiGet } from './client';
@@ -97,3 +99,23 @@ export function useDrivePools(): Map<string, PoolBadgeInfo> {
   });
   return map;
 }
+
+/**
+ * R72: suggested updates for one drive. The keys start with 'drives', so any drive-changing
+ * mutation (which invalidates ['drives']) refreshes them too.
+ */
+export const useDriveSuggestions = (driveId: string) =>
+  useQuery({
+    queryKey: ['drives', driveId, 'suggestions'] as const,
+    queryFn: () =>
+      apiGet(`/api/drives/${driveId}/suggestions`, driveSuggestionsResponseSchema).then(
+        (r) => r.suggestions,
+      ),
+  });
+
+/** R72: per-drive suggestion counts, for the Drives list and the Inbox page. */
+export const useSuggestionSummary = () =>
+  useQuery({
+    queryKey: ['drives', 'suggestions'] as const,
+    queryFn: () => apiGet('/api/suggestions', suggestionSummaryResponseSchema),
+  });

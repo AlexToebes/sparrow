@@ -142,7 +142,7 @@ describe('Inbox (R22, R23, R25, R58)', () => {
         count: 1,
       },
     );
-    renderApp(<App />, '/inbox');
+    renderApp(<App />, '/drives/inbox');
     const card = await screen.findByRole('article', { name: 'Inbox entry SPARE-1' });
     expect(within(card).getByText(/Looks like spare/)).toBeInTheDocument();
     expect(posts(calls, '/api/inbox/ABC%2F1/link')).toHaveLength(0);
@@ -171,7 +171,7 @@ describe('Inbox (R22, R23, R25, R58)', () => {
         count: 1,
       },
     );
-    renderApp(<App />, '/inbox');
+    renderApp(<App />, '/drives/inbox');
     await userEvent.click(await screen.findByRole('button', { name: 'Link to a spare' }));
     const pickDlg = await screen.findByRole('dialog', { name: 'Link NEW-1 to a spare' });
     expect(within(pickDlg).getByRole('button', { name: 'Next' })).toBeDisabled();
@@ -195,7 +195,7 @@ describe('Inbox (R22, R23, R25, R58)', () => {
         count: 1,
       },
     );
-    renderApp(<App />, '/inbox');
+    renderApp(<App />, '/drives/inbox');
     await userEvent.click(await screen.findByRole('button', { name: 'Create new record' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
     await pickSlot(within(dlg), /Bay 1, occupied by AAA0/);
@@ -223,7 +223,7 @@ describe('Inbox (R22, R23, R25, R58)', () => {
         count: 1,
       },
     );
-    renderApp(<App />, '/inbox');
+    renderApp(<App />, '/drives/inbox');
     await userEvent.click(await screen.findByRole('button', { name: 'Create new record' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
     await pickSlot(within(dlg), /Bay 2, empty/);
@@ -248,7 +248,7 @@ describe('Inbox (R22, R23, R25, R58)', () => {
         count: 1,
       },
     );
-    renderApp(<App />, '/inbox');
+    renderApp(<App />, '/drives/inbox');
     await userEvent.click(await screen.findByRole('button', { name: 'Create new record' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
     await pickSlot(within(dlg), /Bay 2, empty/);
@@ -274,7 +274,7 @@ describe('Inbox (R22, R23, R25, R58)', () => {
         count: 1,
       },
     );
-    renderApp(<App />, '/inbox');
+    renderApp(<App />, '/drives/inbox');
     expect(await screen.findByText('Welcome to Sparrow')).toBeInTheDocument();
     const un = await screen.findByRole('region', { name: 'Unidentified' });
     expect(within(un).getByText(/Ghost/)).toBeInTheDocument();
@@ -310,7 +310,7 @@ describe('Import retired drives (R63)', () => {
       { 'POST /api/inbox/import-retired': [spare] },
       { retiredCandidates: retired },
     );
-    renderApp(<App />, '/inbox');
+    renderApp(<App />, '/drives/inbox');
     await userEvent.click(await screen.findByRole('button', { name: 'Review 2' }));
     const panel = await screen.findByRole('region', { name: 'Import retired drives' });
     const submit = within(panel).getByRole('button', { name: /^Import/ });
@@ -347,7 +347,7 @@ describe('Import retired drives (R63)', () => {
       { 'POST /api/inbox/import-retired': [spare] },
       { retiredCandidates: retired },
     );
-    renderApp(<App />, '/inbox');
+    renderApp(<App />, '/drives/inbox');
     await userEvent.click(await screen.findByRole('button', { name: 'Review 2' }));
     const panel = await screen.findByRole('region', { name: 'Import retired drives' });
     await userEvent.click(within(panel).getByLabelText('Select RET-1'));
@@ -368,7 +368,7 @@ describe('Import retired drives (R63)', () => {
 
   it('stays disabled when a selected row has no reason', async () => {
     setup({}, { retiredCandidates: retired });
-    renderApp(<App />, '/inbox');
+    renderApp(<App />, '/drives/inbox');
     await userEvent.click(await screen.findByRole('button', { name: 'Review 2' }));
     const panel = await screen.findByRole('region', { name: 'Import retired drives' });
     await userEvent.click(within(panel).getByLabelText('Select RET-1'));

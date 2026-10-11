@@ -1,13 +1,17 @@
 import { useState } from 'react';
 import { Alert, Badge, Button, Skeleton, Text } from '@mantine/core';
-import { useDrives, useInbox } from '../api/hooks';
+import { Link } from 'react-router';
+import { useDrives, useInbox, useSuggestionSummary } from '../api/hooks';
 import { ImportRetiredPanel } from '../components/ImportRetiredPanel';
 import { InboxEntryCard } from '../components/InboxEntryCard';
+import { ArrowLeftIcon } from '../components/icons';
 import { formatBytes, formatRelative } from '../lib/format';
+import { fieldList } from '../lib/suggestions';
 
 export function InboxPage() {
   const inbox = useInbox();
   const drives = useDrives();
+  const summary = useSuggestionSummary();
   const [importing, setImporting] = useState(false);
 
   if (inbox.isPending) return <Skeleton height={160} />;
@@ -20,10 +24,16 @@ export function InboxPage() {
   }
   const { entries, unidentified, retiredCandidates } = inbox.data;
   // R24: first run, everything the provider reports is new and no drive records exist yet.
+  const updates = (drives.data ?? [])
+    .map((d) => ({ drive: d, fields: summary.data?.byDriveId[d.id]?.fillFields ?? [] }))
+    .filter((u) => u.fields.length > 0);
   const firstRun = entries.length > 0 && drives.data !== undefined && drives.data.length === 0;
 
   return (
     <>
+      <Link to="/drives" className="back-link">
+        <ArrowLeftIcon size={16} /> Drives
+      </Link>
       <h1 className="page-title">Inbox</h1>
       <Text c="dimmed" mb="md">
         Drives the NAS reports that Sparrow has not placed yet: new drives, and spares you already
@@ -46,6 +56,31 @@ export function InboxPage() {
       ) : (
         entries.map((e) => <InboxEntryCard key={e.observationKey} entry={e} />)
       )}
+
+      {updates.length > 0 ? (
+        <section className="card" aria-label="Suggested updates">
+          <div className="card-head">
+            <h2 className="card-title">Suggested updates</h2>
+            <Badge variant="light" color="indigo">
+              {updates.length}
+            </Badge>
+          </div>
+          <Text size="sm" c="dimmed" mb="sm">
+            The provider reports details these records don&apos;t have. Open a drive to review and
+            apply them; nothing changes until you confirm.
+          </Text>
+          <ul className="plain-list update-list">
+            {updates.map(({ drive, fields }) => (
+              <li key={drive.id}>
+                <Link to={`/drives?drive=${drive.id}`} className="mono">
+                  {drive.serial}
+                </Link>
+                <span className="dim"> · can add {fieldList(fields)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {unidentified.length > 0 ? (
         <section className="card" aria-label="Unidentified">

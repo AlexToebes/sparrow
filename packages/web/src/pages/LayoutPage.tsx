@@ -153,7 +153,7 @@ export function LayoutPage() {
           </button>
         ))}
         {inboxCount > 0 ? (
-          <Link to="/inbox" className="chip chip-button" data-kind="info">
+          <Link to="/drives/inbox" className="chip chip-button" data-kind="info">
             <InboxIcon size={14} />
             {inboxCount} in Inbox
           </Link>

@@ -11,12 +11,12 @@ import {
 } from '@mantine/core';
 import { Drawer } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import type { Drive, DriveStatus } from '@sparrow/shared';
-import { useDrives, useLayout } from '../api/hooks';
+import { useDrives, useInbox, useLayout, useSuggestionSummary } from '../api/hooks';
 import { DriveDetail } from '../components/DriveDetail';
 import { DriveFormDialog } from '../components/DriveFormDialog';
-import { PlusIcon } from '../components/icons';
+import { InboxIcon, PlusIcon, UpdateIcon } from '../components/icons';
 import { formatBytes } from '../lib/format';
 import { slotLabel } from '../lib/health';
 
@@ -45,10 +45,23 @@ export function matchesSearch(d: Drive, query: string): boolean {
   );
 }
 
+/** R72: shown on rows whose record could be filled in from the provider (icon plus text). */
+function UpdatesFlag() {
+  return (
+    <span className="update-flag" title="The provider reports details this record doesn't have">
+      <UpdateIcon size={14} />
+      Updates
+    </span>
+  );
+}
+
 export function DrivesPage() {
   const phone = useMediaQuery('(max-width: 48em)') ?? false;
   const drives = useDrives();
   const layout = useLayout();
+  const inboxCount = useInbox().data?.count ?? 0;
+  const suggestions = useSuggestionSummary().data?.byDriveId ?? {};
+  const hasUpdates = (d: Drive) => (suggestions[d.id]?.fill ?? 0) > 0;
   // The status filter lives in the URL (/drives?status=retired) so it can be linked to.
   const [params, setParams] = useSearchParams();
   const statusParam = params.get('status');
@@ -67,7 +80,18 @@ export function DrivesPage() {
       { replace: true },
     );
   const [search, setSearch] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The open drive lives in the URL too (/drives?drive=ID), so the Inbox can link to a drive.
+  const selectedId = params.get('drive');
+  const setSelectedId = (id: string | null) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (id === null) next.delete('drive');
+        else next.set('drive', id);
+        return next;
+      },
+      { replace: true },
+    );
   const [adding, setAdding] = useState(false);
 
   const whereBySlot = useMemo(() => {
@@ -100,9 +124,37 @@ export function DrivesPage() {
     <>
       <div className="page-title-row">
         <h2 className="page-title">Drives</h2>
-        <Button leftSection={<PlusIcon size={14} />} onClick={() => setAdding(true)}>
-          Add drive
-        </Button>
+        <div className="title-actions">
+          {/* R71: the inbox lives here; loud when something waits, quiet otherwise. */}
+          <Button
+            component={Link}
+            to="/drives/inbox"
+            variant={inboxCount > 0 ? 'filled' : 'default'}
+            leftSection={<InboxIcon size={16} />}
+            rightSection={
+              inboxCount > 0 ? (
+                <Badge
+                  size="sm"
+                  circle
+                  variant="white"
+                  color="indigo"
+                  aria-label={`${inboxCount} in inbox`}
+                >
+                  {inboxCount}
+                </Badge>
+              ) : null
+            }
+          >
+            Inbox
+          </Button>
+          <Button
+            variant={inboxCount > 0 ? 'default' : 'filled'}
+            leftSection={<PlusIcon size={14} />}
+            onClick={() => setAdding(true)}
+          >
+            Add drive
+          </Button>
+        </div>
       </div>
       <div className="toolbar">
         <SegmentedControl
@@ -156,9 +208,12 @@ export function DrivesPage() {
                   <span className="mono" style={{ fontWeight: 600 }}>
                     {d.serial}
                   </span>
-                  <Badge variant="light" color={STATUS_COLOR[d.status]}>
-                    {STATUS_WORD[d.status]}
-                  </Badge>
+                  <span className="drive-card-flags">
+                    {hasUpdates(d) ? <UpdatesFlag /> : null}
+                    <Badge variant="light" color={STATUS_COLOR[d.status]}>
+                      {STATUS_WORD[d.status]}
+                    </Badge>
+                  </span>
                 </span>
                 <Text size="sm" c="dimmed">
                   {[d.model, d.driveType, formatBytes(d.capacityBytes)].filter(Boolean).join(' · ')}
@@ -200,7 +255,8 @@ export function DrivesPage() {
                       <Table.Td>
                         <Badge variant="light" color={STATUS_COLOR[d.status]}>
                           {STATUS_WORD[d.status]}
-                        </Badge>
+                        </Badge>{' '}
+                        {hasUpdates(d) ? <UpdatesFlag /> : null}
                       </Table.Td>
                       <Table.Td>{whereOf(d)}</Table.Td>
                     </Table.Tr>

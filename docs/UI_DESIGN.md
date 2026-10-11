@@ -7,8 +7,14 @@ material, not code to copy: build with Mantine components, the shared zod types 
 ## Base (from B, `b-calm`)
 - Mantine look: soft cards, generous spacing, one accent color (indigo), system font stack.
 - Light and dark follow `prefers-color-scheme` (Mantine `defaultColorScheme="auto"`).
-- App shell: sidebar on desktop (Layout, Drives, Inbox with count badge, Settings, plus provider status and
-  "last updated" at the bottom); bottom tab bar on phone (<= 768px).
+- App shell: sidebar on desktop (Layout, Drives, Settings, plus provider status and
+  "last updated" at the bottom); bottom tab bar on phone (<= 768px) with the same three tabs. The Inbox is not a
+  tab (R71): the Drives page header has an "Inbox" button beside "Add drive", filled with a count badge when
+  something waits, plain when empty. The inbox page is `/drives/inbox` with a "Drives" back link and keeps the
+  Drives tab highlighted.
+- Suggested updates (R72): drive detail has a "reports details this record doesn't have" block (ticked rows,
+  "Apply selected") and a collapsed "reports different values" toggle; Drives rows with fillable details show an
+  "Updates" flag (icon plus text); the inbox page lists them in a "Suggested updates" card.
 - Layout page opens with a one-line summary sentence ("Four things need a look" / "Everything is healthy"),
   then the grids as cards (one `BayGrid` per grid; title, "4 x 2 · 7 of 8 occupied").
 - Slot tile: label top-left, health icon top-right, health word, capacity (decimal, "8 TB"), serial (monospace).

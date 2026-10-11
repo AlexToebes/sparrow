@@ -80,6 +80,7 @@ export function setupServer(
     'GET /api/drives': drives,
     'GET /api/drives?status=spare': drives.filter((d) => d.status === 'spare'),
     'GET /api/inbox': { entries: [], unidentified: [], retiredCandidates: [], count: 0 },
+    'GET /api/suggestions': { byDriveId: {} },
     'GET /api/provider/status': {
       providerId: 'none',
       reachable: true,

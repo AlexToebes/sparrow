@@ -1,5 +1,6 @@
 import type { DriveEvent } from '@sparrow/shared';
 import { formatDate, formatDuration } from './format';
+import { FIELD_LABEL } from './suggestions';
 
 export interface StoryItem {
   id: string;
@@ -138,6 +139,16 @@ function describe(
         p.changes && typeof p.changes === 'object'
           ? Object.keys(p.changes).filter((k) => k !== 'installedOn')
           : [];
+      if (p.source === 'provider') {
+        // R72: edits the owner accepted from provider suggestions; our labels, never provider names.
+        const names = others.map(
+          (k) => FIELD_LABEL[k as keyof typeof FIELD_LABEL]?.toLowerCase() ?? k,
+        );
+        return {
+          title: `Details updated from the provider${names.length > 0 ? `: ${names.join(', ')}` : ''}`,
+          detail: null,
+        };
+      }
       const date = installedOnChange(e);
       if (date) {
         return {

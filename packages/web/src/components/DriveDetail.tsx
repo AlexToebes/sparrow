@@ -16,6 +16,7 @@ import { RemoveToSparesDialog } from './RemoveToSparesDialog';
 import { ReplaceDialog } from './ReplaceDialog';
 import { RetireDialog } from './RetireDialog';
 import { StateIcon, poolColor } from './SlotTile';
+import { SuggestedUpdates } from './SuggestedUpdates';
 
 function Row({ label, value }: { label: string; value: string | null }) {
   return (
@@ -223,6 +224,7 @@ export function DriveDetail({ drive, view = null, where = null }: DriveDetailPro
         </div>
       ) : null}
       {drive.status === 'installed' ? <MembershipSection drive={drive} /> : null}
+      <SuggestedUpdates drive={drive} />
       <LifeStory driveId={drive.id} />
 
       {dialog === 'assign' ? <AssignDialog driveId={drive.id} onClose={close} /> : null}
