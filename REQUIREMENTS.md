@@ -73,6 +73,7 @@ Principles:
 - R60: Retiring a drive requires a reason (failed, replaced, other) and a retirement date (default today, editable). It optionally takes a "replaced by" link to another drive record and a note. The app does not enforce any relation between the two drives' sizes, but shows both capacities when linked (typically the replacement is larger). Retiring a drive that sits in a slot frees the slot and logs the event.
 - R61: A retired drive can be reinstated as a spare. The retirement reason and date stay in the event history.
 - R62: Retiring is available from the drive's detail panel at any time, and as an outcome in the missing-slot flow (R27). When assigning a drive to an occupied slot, the occupant resolution offers "Retire (replaced)" with "replaced by" prefilled with the incoming drive.
+- R68 (added 2026-10-11 at the owner's request): An installed drive has an installation date, defaulting to today, that can be set to a past date when assigning and edited later; the event log still records when the change was made.
 
 ### 4.3 Discovery and matching
 - R2: Observations are matched to records by normalized serial, with WWN as a fallback. Never by device name (`sdX`) or provider-internal IDs.
