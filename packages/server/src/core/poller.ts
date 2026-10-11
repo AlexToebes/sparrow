@@ -2,6 +2,7 @@ import { observationSchema, type Observation } from '@sparrow/shared';
 import { z } from 'zod';
 import type { AppDb } from '../db/client.js';
 import { createRepositories } from '../db/repositories.js';
+import { recordHealthChanges } from './health-history.js';
 import type { DriveDataProvider } from './provider-port.js';
 
 /** The slice of a logger the poller uses (the Fastify logger fits). */
@@ -71,6 +72,13 @@ export function createPoller(opts: PollerOptions): Poller {
       lastAttemptAt: at,
       lastError: null,
     });
+    try {
+      // R20: only after a successful poll of the active provider; never fails the poll.
+      recordHealthChanges(db, observations, at);
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      log?.warn({ err, providerId: provider.id }, `Could not record health changes: ${error}`);
+    }
     return { ok: true, observationCount: observations.length };
   };
 
