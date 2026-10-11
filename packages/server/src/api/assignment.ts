@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import {
   assignDriveInputSchema,
   noteInputSchema,
+  removeDriveInputSchema,
   retireDriveInputSchema,
   rmaInputSchema,
 } from '@sparrow/shared';
@@ -32,7 +33,7 @@ export const assignmentRoutes: FastifyPluginAsync<{ db: AppDb }> = async (app, o
   );
 
   app.post<{ Params: IdParams }>('/api/drives/:id/remove', async (req) =>
-    removeToSpares(db, req.params.id, noteInputSchema.parse(req.body ?? {})),
+    removeToSpares(db, req.params.id, removeDriveInputSchema.parse(req.body ?? {})),
   );
 
   app.post<{ Params: IdParams }>('/api/drives/:id/retire', async (req) =>
