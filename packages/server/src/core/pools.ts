@@ -4,19 +4,37 @@ import type { CreatePoolInput, Pool, UpdatePoolInput } from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
 import { drives, memberships, pools, slots } from '../db/schema.js';
 import { conflict, invalid } from './errors.js';
+import { recordEvent } from './events.js';
 import { requirePool } from './memberships.js';
 
-// Pool records (R30). Pool CRUD writes no drive events (events are per drive, R14). A pool that has
+// Pool records (R30). Pool CRUD writes events with no drive (R75). A pool that has
 // ever had a membership cannot be deleted, because the history must stay readable (R29).
+
+/** R34: how the current member count compares with the expected one (null expected = no check). */
+export type PoolSizeCheck = 'ok' | 'fewer' | 'more';
 
 export interface PoolSummary extends Pool {
   memberCount: number;
+  /** Null when the pool has no expected size, so there is nothing to check (R34). */
+  sizeCheck: PoolSizeCheck | null;
 }
+
+export function poolSizeCheck(memberCount: number, expected: number | null): PoolSizeCheck | null {
+  if (expected === null) return null;
+  return memberCount < expected ? 'fewer' : memberCount > expected ? 'more' : 'ok';
+}
+
+const summarize = (pool: Pool, memberCount: number): PoolSummary => ({
+  ...pool,
+  memberCount,
+  sizeCheck: poolSizeCheck(memberCount, pool.expectedMembers),
+});
 
 export interface PoolMember {
   membershipId: string;
   driveId: string;
   serial: string;
+  capacityBytes: number | null;
   role: 'data' | 'hot-spare';
   startedAt: string;
   /** The slot's label (or "Slot N") when the drive is installed; always set for open members. */
@@ -53,7 +71,7 @@ export function createPool(db: AppDb, input: CreatePoolInput): Pool {
     const name = requireName(input.name);
     assertNameFree(tx, name);
     const at = nowIso();
-    return tx
+    const row = tx
       .insert(pools)
       .values({
         id: randomUUID(),
@@ -65,6 +83,17 @@ export function createPool(db: AppDb, input: CreatePoolInput): Pool {
       })
       .returning()
       .get();
+    recordEvent(tx, {
+      driveId: null,
+      type: 'pool-created',
+      payload: {
+        poolId: row.id,
+        name: row.name,
+        layoutLabel: row.layoutLabel,
+        expectedMembers: row.expectedMembers,
+      },
+    });
+    return row;
   });
 }
 
@@ -87,7 +116,19 @@ export function updatePool(db: AppDb, id: string, input: UpdatePoolInput): Pool 
     }
     if (input.layoutLabel !== undefined) set.layoutLabel = input.layoutLabel;
     if (input.expectedMembers !== undefined) set.expectedMembers = input.expectedMembers;
-    return tx.update(pools).set(set).where(eq(pools.id, id)).returning().get();
+    const row = tx.update(pools).set(set).where(eq(pools.id, id)).returning().get();
+    const changes: Record<string, { from: unknown; to: unknown }> = {};
+    for (const field of ['name', 'layoutLabel', 'expectedMembers'] as const) {
+      if (current[field] !== row[field]) changes[field] = { from: current[field], to: row[field] };
+    }
+    if (Object.keys(changes).length > 0) {
+      recordEvent(tx, {
+        driveId: null,
+        type: 'pool-updated',
+        payload: { poolId: id, name: row.name, changes },
+      });
+    }
+    return row;
   });
 }
 
@@ -110,7 +151,7 @@ export function listPools(db: AppDb): PoolSummary[] {
     .from(pools)
     .orderBy(asc(pools.name))
     .all()
-    .map((p) => ({ ...p, memberCount: counts.get(p.id) ?? 0 }));
+    .map((p) => summarize(p, counts.get(p.id) ?? 0));
 }
 
 /** A pool with its current members (open memberships), ordered by serial. */
@@ -123,6 +164,7 @@ export function getPool(db: AppDb, id: string): PoolDetail {
         driveId: drives.id,
         serial: drives.serial,
         serialNormalized: drives.serialNormalized,
+        capacityBytes: drives.capacityBytes,
         role: memberships.role,
         startedAt: memberships.startedAt,
         slotLabel: slots.label,
@@ -138,18 +180,19 @@ export function getPool(db: AppDb, id: string): PoolDetail {
       membershipId: r.membershipId,
       driveId: r.driveId,
       serial: r.serial,
+      capacityBytes: r.capacityBytes,
       role: r.role,
       startedAt: r.startedAt,
       slotLabel: r.slotPosition === null ? null : (r.slotLabel ?? `Slot ${r.slotPosition + 1}`),
     }));
-    return { ...pool, memberCount: members.length, members };
+    return { ...summarize(pool, members.length), members };
   });
 }
 
 /** Deletes a pool only when it has never had a membership (R29: history must be preserved). */
 export function deletePool(db: AppDb, id: string): void {
   db.transaction((tx) => {
-    requirePool(tx, id);
+    const pool = requirePool(tx, id);
     const used = tx
       .select({ id: memberships.id })
       .from(memberships)
@@ -159,5 +202,10 @@ export function deletePool(db: AppDb, id: string): void {
       throw conflict(`Pool ${id} has membership history and cannot be deleted`);
     }
     tx.delete(pools).where(eq(pools.id, id)).run();
+    recordEvent(tx, {
+      driveId: null,
+      type: 'pool-deleted',
+      payload: { poolId: id, name: pool.name },
+    });
   });
 }

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { desc, eq, sql } from 'drizzle-orm';
 import type { DriveEvent, EventType } from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
-import { events } from '../db/schema.js';
+import { drives, events } from '../db/schema.js';
 
 /**
  * The transaction handle passed to `db.transaction((tx) => ...)`. `recordEvent` accepts only this
@@ -40,5 +40,29 @@ export function listDriveEvents(db: AppDb, driveId: string): DriveEvent[] {
     .from(events)
     .where(eq(events.driveId, driveId))
     .orderBy(desc(events.at), desc(sql`rowid`))
+    .all();
+}
+
+/**
+ * The latest events of every kind, newest first, for a future "recent changes" feed. Drive events
+ * carry the drive's serial; layout and pool events (no drive) carry null.
+ */
+export function listRecentEvents(
+  db: AppDb,
+  limit: number,
+): (DriveEvent & { driveSerial: string | null })[] {
+  return db
+    .select({
+      id: events.id,
+      driveId: events.driveId,
+      type: events.type,
+      at: events.at,
+      payload: events.payload,
+      driveSerial: drives.serial,
+    })
+    .from(events)
+    .leftJoin(drives, eq(drives.id, events.driveId))
+    .orderBy(desc(events.at), desc(sql`"events".rowid`))
+    .limit(limit)
     .all();
 }

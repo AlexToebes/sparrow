@@ -86,11 +86,56 @@ describe('pool CRUD (R30)', () => {
     expect(getPool(db(), pool.id).members.map((m) => m.driveId)).toEqual([driveId]);
   });
 
-  it('pool CRUD writes no drive events', () => {
-    const pool = createPool(db(), { name: 'tank' });
-    updatePool(db(), pool.id, { layoutLabel: 'raidz1' });
+  it('R75: pool create, update and delete write events with no drive', () => {
+    const pool = createPool(db(), { name: 'tank', expectedMembers: 6 });
+    updatePool(db(), pool.id, { layoutLabel: 'raidz1', expectedMembers: 4 });
+    updatePool(db(), pool.id, { layoutLabel: 'raidz1' }); // no-op: no event
     deletePool(db(), pool.id);
-    expect(db().select().from(events).where(like(events.type, 'pool-%')).all()).toEqual([]);
+    const rows = db().select().from(events).where(like(events.type, 'pool-%')).all();
+    expect(rows.every((e) => e.driveId === null)).toBe(true);
+    const byType = (t: string) => rows.filter((e) => e.type === t);
+    expect(byType('pool-created')).toHaveLength(1);
+    expect(byType('pool-created')[0]!.payload).toMatchObject({ poolId: pool.id, name: 'tank' });
+    expect(byType('pool-updated')).toHaveLength(1);
+    expect(byType('pool-updated')[0]!.payload).toMatchObject({
+      poolId: pool.id,
+      changes: {
+        layoutLabel: { from: null, to: 'raidz1' },
+        expectedMembers: { from: 6, to: 4 },
+      },
+    });
+    expect(byType('pool-deleted')[0]!.payload).toMatchObject({ poolId: pool.id, name: 'tank' });
+  });
+
+  it('R75: a refused pool delete or rename writes no event', () => {
+    const { slots } = setup();
+    const pool = createPool(db(), { name: 'tank' });
+    install('A', slots[0]!, pool.id);
+    const other = createPool(db(), { name: 'other' });
+    const count = () => db().select().from(events).where(like(events.type, 'pool-%')).all().length;
+    const before = count();
+    expect(thrown(() => deletePool(db(), pool.id)).code).toBe('conflict');
+    expect(thrown(() => updatePool(db(), other.id, { name: 'tank' })).code).toBe('conflict');
+    expect(count()).toBe(before);
+  });
+
+  it('R34: sizeCheck compares current members with the expected count', () => {
+    const { slots } = setup();
+    const pool = createPool(db(), { name: 'tank' });
+    expect(getPool(db(), pool.id).sizeCheck).toBeNull();
+    updatePool(db(), pool.id, { expectedMembers: 2 });
+    expect(listPools(db())[0]).toMatchObject({
+      expectedMembers: 2,
+      memberCount: 0,
+      sizeCheck: 'fewer',
+    });
+    install('A', slots[0]!, pool.id);
+    install('B', slots[1]!, pool.id);
+    expect(getPool(db(), pool.id)).toMatchObject({ memberCount: 2, sizeCheck: 'ok' });
+    install('C', slots[2]!, pool.id);
+    expect(getPool(db(), pool.id)).toMatchObject({ memberCount: 3, sizeCheck: 'more' });
+    updatePool(db(), pool.id, { expectedMembers: null });
+    expect(getPool(db(), pool.id).sizeCheck).toBeNull();
   });
 
   it('listPools includes the current member count', () => {
