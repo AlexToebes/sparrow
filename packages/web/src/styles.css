@@ -1032,3 +1032,45 @@ body {
   content: '\00a0▾';
   color: var(--sp-dim);
 }
+
+/* Multi-step dialogs (StepFlow): the footer stays visible while one step's content scrolls. */
+.step-modal-content {
+  display: flex;
+  flex-direction: column;
+}
+.step-modal-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  padding-bottom: 0;
+}
+.step-heading {
+  color: var(--sp-dim);
+  outline: none;
+}
+.step-content {
+  flex: 1 0 auto;
+}
+.step-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding: 12px 0;
+  background: var(--mantine-color-body);
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+.step-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Button, Modal, Radio, Select, Text, Textarea } from '@mantine/core';
+import { Alert, Button, Radio, Select, Text, Textarea } from '@mantine/core';
 import { RETIREMENT_REASONS, type Drive, type RetirementReason } from '@sparrow/shared';
 import { ApiError } from '../api/client';
 import { useAssignDrive, type OccupantInput } from '../api/driveMutations';
@@ -9,15 +9,15 @@ import { NOT_RECORDED_HINT, OptionalDateField, PoolRoleFields, usePoolRole } fro
 import { installedOnError, todayLocal } from './RetireFields';
 import { SlotPicker } from './SlotPicker';
 import { SparePicker } from './SparePicker';
+import { StepFlow, type StepDef } from './StepFlow';
 
 type Step = 'incoming' | 'date' | 'outgoing' | 'confirm';
-const STEPS: Step[] = ['incoming', 'date', 'outgoing', 'confirm'];
-const STEP_TITLE: Record<Step, string> = {
-  incoming: 'Choose the replacement',
-  date: 'When was it swapped?',
-  outgoing: 'What happens to the old drive?',
-  confirm: 'Confirm',
-};
+const STEPS: StepDef<Step>[] = [
+  { key: 'incoming', title: 'Choose the replacement' },
+  { key: 'date', title: 'When was it swapped?' },
+  { key: 'outgoing', title: 'What happens to the old drive?' },
+  { key: 'confirm', title: 'Confirm' },
+];
 const REASON_LABEL: Record<RetirementReason, string> = {
   failed: 'Failed',
   replaced: 'Replaced',
@@ -138,12 +138,55 @@ export function ReplaceDialog({
         ? 'sent for RMA'
         : `retired (${reason ? REASON_LABEL[reason].toLowerCase() : '…'})`;
 
-  return (
-    <Modal opened onClose={onClose} title={`Replace ${drive.serial}`} centered size="lg">
-      <Text size="xs" c="dimmed" mb="xs">
-        Step {STEPS.indexOf(step) + 1} of {STEPS.length} · {STEP_TITLE[step]}
-      </Text>
+  const footer =
+    step === 'incoming' ? (
+      <>
+        <Button variant="default" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button disabled={!incoming} onClick={toDate}>
+          Next
+        </Button>
+      </>
+    ) : step === 'date' ? (
+      <>
+        <Button variant="default" onClick={() => go('incoming')}>
+          Back
+        </Button>
+        <Button onClick={toOutgoing}>Next</Button>
+      </>
+    ) : step === 'outgoing' ? (
+      <>
+        <Button variant="default" onClick={() => go('date')}>
+          Back
+        </Button>
+        <Button disabled={poolRole.pending} onClick={review}>
+          Review
+        </Button>
+      </>
+    ) : (
+      <>
+        <Button variant="default" onClick={() => go('outgoing')}>
+          Back
+        </Button>
+        <Button
+          color={choice === 'spare' ? 'indigo' : 'red'}
+          loading={assign.isPending}
+          onClick={confirm}
+        >
+          Confirm replacement
+        </Button>
+      </>
+    );
 
+  return (
+    <StepFlow
+      title={`Replace ${drive.serial}`}
+      steps={STEPS}
+      current={step}
+      onClose={onClose}
+      footer={footer}
+    >
       {step === 'incoming' ? (
         <>
           {mini}
@@ -180,14 +223,6 @@ export function ReplaceDialog({
             loading={spares.isPending}
             outgoing={drive}
           />
-          <div className="dialog-actions">
-            <Button variant="default" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button disabled={!incoming} onClick={toDate}>
-              Next
-            </Button>
-          </div>
         </>
       ) : null}
 
@@ -205,12 +240,6 @@ export function ReplaceDialog({
             onChange={setSwapDate}
             error={error}
           />
-          <div className="dialog-actions">
-            <Button variant="default" onClick={() => go('incoming')}>
-              Back
-            </Button>
-            <Button onClick={toOutgoing}>Next</Button>
-          </div>
         </>
       ) : null}
 
@@ -272,14 +301,6 @@ export function ReplaceDialog({
               {error}
             </Alert>
           ) : null}
-          <div className="dialog-actions">
-            <Button variant="default" onClick={() => go('date')}>
-              Back
-            </Button>
-            <Button disabled={poolRole.pending} onClick={review}>
-              Review
-            </Button>
-          </div>
         </>
       ) : null}
 
@@ -300,20 +321,8 @@ export function ReplaceDialog({
               {error}
             </Alert>
           ) : null}
-          <div className="dialog-actions">
-            <Button variant="default" onClick={() => go('outgoing')}>
-              Back
-            </Button>
-            <Button
-              color={choice === 'spare' ? 'indigo' : 'red'}
-              loading={assign.isPending}
-              onClick={confirm}
-            >
-              Confirm replacement
-            </Button>
-          </div>
         </>
       ) : null}
-    </Modal>
+    </StepFlow>
   );
 }
