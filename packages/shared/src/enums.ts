@@ -19,6 +19,18 @@ export const EVENT_TYPES = [
   'pool-joined',
   'pool-left',
   'pool-role-changed',
+  'health-changed',
+  'suggestion-dismissed',
+  'enclosure-created',
+  'enclosure-renamed',
+  'enclosure-deleted',
+  'grid-created',
+  'grid-updated',
+  'grid-deleted',
+  'slot-relabeled',
+  'pool-created',
+  'pool-updated',
+  'pool-deleted',
 ] as const;
 export const HEALTH_VALUES = ['ok', 'warning', 'failed', 'unknown'] as const;
 export const OBSERVATION_STATES = ['active', 'decommissioned'] as const;

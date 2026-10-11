@@ -58,7 +58,7 @@ CREATE TABLE `events` (
 	`at` text NOT NULL,
 	`payload` text NOT NULL,
 	FOREIGN KEY (`drive_id`) REFERENCES `drives`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "events_type_enum" CHECK(type IN ('drive-created', 'drive-updated', 'drive-installed', 'drive-removed', 'drive-retired', 'drive-reinstated', 'drive-sent-for-rma', 'drive-linked', 'pool-joined', 'pool-left', 'pool-role-changed'))
+	CONSTRAINT "events_type_enum" CHECK(type IN ('drive-created', 'drive-updated', 'drive-installed', 'drive-removed', 'drive-retired', 'drive-reinstated', 'drive-sent-for-rma', 'drive-linked', 'pool-joined', 'pool-left', 'pool-role-changed', 'health-changed', 'suggestion-dismissed', 'enclosure-created', 'enclosure-renamed', 'enclosure-deleted', 'grid-created', 'grid-updated', 'grid-deleted', 'slot-relabeled', 'pool-created', 'pool-updated', 'pool-deleted'))
 );
 --> statement-breakpoint
 CREATE INDEX `events_drive_at_idx` ON `events` (`drive_id`,`at`);--> statement-breakpoint
@@ -100,9 +100,11 @@ CREATE TABLE `pools` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`layout_label` text,
+	`expected_members` integer,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
-	CONSTRAINT "pools_name_not_empty" CHECK(length("pools"."name") > 0)
+	CONSTRAINT "pools_name_not_empty" CHECK(length("pools"."name") > 0),
+	CONSTRAINT "pools_expected_members_min" CHECK("pools"."expected_members" IS NULL OR "pools"."expected_members" >= 1)
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `pools_name_unique` ON `pools` (`name`);--> statement-breakpoint

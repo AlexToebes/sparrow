@@ -277,3 +277,23 @@ describe('optional retirement date in the baseline (R60)', () => {
     }
   });
 });
+
+describe('foundation for the next batch (R20, R34, R72)', () => {
+  it('R20: a fresh DB accepts an event of type health-changed', () => {
+    const d = spare('H1');
+    const e = repo.events.create({ driveId: d.id, type: 'health-changed', payload: { to: 'ok' } });
+    expect(repo.events.get(e.id)?.type).toBe('health-changed');
+  });
+
+  it('R72: a fresh DB accepts a pool with expected_members 6 and round-trips it', () => {
+    const p = repo.pools.create({ name: 'tank', layoutLabel: null, expectedMembers: 6 });
+    expect(repo.pools.get(p.id)?.expectedMembers).toBe(6);
+    expect(repo.pools.create({ name: 'spares', layoutLabel: null }).expectedMembers).toBeNull();
+  });
+
+  it('R72: a pool with expected_members 0 is rejected by the CHECK constraint', () => {
+    expect(() =>
+      repo.pools.create({ name: 'empty', layoutLabel: null, expectedMembers: 0 }),
+    ).toThrow(/CHECK/);
+  });
+});

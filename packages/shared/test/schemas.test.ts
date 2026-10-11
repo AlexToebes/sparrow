@@ -8,8 +8,10 @@ import {
   membershipSchema,
   normalizeSerial,
   observationSchema,
+  createPoolInputSchema,
   poolSchema,
   slotSchema,
+  updatePoolInputSchema,
 } from '../src/index.js';
 
 const ts = '2026-01-02T03:04:05Z';
@@ -139,9 +141,50 @@ describe('driveSchema', () => {
 
 describe('pool, membership, event schemas', () => {
   it('R30: pool accepts valid and rejects empty name', () => {
-    const pool = { id: 'p', name: 'tank', layoutLabel: 'raidz2', ...stamps };
+    const pool = { id: 'p', name: 'tank', layoutLabel: 'raidz2', expectedMembers: null, ...stamps };
     expect(poolSchema.safeParse(pool).success).toBe(true);
     expect(poolSchema.safeParse({ ...pool, name: '' }).success).toBe(false);
+  });
+
+  it('R72: pool expectedMembers accepts null or 1-100 and rejects 0 and 101', () => {
+    const pool = { id: 'p', name: 'tank', layoutLabel: null, expectedMembers: 6, ...stamps };
+    expect(poolSchema.safeParse(pool).success).toBe(true);
+    expect(poolSchema.safeParse({ ...pool, expectedMembers: null }).success).toBe(true);
+    expect(poolSchema.safeParse({ ...pool, expectedMembers: 0 }).success).toBe(false);
+    expect(poolSchema.safeParse({ ...pool, expectedMembers: 101 }).success).toBe(false);
+    expect(poolSchema.safeParse({ ...pool, expectedMembers: 2.5 }).success).toBe(false);
+  });
+
+  it('R72: pool API inputs take optional expectedMembers', () => {
+    expect(createPoolInputSchema.parse({ name: 'tank', expectedMembers: 6 }).expectedMembers).toBe(
+      6,
+    );
+    expect(createPoolInputSchema.parse({ name: 'tank' }).expectedMembers).toBeUndefined();
+    expect(createPoolInputSchema.safeParse({ name: 'tank', expectedMembers: 0 }).success).toBe(
+      false,
+    );
+    expect(updatePoolInputSchema.safeParse({ expectedMembers: null }).success).toBe(true);
+    expect(updatePoolInputSchema.safeParse({ expectedMembers: 101 }).success).toBe(false);
+  });
+
+  it('R20: event accepts the event types added for the next feature batch', () => {
+    const e = { id: 'e', driveId: null, type: 'health-changed', at: ts, payload: {} };
+    for (const type of [
+      'health-changed',
+      'suggestion-dismissed',
+      'enclosure-created',
+      'enclosure-renamed',
+      'enclosure-deleted',
+      'grid-created',
+      'grid-updated',
+      'grid-deleted',
+      'slot-relabeled',
+      'pool-created',
+      'pool-updated',
+      'pool-deleted',
+    ]) {
+      expect(eventSchema.safeParse({ ...e, type }).success).toBe(true);
+    }
   });
 
   it('R29: membership validates role and end not before start', () => {

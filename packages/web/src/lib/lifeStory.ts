@@ -198,6 +198,9 @@ function describe(
       };
     case 'pool-role-changed':
       return { title: 'Pool role changed', detail: join(str(p.from), str(p.to)) };
+    default:
+      // Event types added for later batches (health, layout and pool records) have no story text yet.
+      return { title: e.type.replace(/-/g, ' '), detail: null };
   }
 }
 

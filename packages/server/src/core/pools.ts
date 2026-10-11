@@ -59,6 +59,7 @@ export function createPool(db: AppDb, input: CreatePoolInput): Pool {
         id: randomUUID(),
         name,
         layoutLabel: input.layoutLabel ?? null,
+        expectedMembers: input.expectedMembers ?? null,
         createdAt: at,
         updatedAt: at,
       })
@@ -71,7 +72,12 @@ export function createPool(db: AppDb, input: CreatePoolInput): Pool {
 export function updatePool(db: AppDb, id: string, input: UpdatePoolInput): Pool {
   return db.transaction((tx) => {
     const current = requirePool(tx, id);
-    const set: { name?: string; layoutLabel?: string | null; updatedAt: string } = {
+    const set: {
+      name?: string;
+      layoutLabel?: string | null;
+      expectedMembers?: number | null;
+      updatedAt: string;
+    } = {
       updatedAt: nowIso(),
     };
     if (input.name !== undefined) {
@@ -80,6 +86,7 @@ export function updatePool(db: AppDb, id: string, input: UpdatePoolInput): Pool 
       set.name = name;
     }
     if (input.layoutLabel !== undefined) set.layoutLabel = input.layoutLabel;
+    if (input.expectedMembers !== undefined) set.expectedMembers = input.expectedMembers;
     return tx.update(pools).set(set).where(eq(pools.id, id)).returning().get();
   });
 }
