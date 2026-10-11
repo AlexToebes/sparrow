@@ -2,7 +2,7 @@
 
 Sparrow keeps your spares in rows. Status: requirements settled (v1.2 draft). Defaults in section 7 are confirmed.
 
-Changes since v1.0: retirement reasons and reinstating (R13, R60 to R62), seeding retired drives from decommissioned observations (R63, moved from backlog), delivery items (R64 to R67: README with compose example, CI pipeline, Dockerfile, health endpoint), defaults confirmed (D5 revised, D10 and D11 added).
+Changes since v1.0: visual slot picking, "Replace" and optional removal dates (R69, R70); retirement reasons and reinstating (R13, R60 to R62), seeding retired drives from decommissioned observations (R63, moved from backlog), delivery items (R64 to R67: README with compose example, CI pipeline, Dockerfile, health endpoint), defaults confirmed (D5 revised, D10 and D11 added).
 
 Changes since v1.1: project named Sparrow (D12), frontend stack decided (D9), pnpm as package manager (D13).
 
@@ -74,6 +74,8 @@ Principles:
 - R61: A retired drive can be reinstated as a spare. The retirement reason and date stay in the event history.
 - R62: Retiring is available from the drive's detail panel at any time, and as an outcome in the missing-slot flow (R27). When assigning a drive to an occupied slot, the occupant resolution offers "Retire (replaced)" with "replaced by" prefilled with the incoming drive.
 - R68 (added 2026-10-11 at the owner's request; made optional 2026-10-11 at the owner's request: an unknown date is stored as not recorded rather than guessed): An installed drive may have an installation date. Assigning a spare defaults it to today, and it can be set to a past date or cleared ("not recorded"); a drive found in the NAS and placed from the inbox starts as not recorded. The date can be set, changed or cleared later while the drive is installed; the event log still records when the change was made.
+- R69 (added 2026-10-11 at the owner's request): Returning a drive to spares takes an optional removal date, like R68's installation date. When the removal is done now ("Remove to spares", the occupant outcome, "Replace") it defaults to today and can be backdated or cleared; in the missing-drive flow (R27) it starts empty because the drive went missing at an unknown time. Empty means "not recorded" and is shown that way in the life story; the date cannot be in the future, before the installation date or before the pool membership start. The event log still records when the change was made. Retiring or sending for RMA keeps its own required date (R60).
+- R70 (added 2026-10-11 at the owner's request): Slots are always chosen on a visual bay grid (the same grid as the Layout page, honoring rows, columns and orientation), never from a list: assigning from the spares shelf, from an empty slot and from the inbox. Occupied slots are selectable and lead to the occupant step (R37). An installed drive offers "Replace", which swaps it in one step: pick the replacement from the spares (same-type drives of at least the same capacity are suggested first, smaller ones carry a note, both capacities are shown, R60), one optional swap date (the new drive's installation date and the old drive's removal date, R68, R69), then what happens to the old drive (back to spares, retire with a reason and the new drive as "replaced by", or RMA, R27, R62). Pool and role default from the old drive (R35).
 
 ### 4.3 Discovery and matching
 - R2: Observations are matched to records by normalized serial, with WWN as a fallback. Never by device name (`sdX`) or provider-internal IDs.

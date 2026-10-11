@@ -43,6 +43,13 @@ material, not code to copy: build with Mantine components, the shared zod types 
   capacity, condition, location) with an "Assign" action — makes replacing a failed drive one screen.
 - Monospace for serials and numbers. Keyboard shortcuts go to the parking lot.
 
+## Choosing a slot (R70)
+- Never offer a slot in a dropdown. Any flow that needs a slot shows the bay grids with `SlotPicker`: it renders
+  the shared `BayGrid` (same rows, columns and orientation as the Layout page) with each tile a radio showing
+  label, serial plus capacity or "Empty", and the health icon. The selected tile has an accent border and a
+  check icon. Occupied tiles are selectable and lead to the occupant step.
+- Spares are chosen on cards (`SparePicker`), not a dropdown. "Replace" shows the fixed bay as a read-only grid.
+
 ## Formatting rules
 - Capacities in decimal units via one helper (`formatBytes(4_000_000_000_000) === "4 TB"`, 500 GB, 1.92 TB).
 - Timestamps: stored UTC, shown in local time; relative ("2 min ago", "3 d ago") for freshness, absolute
