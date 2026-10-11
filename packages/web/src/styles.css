@@ -1177,3 +1177,62 @@ body {
 .update-list li {
   padding: 4px 0;
 }
+
+/* Pools page (R34, R76) */
+.pool-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+.size-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.size-ok {
+  color: var(--sp-ok);
+}
+.size-warn {
+  color: var(--sp-warn);
+}
+.pool-members {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+.pool-members li {
+  border-top: 1px solid var(--sp-line);
+}
+.pool-member {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) 5em minmax(0, 1fr) 6.5em;
+  align-items: center;
+  gap: 4px 12px;
+  width: 100%;
+  padding: 10px 4px;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.pool-member:hover {
+  background: var(--sp-hover);
+}
+.pool-member-serial {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 48em) {
+  .pool-member {
+    grid-template-columns: 1fr auto;
+  }
+}
+.pool-member > :last-child {
+  justify-self: end;
+}

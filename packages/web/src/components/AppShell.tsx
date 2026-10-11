@@ -1,13 +1,14 @@
 import { AppShell as MantineShell } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { NavLink, Outlet } from 'react-router';
-import { DriveIcon, GridIcon, SettingsIcon } from './icons';
+import { DriveIcon, GridIcon, PoolIcon, SettingsIcon } from './icons';
 import { ProviderBanner } from './ProviderBanner';
 import { ProviderStatusLine } from './ProviderStatusLine';
 
 const NAV = [
   { to: '/', label: 'Layout', icon: GridIcon, end: true },
   { to: '/drives', label: 'Drives', icon: DriveIcon, end: false },
+  { to: '/pools', label: 'Pools', icon: PoolIcon, end: false },
   { to: '/settings', label: 'Settings', icon: SettingsIcon, end: false },
 ] as const;
 

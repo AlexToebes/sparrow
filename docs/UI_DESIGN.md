@@ -7,11 +7,12 @@ material, not code to copy: build with Mantine components, the shared zod types 
 ## Base (from B, `b-calm`)
 - Mantine look: soft cards, generous spacing, one accent color (indigo), system font stack.
 - Light and dark follow `prefers-color-scheme` (Mantine `defaultColorScheme="auto"`).
-- App shell: sidebar on desktop (Layout, Drives, Settings, plus provider status and
-  "last updated" at the bottom); bottom tab bar on phone (<= 768px) with the same three tabs. The Discovered page (formerly
+- App shell: sidebar on desktop (Layout, Drives, Pools, Settings, plus provider status and
+  "last updated" at the bottom); bottom tab bar on phone (<= 768px) with the same four tabs. The Discovered page (formerly
   Inbox, R71) is not a tab: the Drives page header has a "Discovered" button beside "Add drive", filled with a count badge when
   something waits, plain when empty. The page is `/drives/discovered` (`/drives/inbox` and `/inbox` redirect) with a "Drives" back link and keeps the
   Drives tab highlighted.
+- Pools page (`/pools`, R76, R34): a card per pool with name, layout label, size check and members. The size check is icon plus text ("5 of 6 drives — one missing", "7 drives, expected 6"; a check mark with "6 of 6 drives" when it matches; nothing when no expected number is set). Members are rows (serial, capacity, bay, role badge) that open the drive detail in the usual drawer. "New pool", Edit and Delete live here, not in Settings.
 - Suggested updates (R72): drive detail has a "reports details this record doesn't have" block (ticked rows,
   "Apply selected") and a collapsed "reports different values" toggle; Drives rows with fillable details show an
   "Updates" flag (icon plus text); the Discovered page lists them in a "Suggested updates" card.

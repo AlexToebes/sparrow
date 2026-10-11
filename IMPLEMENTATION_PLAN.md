@@ -178,6 +178,12 @@ Backend steps 2 to 10 expose their behavior through API routes as they go, so th
   - What changed: `moveDrive` (`core/move.ts`) and `POST /api/drives/:id/move` (shared `move-api.ts`): destination spares | slot (+ optional occupant resolution) | retire | rma, optional `replacement` spare (pool/role default from the vacated bay, R35), one `date` (omitted = today, null = not recorded, future = 400) used as every step's date. One transaction. Web: `MoveDialog` on `StepFlow` replaces `ReplaceDialog` and the Remove to spares button; the Retire button on an installed drive opens Move with Retire chosen; `SlotPicker` can disable a slot ("Current"); the life story reads a bay-to-bay move as one entry.
   - Done when: server tests cover each destination with and without a replacement, bay-to-bay membership and events, occupant resolutions, dates, replacement rules and atomicity; web tests cover each step, the single POST and the date semantics.
 
+- [x] **Post-MVP (Pools, layout events)**
+  - Requirements: R34 (into scope), R75, R76 (new, at the owner's request), R14, R38, R30.
+  - Why: AGENTS rule 6 says every state change writes an event, but layout and pool changes wrote none; pools were buried in Settings and had no sanity check.
+  - What changed: `core/layout.ts` and `core/pools.ts` record `enclosure-*`, `grid-*`, `slot-relabeled` and `pool-*` events (driveId null) in the same transaction; no-ops and the seed write none. `GET /api/events/recent`. Pool list and detail carry `expectedMembers`, `memberCount`, `sizeCheck` (`ok|fewer|more|null`); detail members gained `capacityBytes`. Web: `/pools` page (nav Layout, Drives, Pools, Settings), `PoolsSection` removed from Settings, `PoolForm` has "Expected drives".
+  - Done when: server tests cover an event per mutation, atomicity (refused change writes none), the seed, the recent endpoint and the three size states; web tests cover the nav, the page, create and edit with the expected count.
+
 ---
 
 ## Parking lot (not in the MVP)
@@ -186,7 +192,7 @@ Copy from `REQUIREMENTS.md` section 6 and add new ideas here. Do not build these
 
 - R12 compatibility check (compare against the vdev's usable per-disk size).
 - R20 health changes in the event log.
-- R34 pool leaf-count sanity check.
+- A "recent changes" feed in the UI on top of `GET /api/events/recent` (R75).
 - Richer slot display (model, capacity, serial, temperature, pool badge).
 - Reject a retirement or removal date earlier than the installation date (only the removal to spares is checked today, R69).
 - Dismiss provider suggestions (R72): remember that a "differs" suggestion was seen and rejected, without storing provider data.
@@ -198,6 +204,7 @@ Copy from `REQUIREMENTS.md` section 6 and add new ideas here. Do not build these
 - Investigate why the boot NVMe is stale in Scrutiny (collector likely lacks `--cap-add SYS_ADMIN` or the NVMe device mapping). This is a Scrutiny setup issue, not a Sparrow bug.
 
 ## Notes log
+- 2026-10-11, Post-MVP (Pools, layout events): reverses the Step 2 note "layout edits write no drive events". Decisions: the seed writes no events; no-op edits write none; deleting an enclosure writes one `enclosure-deleted` (with `gridCount`), not one `grid-deleted` per grid; `slot-relabeled` and `grid-created` payloads also carry position / dimensions. Recent events join the drive serial (`driveSerial`, null without a drive); the web life story only shows drive events, so nothing there changed. A pool's size check counts open memberships (hot spares included). Pool member rows open the drive in a drawer on the Pools page (`/pools?drive=ID`).
 
 - 2026-10-11, R71 label: the inbox is labelled "Discovered" in the UI (`/drives/discovered`, old `/inbox` and `/drives/inbox` redirect); API paths, hooks, file names and schema names keep "inbox". The health box now sits directly under the facts, above the suggested updates. No backend change.
 - 2026-10-11, Post-MVP 5 (R71, R72): suggestions are never stored, so there is no schema change and no migration; "differs" suggestions do not count toward any indicator because the owner may know better and there is no dismissal yet. Applying a WWN that another record holds fails with the usual `updateDrive` 409 (the suggestion is still listed). The inbox badge counts only unresolved observations (R9), not suggested updates, which have their own section. The open drive on the Drives page is now in the URL (`/drives?drive=ID`) so the inbox can link to it. This entry shares the "Post-MVP 5" label with the R70 note below (written before the entry existed).

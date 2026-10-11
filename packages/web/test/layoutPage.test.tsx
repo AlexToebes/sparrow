@@ -87,6 +87,7 @@ function fixtures(over: { providerStale?: boolean } = {}) {
         createdAt: T,
         updatedAt: T,
         memberCount: 1,
+        sizeCheck: null,
       },
     ],
     '/api/pools/p1': {
@@ -97,12 +98,14 @@ function fixtures(over: { providerStale?: boolean } = {}) {
       createdAt: T,
       updatedAt: T,
       memberCount: 1,
+      sizeCheck: null,
       members: [
         {
           membershipId: 'm1',
           driveId: 'd0',
           serial: 'AAA0',
           role: 'data',
+          capacityBytes: null,
           startedAt: T,
           slotLabel: 'Bay 1',
         },
@@ -146,7 +149,7 @@ describe('Layout page (R4, R15, R18, R47)', () => {
     expect(screen.getAllByTestId('bay-cell')).toHaveLength(4);
   });
 
-  it('R71: the navigation has three tabs and no Discovered tab; the chip links to /drives/discovered', async () => {
+  it('R71: the navigation has four tabs and no Discovered tab; the chip links to /drives/discovered', async () => {
     fixtures();
     renderApp(<App />);
     const chip = await screen.findByRole('link', { name: /2 discovered/ });
@@ -157,7 +160,7 @@ describe('Layout page (R4, R15, R18, R47)', () => {
       within(nav)
         .getAllByRole('link')
         .map((l) => l.textContent),
-    ).toEqual(['Layout', 'Drives', 'Settings']);
+    ).toEqual(['Layout', 'Drives', 'Pools', 'Settings']);
     expect(screen.queryByLabelText('2 discovered')).not.toBeInTheDocument();
   });
 
