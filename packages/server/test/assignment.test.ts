@@ -403,6 +403,7 @@ describe('remove, retire, RMA, reinstate (R60, R61, R27)', () => {
       poolId: pool,
       role: 'data',
       installedOn: TODAY(),
+      removedOn: TODAY(), // R69: omitted removal date = today
       note: 'shelf',
     });
   });

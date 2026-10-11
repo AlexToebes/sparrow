@@ -11,7 +11,12 @@ import { getGrid, getSlot } from '../db/layout-repo.js';
 import { drives, events, pools } from '../db/schema.js';
 import { conflict, invalid, notFound } from './errors.js';
 import { recordEvent, type DbTransaction } from './events.js';
-import { parseInstalledOn, startOfInstalledOn, todayUtc } from './installed-on.js';
+import {
+  parseInstalledOn,
+  parseNotFutureDate,
+  startOfInstalledOn,
+  todayUtc,
+} from './installed-on.js';
 import { endOpenMembership, openMembership, startMembership } from './memberships.js';
 
 // Slot assignment and retirement (R8, R35, R37, R60, R61, R62, D7). Every public function runs in
@@ -52,14 +57,62 @@ function slotInfo(tx: Tx, slotId: string): SlotInfo {
   };
 }
 
-/** installed -> spare. Ends the membership, clears the slot, logs drive-removed. */
-function freeSlot(tx: Tx, drive: Drive, note: string | null): Drive {
+/** R69: the day the drive left its slot, as the slot-freeing step records it. */
+interface Removal {
+  /** YYYY-MM-DD, or null when not recorded. */
+  removedOn: string | null;
+  /**
+   * True only for removing to the spares (R69). A past date then backdates the membership end and is
+   * checked against the installation date and the pool start. Retire and RMA only record the date in
+   * the event payload and end the membership at the time of recording.
+   */
+  backdate: boolean;
+}
+
+/** R69: the removal date for a request. Omitted = today (UTC); null = not recorded; otherwise validated. */
+function removalDateOf(value: string | null | undefined, clock: Date): string | null {
+  if (value === undefined) return todayUtc(clock);
+  return value === null ? null : parseNotFutureDate('removedOn', value, clock);
+}
+
+/** R69: a removal date may not precede the installation date or the start of the pool membership. */
+function assertRemovalAfterStart(
+  drive: Drive,
+  membershipStartedAt: string | null,
+  removedOn: string,
+): void {
+  if (drive.installedOn !== null && removedOn < drive.installedOn) {
+    throw invalid(
+      `A drive can't be removed before it was installed (installed on ${drive.installedOn})`,
+    );
+  }
+  if (
+    membershipStartedAt !== null &&
+    Date.parse(`${removedOn}T00:00:00.000Z`) < Date.parse(membershipStartedAt)
+  ) {
+    throw invalid(
+      `A drive can't be removed before it joined the pool (joined on ${membershipStartedAt.slice(0, 10)})`,
+    );
+  }
+}
+
+/** installed -> spare. Ends the membership, clears the slot, logs drive-removed (R14, R69). */
+function freeSlot(tx: Tx, drive: Drive, note: string | null, removal: Removal): Drive {
   if (drive.status !== 'installed' || drive.slotId === null) {
     throw conflict(`Drive ${drive.id} is not installed (${drive.status})`);
   }
   const at = nowIso();
   const info = slotInfo(tx, drive.slotId);
-  const pool = endOpenMembership(tx, drive.id, at);
+  // R69: a past removal date backdates the membership end; the event is still stamped at `at`.
+  const backdated =
+    removal.backdate && removal.removedOn !== null && removal.removedOn < todayUtc(new Date(at));
+  if (removal.backdate && removal.removedOn !== null) {
+    // Nothing is written before this check, so a rejected date leaves the drive and membership as they were.
+    const open = backdated ? openMembership(tx, drive.id) : undefined;
+    assertRemovalAfterStart(drive, open?.startedAt ?? null, removal.removedOn);
+  }
+  const endAt = backdated ? `${removal.removedOn}T00:00:00.000Z` : at;
+  const pool = endOpenMembership(tx, drive.id, endAt, backdated);
   const updated = tx
     .update(drives)
     .set({ status: 'spare', slotId: null, installedOn: null, updatedAt: at })
@@ -78,6 +131,8 @@ function freeSlot(tx: Tx, drive: Drive, note: string | null): Drive {
       role: pool?.role ?? null,
       // R68: the history keeps the installation date, so time in the slot can be computed.
       installedOn: drive.installedOn,
+      // R69: the day it physically left (null = not recorded). `at` above is when it was recorded.
+      removedOn: removal.removedOn,
       note,
     },
   });
@@ -116,7 +171,10 @@ function retireInternal(tx: Tx, driveId: string, opts: RetireOptions): Drive {
     }
   }
   const slotId = drive.slotId;
-  if (drive.status === 'installed') drive = freeSlot(tx, drive, null);
+  // R69: the retirement date is the day the drive left the slot.
+  if (drive.status === 'installed') {
+    drive = freeSlot(tx, drive, null, { removedOn: opts.date, backdate: false });
+  }
   const at = nowIso();
   const updated = tx
     .update(drives)
@@ -264,7 +322,10 @@ export function assignDrive(db: AppDb, input: AssignDriveInput): AssignDriveResu
         });
       }
       if (action.action === 'spare') {
-        resolved = freeSlot(tx, occupant, null);
+        resolved = freeSlot(tx, occupant, null, {
+          removedOn: removalDateOf(action.removedOn, clock),
+          backdate: true,
+        });
       } else if (action.action === 'retire') {
         // R62: undefined = prefill the incoming drive for 'replaced'; an explicit null = no replacement.
         const replacedBy =
@@ -327,13 +388,22 @@ export function assignDrive(db: AppDb, input: AssignDriveInput): AssignDriveResu
   });
 }
 
-/** installed -> spare (back to the shelf). */
+export interface RemoveToSparesOptions {
+  note?: string | null | undefined;
+  /** R69: YYYY-MM-DD the drive physically left. Omitted = today (UTC); null = not recorded. */
+  removedOn?: string | null | undefined;
+}
+
+/** installed -> spare (back to the shelf). R69: records when it was physically removed. */
 export function removeToSpares(
   db: AppDb,
   driveId: string,
-  opts: { note?: string | null | undefined } = {},
+  opts: RemoveToSparesOptions = {},
 ): Drive {
-  return db.transaction((tx) => freeSlot(tx, loadDrive(tx, driveId), opts.note ?? null));
+  const removedOn = removalDateOf(opts.removedOn, new Date());
+  return db.transaction((tx) =>
+    freeSlot(tx, loadDrive(tx, driveId), opts.note ?? null, { removedOn, backdate: true }),
+  );
 }
 
 export interface RetireDriveOptions {

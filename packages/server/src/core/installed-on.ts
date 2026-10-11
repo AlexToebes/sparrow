@@ -9,14 +9,22 @@ const DAY_MS = 86_400_000;
 
 export const todayUtc = (now: Date = new Date()): string => now.toISOString().slice(0, 10);
 
-/** Validates an installation date and returns it. Throws a 400 `invalid` for a malformed or future date. */
-export function parseInstalledOn(value: string, now: Date = new Date()): string {
+/**
+ * Validates a calendar date that must not lie in the future (R68 installation date, R69 removal date)
+ * and returns it. Throws a 400 `invalid` naming `field` for a malformed or future date.
+ */
+export function parseNotFutureDate(field: string, value: string, now: Date = new Date()): string {
   if (!dateSchema.safeParse(value).success) {
-    throw invalid('installedOn must be a valid date (YYYY-MM-DD)');
+    throw invalid(`${field} must be a valid date (YYYY-MM-DD)`);
   }
   const latest = todayUtc(new Date(now.getTime() + DAY_MS));
-  if (value > latest) throw invalid('installedOn must not be in the future');
+  if (value > latest) throw invalid(`${field} must not be in the future`);
   return value;
+}
+
+/** Validates an installation date and returns it. Throws a 400 `invalid` for a malformed or future date. */
+export function parseInstalledOn(value: string, now: Date = new Date()): string {
+  return parseNotFutureDate('installedOn', value, now);
 }
 
 /**

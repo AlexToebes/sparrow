@@ -16,9 +16,15 @@ const note = z.string().trim().min(1).max(5000).nullish();
  */
 export const installedOnSchema = dateSchema.nullable();
 
+/**
+ * R69: the day the drive physically left its slot, or null for "removal date not recorded". The
+ * server rejects future dates and dates before the installation or pool start. Omitted = today (UTC).
+ */
+export const removedOnSchema = dateSchema.nullable();
+
 /** How to deal with the drive already in the slot (R37). */
 export const occupantResolutionSchema = z.discriminatedUnion('action', [
-  z.strictObject({ action: z.literal('spare') }),
+  z.strictObject({ action: z.literal('spare'), removedOn: removedOnSchema.optional() }),
   z.strictObject({
     action: z.literal('retire'),
     reason: retirementReasonSchema,
@@ -41,9 +47,16 @@ export const assignDriveInputSchema = z.strictObject({
 });
 export type AssignDriveInput = z.infer<typeof assignDriveInputSchema>;
 
-/** POST /api/drives/:id/remove and /reinstate. */
+/** POST /api/drives/:id/reinstate. */
 export const noteInputSchema = z.strictObject({ note });
 export type NoteInput = z.infer<typeof noteInputSchema>;
+
+/** POST /api/drives/:id/remove (R69). `removedOn` omitted = today (UTC); null = not recorded. */
+export const removeDriveInputSchema = z.strictObject({
+  note,
+  removedOn: removedOnSchema.optional(),
+});
+export type RemoveDriveInput = z.infer<typeof removeDriveInputSchema>;
 
 /** POST /api/drives/:id/retire. The date defaults to today (UTC). */
 export const retireDriveInputSchema = z.strictObject({
