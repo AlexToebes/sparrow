@@ -16,6 +16,7 @@ export function LifeStory({ driveId }: { driveId: string }) {
     sum.inService > 0 ? `${formatDuration(sum.inService)} in service` : null,
     sum.installUnrecorded ? 'Installation date not recorded' : null,
     sum.removalUnrecorded ? 'Removal date not recorded' : null,
+    sum.retirementUnrecorded ? 'Retirement date not recorded' : null,
     sum.onShelf > 0 ? `${formatDuration(sum.onShelf)} on the shelf` : null,
   ].filter(Boolean);
   return (
@@ -32,7 +33,11 @@ export function LifeStory({ driveId }: { driveId: string }) {
             key={item.id}
             className="story-item"
             data-kind={item.kind}
-            data-unrecorded={item.unrecorded || item.removalUnrecorded ? 'true' : undefined}
+            data-unrecorded={
+              item.unrecorded || item.removalUnrecorded || item.retirementUnrecorded
+                ? 'true'
+                : undefined
+            }
           >
             <span className="story-dot" aria-hidden="true" />
             <div className="story-head">
@@ -43,6 +48,9 @@ export function LifeStory({ driveId }: { driveId: string }) {
                 ) : null}
                 {item.removalUnrecorded ? (
                   <span className="story-recorded"> · date recorded, removal date unknown</span>
+                ) : null}
+                {item.retirementUnrecorded ? (
+                  <span className="story-recorded"> · date recorded, retirement date unknown</span>
                 ) : null}
                 {item.recorded ? (
                   <span className="story-recorded"> · recorded {item.recorded}</span>

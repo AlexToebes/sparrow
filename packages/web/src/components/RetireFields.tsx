@@ -1,19 +1,18 @@
-import { Select, Text, Textarea, TextInput } from '@mantine/core';
+import { Select, Text, Textarea } from '@mantine/core';
 import { RETIREMENT_REASONS, type Drive, type RetirementReason } from '@sparrow/shared';
 import { formatBytes } from '../lib/format';
+import { todayLocal } from './dates';
+import { OptionalDateField } from './OptionalDateField';
+
+export { todayLocal };
 
 export interface RetireValues {
   reason: RetirementReason | null;
+  /** R60: YYYY-MM-DD; empty = retirement date not recorded. */
   date: string;
   replacedByDriveId: string | null;
   note: string;
 }
-
-export const todayLocal = (): string => {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
 
 /** R68: an installation date is optional (empty = not recorded); if given it must be a real date, not later than today (local). */
 export function installedOnError(value: string): string | null {
@@ -24,9 +23,10 @@ export function installedOnError(value: string): string | null {
   return value > todayLocal() ? 'The installation date cannot be in the future.' : null;
 }
 
-export const emptyRetireValues = (): RetireValues => ({
+/** R60: the reason has no default; the date starts at `date` (today, or '' = not recorded). */
+export const emptyRetireValues = (date: string = todayLocal()): RetireValues => ({
   reason: null,
-  date: todayLocal(),
+  date,
   replacedByDriveId: null,
   note: '',
 });
@@ -66,14 +66,13 @@ export function RetireFields({ drive, candidates, values, onChange, idPrefix }: 
         onChange={(v) => set({ reason: v as RetirementReason | null })}
         allowDeselect={false}
       />
-      <TextInput
+      <OptionalDateField
         id={`${id}-date`}
-        label="Date"
-        type="date"
-        required
+        label="Retirement date (optional)"
+        description={RETIREMENT_DATE_HINT}
         value={values.date}
-        onChange={(e) => set({ date: e.currentTarget.value })}
-        mt="sm"
+        onChange={(date) => set({ date })}
+        error={retirementDateError(values.date)}
       />
       <Select
         label="Replaced by"
@@ -125,11 +124,22 @@ export function RetireFields({ drive, candidates, values, onChange, idPrefix }: 
   );
 }
 
+export const RETIREMENT_DATE_HINT =
+  'Leave empty if you don’t know — better ‘not recorded’ than a guess.';
+
+/** R60: a retirement date is optional (empty = not recorded); if given it must be a real date, not later than today (local). */
+export function retirementDateError(value: string): string | null {
+  if (value === '') return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value))) {
+    return 'Enter the date the drive was retired.';
+  }
+  return value > todayLocal() ? 'The retirement date cannot be in the future.' : null;
+}
+
 /** Validates the shared fields; returns an error message or null. */
 export function retireValuesError(v: RetireValues): string | null {
   if (v.reason === null) return 'Choose a reason.';
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(v.date)) return 'Enter a valid date.';
-  return null;
+  return retirementDateError(v.date);
 }
 
 /** R69: a removal date is optional (empty = not recorded); if given it must be a real date, not later than today (local). */

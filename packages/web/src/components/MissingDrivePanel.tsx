@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Button, Text, Textarea, TextInput } from '@mantine/core';
+import { Button, Text, Textarea } from '@mantine/core';
 import type { Drive, SlotFlag } from '@sparrow/shared';
 import { useDriveAction } from '../api/driveMutations';
 import { ConfirmDialog } from './ConfirmDialog';
 import { RemoveToSparesDialog } from './RemoveToSparesDialog';
 import { RetireDialog } from './RetireDialog';
-import { todayLocal } from './RetireFields';
+import { OptionalDateField } from './OptionalDateField';
+import { RETIREMENT_DATE_HINT, retirementDateError } from './RetireFields';
 
 const REASON_TEXT: Record<SlotFlag['reason'], string> = {
   decommissioned: 'The provider reports this drive as decommissioned.',
@@ -30,7 +31,7 @@ export function MissingDrivePanel({
 }) {
   const [outcome, setOutcome] = useState<Outcome>(null);
   const rma = useDriveAction(drive.id, 'rma');
-  const [rmaDate, setRmaDate] = useState(todayLocal);
+  const [rmaDate, setRmaDate] = useState('');
   const [rmaNote, setRmaNote] = useState('');
   const close = () => setOutcome(null);
 
@@ -66,26 +67,33 @@ export function MissingDrivePanel({
           removal date starts empty.
         </RemoveToSparesDialog>
       ) : null}
-      {outcome === 'retire' ? <RetireDialog drive={drive} opened onClose={close} /> : null}
+      {outcome === 'retire' ? (
+        <RetireDialog drive={drive} opened defaultDate="" onClose={close} />
+      ) : null}
       {outcome === 'rma' ? (
         <ConfirmDialog
           title="Send for RMA"
           confirmLabel="Send for RMA"
           color="orange"
           mutation={rma}
-          body={{ date: rmaDate, note: rmaNote.trim() === '' ? null : rmaNote.trim() }}
+          confirmDisabled={retirementDateError(rmaDate) !== null}
+          body={{
+            date: rmaDate === '' ? null : rmaDate,
+            note: rmaNote.trim() === '' ? null : rmaNote.trim(),
+          }}
           onClose={close}
         >
           <Text>
             Record <strong className="mono">{drive.serial}</strong> as sent back to the vendor? It
-            leaves {where ?? 'its slot'} and its pool membership ends.
+            leaves {where ?? 'its slot'} and its pool membership ends. It went missing at an unknown
+            time, so the date starts empty.
           </Text>
-          <TextInput
-            label="Date"
-            type="date"
+          <OptionalDateField
+            label="RMA date (optional)"
+            description={RETIREMENT_DATE_HINT}
             value={rmaDate}
-            onChange={(e) => setRmaDate(e.currentTarget.value)}
-            mt="sm"
+            onChange={setRmaDate}
+            error={retirementDateError(rmaDate)}
           />
           <Textarea
             label="Note"

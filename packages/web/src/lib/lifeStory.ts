@@ -13,6 +13,8 @@ export interface StoryItem {
   unrecorded: boolean;
   /** R69: a removal whose date is unknown; `date` is then the day it was logged ("recorded"). */
   removalUnrecorded: boolean;
+  /** R60: a retirement or RMA whose date is unknown; `date` is then the day it was logged ("recorded"). */
+  retirementUnrecorded: boolean;
   kind: DriveEvent['type'];
   title: string;
   detail: string | null;
@@ -38,14 +40,21 @@ const isUnrecordedInstall = (e: DriveEvent): boolean =>
 const isUnrecordedRemoval = (e: DriveEvent): boolean =>
   e.type === 'drive-removed' && 'removedOn' in e.payload && e.payload.removedOn === null;
 
+/** R60: a drive-retired or drive-sent-for-rma event that says the date was not recorded (explicit null). */
+const isUnrecordedRetirement = (e: DriveEvent): boolean =>
+  (e.type === 'drive-retired' || e.type === 'drive-sent-for-rma') &&
+  'date' in e.payload &&
+  e.payload.date === null;
+
 /**
- * R68, R69: the event log records WHEN a change was made (`at`); an installation can describe an earlier
+ * R68, R69, R60: the event log records WHEN a change was made (`at`); an installation can describe an earlier
  * day. The story orders by the effective instant: for drive-installed the payload's installedOn
  * (unless it is the very day the event was logged, then `at` keeps same-day order exact), for
  * pool-joined the membership start. Midnight-UTC instants stand for calendar dates (how the server
  * stores a backdated start), so they are shown as the date itself, never shifted by the time zone.
  * R69: drive-removed works like drive-installed with `removedOn`; when the key is absent (older
- * events) or null (not recorded) the instant stays the logging time.
+ * events) or null (not recorded) the instant stays the logging time. R60: drive-retired and
+ * drive-sent-for-rma work the same way with their `date`.
  */
 function effective(e: DriveEvent): { at: string; date: string; recorded: string | null } {
   const logged = formatDate(e.at);
@@ -57,8 +66,12 @@ function effective(e: DriveEvent): { at: string; date: string; recorded: string 
       if (on !== e.at.slice(0, 10)) at = midnight(on);
       date = on;
     }
-  } else if (e.type === 'drive-removed') {
-    const on = dateStr(e.payload.removedOn);
+  } else if (
+    e.type === 'drive-removed' ||
+    e.type === 'drive-retired' ||
+    e.type === 'drive-sent-for-rma'
+  ) {
+    const on = dateStr(e.type === 'drive-removed' ? e.payload.removedOn : e.payload.date);
     if (on !== null) {
       if (on !== e.at.slice(0, 10)) at = midnight(on);
       date = on;
@@ -150,13 +163,16 @@ function describe(
       };
     case 'drive-retired':
       return {
-        title: 'Retired',
+        title: isUnrecordedRetirement(e) ? 'Retired (retirement date not recorded)' : 'Retired',
         detail: join(str(p.reason), str(p.date), note),
       };
     case 'drive-reinstated':
       return { title: 'Reinstated as a spare', detail: note };
     case 'drive-sent-for-rma':
-      return { title: 'Sent for RMA', detail: join(str(p.date), note) };
+      return {
+        title: isUnrecordedRetirement(e) ? 'Sent for RMA (date not recorded)' : 'Sent for RMA',
+        detail: join(str(p.date), note),
+      };
     case 'drive-linked':
       return { title: 'Linked to a drive in the NAS', detail: str(p.observationSerial) };
     case 'pool-joined':
@@ -191,6 +207,7 @@ export function buildStory(
       recorded: o.recorded,
       unrecorded: isUnrecordedInstall(o.event),
       removalUnrecorded: isUnrecordedRemoval(o.event),
+      retirementUnrecorded: isUnrecordedRetirement(o.event),
       kind: o.event.type,
       title,
       detail,
@@ -213,6 +230,11 @@ export interface StorySummary {
    * logged is when it was recorded, not when it happened.
    */
   removalUnrecorded: boolean;
+  /**
+   * R60: a drive was retired on an unknown date. The shelf time before it is NOT counted in
+   * `onShelf`: the day the retirement was logged is when it was recorded, not when it happened.
+   */
+  retirementUnrecorded: boolean;
 }
 
 /** Time installed and time on the shelf, from the event sequence up to `end` (now, or retirement). */
@@ -225,13 +247,14 @@ export function summarizeStory(
     onShelf: 0,
     installUnrecorded: false,
     removalUnrecorded: false,
+    retirementUnrecorded: false,
   };
   type Phase = 'shelf' | 'installed' | 'retired' | null;
   let state: Phase = null as Phase;
   let since = 0;
   let known = true; // is the start of the running phase a real date (R68, R69)?
   const close = (at: number, endKnown: boolean) => {
-    if (state === 'shelf' && known) out.onShelf += Math.max(0, at - since);
+    if (state === 'shelf' && known && endKnown) out.onShelf += Math.max(0, at - since);
     if (state === 'installed' && known && endKnown) out.inService += Math.max(0, at - since);
     if (state === 'installed' && !known) out.installUnrecorded = true;
     if (state === 'installed' && !endKnown) out.removalUnrecorded = true;
@@ -239,6 +262,7 @@ export function summarizeStory(
   for (const o of orderedByEffective(eventsNewestFirst)) {
     const at = Date.parse(o.at);
     const e = o.event;
+    if (e.type === 'drive-retired' && isUnrecordedRetirement(e)) out.retirementUnrecorded = true;
     // R68: a drive can be logged here long after it went in, so "added to Sparrow" only starts the
     // shelf phase when nothing earlier is known.
     const next: Phase =
@@ -254,7 +278,7 @@ export function summarizeStory(
               ? 'retired'
               : state;
     if (next !== state) {
-      close(at, !isUnrecordedRemoval(e));
+      close(at, !isUnrecordedRemoval(e) && !isUnrecordedRetirement(e));
       state = next;
       since = at;
       known = !isUnrecordedInstall(e) && !isUnrecordedRemoval(e);

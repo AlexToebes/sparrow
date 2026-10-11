@@ -397,6 +397,45 @@ describe('Assignment (R8, R35, R37, R62)', () => {
 });
 
 describe('Retire and reinstate (R60, R61)', () => {
+  it('R60: a retired drive shows its date, or says the date is not recorded', async () => {
+    setup();
+    renderApp(<App />, '/drives');
+    await userEvent.click(await screen.findByText('OLD7'));
+    expect(await screen.findByText('failed · 2025-05-05')).toBeInTheDocument();
+  });
+
+  it('R60: a retired drive without a date says so', async () => {
+    const noDate = makeDrive({
+      id: 'd7',
+      serial: 'OLD7',
+      status: 'retired',
+      retirementReason: 'other',
+      retirementDate: null,
+    });
+    setup({ 'GET /api/drives': [noDate], 'GET /api/drives/d7': noDate });
+    renderApp(<App />, '/drives');
+    await userEvent.click(await screen.findByText('OLD7'));
+    expect(await screen.findByText('other · retirement date not recorded')).toBeInTheDocument();
+  });
+
+  it('R60, R62: the occupant step takes an optional retirement date; Clear sends null', async () => {
+    const calls = setup();
+    renderApp(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Assign SPARE9' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
+    await pickSlot(within(dlg), /Bay 1, occupied by AAA0/);
+    await waitFor(() => expect(field(within(dlg), 'Pool')).toHaveValue('tank · raidz2'));
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Next' }));
+    const occ = await screen.findByRole('dialog', { name: 'Bay 1 is occupied' });
+    await userEvent.click(within(occ).getByRole('radio', { name: /Retire it/ }));
+    await userEvent.click(within(occ).getByRole('button', { name: 'Clear' }));
+    await userEvent.click(within(occ).getByRole('button', { name: 'Retire it and assign' }));
+    await waitFor(() => expect(posts(calls, '/api/slots/s0/assign')).toHaveLength(1));
+    expect(posts(calls, '/api/slots/s0/assign')[0]!.body).toMatchObject({
+      occupant: { action: 'retire', reason: 'replaced', date: null },
+    });
+  });
+
   it('R60, R61: retire with a replacement shows both capacities and confirms before sending', async () => {
     const calls = setup();
     renderApp(<App />, '/drives');
@@ -420,6 +459,31 @@ describe('Retire and reinstate (R60, R61)', () => {
       date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       replacedByDriveId: 'd9',
       note: 'clicking noises',
+    });
+  });
+
+  it('R60: the retirement date is optional: Clear sends null, the reason is still required', async () => {
+    const calls = setup();
+    renderApp(<App />, '/drives');
+    await userEvent.click(await screen.findByText('AAA0'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Retire' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Retire AAA0' });
+    const date = within(dlg).getByLabelText(/Retirement date \(optional\)/);
+    expect((date as HTMLInputElement).value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(within(dlg).getByText(/better ‘not recorded’ than a guess/)).toBeInTheDocument();
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Clear' }));
+    expect(date).toHaveValue('');
+    // No reason yet: still blocked.
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Review' }));
+    expect(await within(dlg).findByText('Choose a reason.')).toBeInTheDocument();
+    await pick(/Reason/, 'Failed');
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Review' }));
+    expect(await within(dlg).findByText(/retirement date not recorded/)).toBeInTheDocument();
+    await userEvent.click(await within(dlg).findByRole('button', { name: 'Confirm retire' }));
+    await waitFor(() => expect(posts(calls, '/api/drives/d0/retire')).toHaveLength(1));
+    expect(posts(calls, '/api/drives/d0/retire')[0]!.body).toMatchObject({
+      reason: 'failed',
+      date: null,
     });
   });
 

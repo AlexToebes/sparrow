@@ -161,6 +161,12 @@ Backend steps 2 to 10 expose their behavior through API routes as they go, so th
   - What changed (web; the backend part is a separate change): `SlotPicker` (radio-group of the shared `BayGrid`, keyboard and 44px targets) replaces the slot select in `AssignDialog` (spares shelf, empty slot, inbox placement); spare `cards` replace the drive select; `ReplaceDialog` (pick a suggested spare, one optional swap date, outcome for the old drive, confirm, one assign call); `RemoveToSparesDialog` and the occupant step take an optional removal date; the life story orders and labels `drive-removed` by `removedOn`; spares-shelf rows open the drive drawer with its History and link to retired drives (`/drives?status=retired`).
   - Done when: web tests cover the picker (grids, click, keyboard, occupied tile), preselected slot, spare cards, each Replace outcome, remove dates, the missing-drive default and the story ordering.
 
+- [x] **Post-MVP 4: Optional retirement date**
+  - Requirements: R60 (retirement date made optional at the owner's request), R63, R69, R14.
+  - Why: same principle as R68 and R69: an unknown date is stored as not recorded rather than guessed. The reason stays required.
+  - What changed: `drives.retirement_date` may be NULL for a retired drive (migration 0001 replaces the CHECK `drives_retired_needs_reason_and_date` with `drives_retired_needs_reason`). Retire, RMA and the occupant outcome take `date?: YYYY-MM-DD | null` (omitted = today UTC, null = not recorded, future rejected); import-retired takes the same (omitted = the observation's last-reported day, null = not recorded). Events carry null (`drive-retired.date`, `drive-sent-for-rma.date`, `drive-removed.removedOn`); `drive-reinstated.previousDate` may be null. Web: one optional date field (Today/Clear, helper text) in the retire dialog, the occupied-slot step, the missing-drive RMA and Replace (which now simply uses the swap date and no longer asks for a second one); the import panel date is clearable; the drive detail says "retirement date not recorded"; the life story orders by the retirement date and marks an unrecorded one with a dashed marker.
+  - Done when: server tests cover retire/RMA/occupant/import with omitted, null, past and future dates, reinstate, export/import with null and the 0000 to 0001 migration with data; shared and web tests cover the schemas, the dialogs, the import panel and the life story.
+
 ---
 
 ## Parking lot (not in the MVP)
@@ -171,6 +177,7 @@ Copy from `REQUIREMENTS.md` section 6 and add new ideas here. Do not build these
 - R20 health changes in the event log.
 - R34 pool leaf-count sanity check.
 - Richer slot display (model, capacity, serial, temperature, pool badge).
+- Reject a retirement or removal date earlier than the installation date (only the removal to spares is checked today, R69).
 - Several providers at once.
 - Automatic pool membership.
 - Scheduled exports.
@@ -179,6 +186,7 @@ Copy from `REQUIREMENTS.md` section 6 and add new ideas here. Do not build these
 
 ## Notes log
 
+- 2026-10-11, Post-MVP 4 (R60, R63, optional retirement date): migration 0001 is a proper upgrade, NOT a squash, so the owner's real data is kept and no wipe is needed. It uses the safe rebuild again (`PRAGMA defer_foreign_keys=ON`, copy rows into a plain `__drives_copy`, drop and recreate `drives` with the new CHECK, refill, drop the copy, recreate the two unique indexes; drizzle-kit's generated rebuild fails inside the migration transaction). `test/migration-0001.test.ts` builds a 0000 database with foreign keys on and checks rows, FKs, indexes and every other CHECK. Retire and RMA are checked for the future but, as before, not against the installation date (parking lot). Pool membership still ends at recording time on retire. A retirement with a known date writes `drive-removed.removedOn` equal to it, otherwise null.
 - 2026-10-11, Post-MVP 3 (R69, R70, web): the web declares `OccupantInput`, `RemoveInput` and a local assign body schema in `api/driveMutations.ts` so it builds before shared gains `removedOn`; once shared has it they can be replaced by the shared types. Replace suggests spares of the same type and at least the outgoing capacity (smaller ones get a non-blocking note); this is a light version of the R12 parking-lot idea and does not check the vdev's usable size. One swap date feeds the new drive's `installedOn` and the old drive's `removedOn` (spares) or retire/RMA date (required, so it is asked separately when the swap date is empty). The life story does not count in-service time before, nor shelf time after, a removal with no date.
 Short, dated notes from each session (surprises, decisions, deviations). Newest first.
 

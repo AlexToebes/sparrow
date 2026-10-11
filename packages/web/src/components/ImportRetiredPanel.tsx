@@ -7,6 +7,7 @@ import { HEALTH_WORD } from '../lib/health';
 import { ConfirmDialog } from './ConfirmDialog';
 import { stateColor } from './DriveDetail';
 import { StateIcon } from './SlotTile';
+import { retirementDateError, todayLocal } from './RetireFields';
 
 const REASON_LABEL: Record<RetirementReason, string> = {
   failed: 'Failed',
@@ -14,7 +15,6 @@ const REASON_LABEL: Record<RetirementReason, string> = {
   other: 'Other',
 };
 const REASON_DATA = RETIREMENT_REASONS.map((r) => ({ value: r, label: REASON_LABEL[r] }));
-const validDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 
 interface Row {
   selected: boolean;
@@ -39,14 +39,16 @@ export function ImportRetiredPanel({ candidates }: { candidates: RetiredCandidat
 
   const selected = candidates.filter((c) => rowOf(c).selected);
   const ready =
-    selected.length > 0 && selected.every((c) => rowOf(c).reason && validDate(rowOf(c).date));
+    selected.length > 0 &&
+    selected.every((c) => rowOf(c).reason && retirementDateError(rowOf(c).date) === null);
   const allSelected = selected.length === candidates.length;
   const missingReasons = selected.filter((c) => !rowOf(c).reason).length;
 
   const items = selected.map((c) => ({
     observationKey: c.observationKey,
     reason: rowOf(c).reason!,
-    date: rowOf(c).date,
+    // R63, R60: the prefilled last-reported day, or null when the user cleared it (not recorded).
+    date: rowOf(c).date === '' ? null : rowOf(c).date,
   }));
 
   return (
@@ -54,7 +56,9 @@ export function ImportRetiredPanel({ candidates }: { candidates: RetiredCandidat
       <Text size="sm" c="dimmed" mb="sm">
         The provider still reports these drives as decommissioned. Importing creates a retired
         record for each, so their history is kept. Choose a reason for every drive you import; the
-        reported health is only a hint and is never applied. You can skip this entirely.
+        reported health is only a hint and is never applied. The date starts at the day the provider
+        last reported the drive (approximate); clear it if you would rather record none. You can
+        skip this entirely.
       </Text>
       <div className="bulk-bar">
         <Select
@@ -101,7 +105,7 @@ export function ImportRetiredPanel({ candidates }: { candidates: RetiredCandidat
               <Table.Th>Drive</Table.Th>
               <Table.Th>Last known health (hint)</Table.Th>
               <Table.Th>Reason</Table.Th>
-              <Table.Th>Date</Table.Th>
+              <Table.Th>Retirement date (optional)</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -145,8 +149,29 @@ export function ImportRetiredPanel({ candidates }: { candidates: RetiredCandidat
                       aria-label={`Date for ${c.serial}`}
                       type="date"
                       value={row.date}
+                      max={todayLocal()}
+                      placeholder="not recorded"
                       onChange={(e) => patch(c, { date: e.currentTarget.value })}
+                      error={retirementDateError(row.date)}
+                      rightSectionWidth={64}
+                      rightSection={
+                        <Button
+                          size="compact-xs"
+                          variant="subtle"
+                          color="gray"
+                          aria-label={`Clear date for ${c.serial}`}
+                          disabled={row.date === ''}
+                          onClick={() => patch(c, { date: '' })}
+                        >
+                          Clear
+                        </Button>
+                      }
                     />
+                    {row.date === '' ? (
+                      <Text size="xs" c="dimmed">
+                        Not recorded
+                      </Text>
+                    ) : null}
                   </Table.Td>
                 </Table.Tr>
               );
@@ -175,7 +200,8 @@ export function ImportRetiredPanel({ candidates }: { candidates: RetiredCandidat
         >
           <Text>
             Create {items.length} retired {items.length === 1 ? 'record' : 'records'}? Each gets the
-            reason and date you chose. This is all or nothing, and they can be reinstated later.
+            reason you chose and its date (or none, when cleared). This is all or nothing, and they
+            can be reinstated later.
           </Text>
         </ConfirmDialog>
       ) : null}

@@ -219,3 +219,60 @@ describe('life story with an optional removal date (R69)', () => {
     expect(story.at(-2)!.date).toBe('2026-08-20');
   });
 });
+
+describe('life story with an optional retirement date (R60)', () => {
+  const created = ev('drive-created', '2026-01-01T08:00:00.000Z');
+
+  it('uses the retirement date when present, orders by it and shows when it was recorded', () => {
+    const retired = ev('drive-retired', '2026-10-11T09:00:00.000Z', {
+      reason: 'failed',
+      date: '2026-09-01',
+    });
+    const story = buildStory(newestFirst(created, retired));
+    expect(story.at(-1)).toMatchObject({
+      kind: 'drive-retired',
+      title: 'Retired',
+      date: '2026-09-01',
+      recorded: '2026-10-11',
+      retirementUnrecorded: false,
+    });
+  });
+
+  it('marks a null date as not recorded, keeps the logged position, and does not count the recording day as real', () => {
+    const retired = ev('drive-retired', '2026-10-11T09:00:00.000Z', {
+      reason: 'failed',
+      date: null,
+    });
+    const story = buildStory(newestFirst(created, retired));
+    expect(story.at(-1)).toMatchObject({
+      title: 'Retired (retirement date not recorded)',
+      date: '2026-10-11',
+      recorded: null,
+      retirementUnrecorded: true,
+    });
+    const sum = summarizeStory(newestFirst(created, retired), NOW);
+    expect(sum.retirementUnrecorded).toBe(true);
+    expect(sum.onShelf).toBe(0);
+  });
+
+  it('counts shelf time up to a real retirement date', () => {
+    const retired = ev('drive-retired', '2026-10-11T09:00:00.000Z', {
+      reason: 'other',
+      date: '2026-01-11',
+    });
+    const sum = summarizeStory(newestFirst(created, retired), NOW);
+    expect(sum.onShelf).toBe(
+      Date.parse('2026-01-11T00:00:00.000Z') - Date.parse('2026-01-01T08:00:00.000Z'),
+    );
+    expect(sum.retirementUnrecorded).toBe(false);
+  });
+
+  it('an RMA without a date is labelled too', () => {
+    const rma = ev('drive-sent-for-rma', '2026-10-11T09:00:00.000Z', { date: null });
+    const story = buildStory(newestFirst(created, rma));
+    expect(story.at(-1)).toMatchObject({
+      title: 'Sent for RMA (date not recorded)',
+      retirementUnrecorded: true,
+    });
+  });
+});

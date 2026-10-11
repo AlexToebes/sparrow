@@ -351,7 +351,7 @@ describe('Replace (R70, R60, R62, R35)', () => {
     });
   });
 
-  it('R60, R27, R68: with no swap date, installedOn is null and retire or RMA ask for their own date', async () => {
+  it('R60, R27, R68: with no swap date, installedOn is null and RMA sends date null (no extra date field)', async () => {
     const calls = setupServer();
     const dlg = await openReplace();
     await userEvent.click(within(dlg).getByRole('radio', { name: /SPARE8/ }));
@@ -359,25 +359,39 @@ describe('Replace (R70, R60, R62, R35)', () => {
     await userEvent.click(within(dlg).getByRole('button', { name: 'Clear' }));
     await next(dlg);
     await userEvent.click(within(dlg).getByRole('radio', { name: 'Send for RMA' }));
+    expect(within(dlg).queryByLabelText(/Retirement date/)).not.toBeInTheDocument();
     await userEvent.click(within(dlg).getByRole('button', { name: 'Review' }));
     expect(
-      await within(dlg).findByText(/Enter the date for the retirement or RMA/),
-    ).toBeInTheDocument();
-    fireEvent.change(within(dlg).getByLabelText(/Retirement date/), {
-      target: { value: '2026-10-02' },
-    });
-    await userEvent.click(within(dlg).getByRole('button', { name: 'Review' }));
-    expect(
-      await within(dlg).findByText(
-        /swapped on not recorded, old drive: sent for RMA on 2026-10-02/,
-      ),
+      await within(dlg).findByText(/swapped on not recorded, old drive: sent for RMA\./),
     ).toBeInTheDocument();
     await userEvent.click(within(dlg).getByRole('button', { name: 'Confirm replacement' }));
     await waitFor(() => expect(posts(calls, '/api/slots/s2/assign')).toHaveLength(1));
     expect(posts(calls, '/api/slots/s2/assign')[0]!.body).toMatchObject({
       driveId: 'd8',
       installedOn: null,
-      occupant: { action: 'rma', date: '2026-10-02', note: null },
+      occupant: { action: 'rma', date: null, note: null },
+    });
+  });
+
+  it('R60: with no swap date, Retire still needs the reason and then sends date null', async () => {
+    const calls = setupServer();
+    const dlg = await openReplace();
+    await userEvent.click(within(dlg).getByRole('radio', { name: /SPARE8/ }));
+    await next(dlg);
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Clear' }));
+    await next(dlg);
+    await userEvent.click(within(dlg).getByRole('radio', { name: 'Retire' }));
+    expect(within(dlg).queryByLabelText(/Retirement date/)).not.toBeInTheDocument();
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Review' }));
+    expect(await within(dlg).findByText('Choose a reason.')).toBeInTheDocument();
+    await userEvent.click(field(within(dlg), /^Reason/));
+    await userEvent.click(await screen.findByRole('option', { name: 'Failed', hidden: true }));
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Review' }));
+    await userEvent.click(await within(dlg).findByRole('button', { name: 'Confirm replacement' }));
+    await waitFor(() => expect(posts(calls, '/api/slots/s2/assign')).toHaveLength(1));
+    expect(posts(calls, '/api/slots/s2/assign')[0]!.body).toMatchObject({
+      installedOn: null,
+      occupant: { action: 'retire', reason: 'failed', date: null, replacedByDriveId: 'd8' },
     });
   });
 

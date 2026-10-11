@@ -14,19 +14,21 @@ import {
 interface RetireDialogProps {
   drive: Drive;
   opened: boolean;
+  /** R60: the date field starts at today; the missing-drive flow passes '' (went missing at an unknown time). */
+  defaultDate?: string;
   onClose: () => void;
 }
 
 /** Retire a drive (R60, R61): reason, date, replaced-by with both capacities, note, then a confirm step. */
-export function RetireDialog({ drive, opened, onClose }: RetireDialogProps) {
+export function RetireDialog({ drive, opened, defaultDate, onClose }: RetireDialogProps) {
   const drives = useDrives();
   const retire = useDriveAction(drive.id, 'retire');
-  const [values, setValues] = useState<RetireValues>(emptyRetireValues);
+  const [values, setValues] = useState<RetireValues>(() => emptyRetireValues(defaultDate));
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const close = () => {
-    setValues(emptyRetireValues());
+    setValues(emptyRetireValues(defaultDate));
     setConfirming(false);
     setError(null);
     retire.reset();
@@ -43,7 +45,7 @@ export function RetireDialog({ drive, opened, onClose }: RetireDialogProps) {
     retire.mutate(
       {
         reason: values.reason!,
-        date: values.date,
+        date: values.date === '' ? null : values.date,
         replacedByDriveId: values.replacedByDriveId,
         note: values.note.trim() === '' ? null : values.note.trim(),
       },
@@ -64,8 +66,8 @@ export function RetireDialog({ drive, opened, onClose }: RetireDialogProps) {
       {confirming ? (
         <>
           <Text>
-            Retire <strong className="mono">{drive.serial}</strong> as {values.reason} on{' '}
-            {values.date}
+            Retire <strong className="mono">{drive.serial}</strong> as {values.reason}
+            {values.date === '' ? ' (retirement date not recorded)' : ` on ${values.date}`}
             {replacement ? `, replaced by ${replacement.serial}` : ''}?
           </Text>
           {drive.status === 'installed' ? (

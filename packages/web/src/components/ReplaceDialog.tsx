@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Button, Modal, Radio, Select, Text, Textarea, TextInput } from '@mantine/core';
+import { Alert, Button, Modal, Radio, Select, Text, Textarea } from '@mantine/core';
 import { RETIREMENT_REASONS, type Drive, type RetirementReason } from '@sparrow/shared';
 import { ApiError } from '../api/client';
 import { useAssignDrive, type OccupantInput } from '../api/driveMutations';
@@ -57,7 +57,6 @@ export function ReplaceDialog({
   const [choice, setChoice] = useState<Choice>('spare');
   const [reason, setReason] = useState<RetirementReason | null>(null);
   const [note, setNote] = useState('');
-  const [ownDate, setOwnDate] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const incoming = (spares.data ?? []).find((d) => d.id === incomingId) ?? null;
@@ -65,9 +64,8 @@ export function ReplaceDialog({
     ? (pools.data?.find((p) => p.id === poolRole.poolValue)?.name ?? 'a pool')
     : null;
   const roleWord = poolRole.roleValue === 'hot-spare' ? 'hot spare' : 'data';
-  // Retire and RMA need a date (R60): the swap date, else the one typed in the option.
-  const needsOwnDate = choice !== 'spare' && swapDate === '';
-  const effectiveDate = swapDate !== '' ? swapDate : ownDate;
+  // R60: retire and RMA use the swap date as well; empty = not recorded.
+  const swapOrNull = swapDate === '' ? null : swapDate;
 
   const go = (next: Step) => {
     setError(null);
@@ -77,20 +75,17 @@ export function ReplaceDialog({
   const buildOccupant = (): { occupant: OccupantInput } | { error: string } => {
     const trimmed = note.trim() === '' ? null : note.trim();
     if (choice === 'spare') {
-      return { occupant: { action: 'spare', removedOn: swapDate === '' ? null : swapDate } };
+      return { occupant: { action: 'spare', removedOn: swapOrNull } };
     }
     if (choice === 'retire' && reason === null) return { error: 'Choose a reason.' };
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)) {
-      return { error: 'Enter the date for the retirement or RMA.' };
-    }
     if (choice === 'rma') {
-      return { occupant: { action: 'rma', date: effectiveDate, note: trimmed } };
+      return { occupant: { action: 'rma', date: swapOrNull, note: trimmed } };
     }
     return {
       occupant: {
         action: 'retire',
         reason: reason!,
-        date: effectiveDate,
+        date: swapOrNull,
         note: trimmed,
         // The incoming drive is the replacement whatever the reason.
         replacedByDriveId: incoming!.id,
@@ -122,7 +117,7 @@ export function ReplaceDialog({
         driveId: incoming.id,
         poolId: poolRole.poolValue,
         ...(poolRole.poolValue !== null ? { role: poolRole.roleValue } : {}),
-        installedOn: swapDate === '' ? null : swapDate,
+        installedOn: swapOrNull,
         occupant: built.occupant,
       },
       {
@@ -258,18 +253,6 @@ export function ReplaceDialog({
           ) : null}
           {choice !== 'spare' ? (
             <>
-              {needsOwnDate ? (
-                <TextInput
-                  label="Retirement date"
-                  description="Required: you left the swap date empty."
-                  type="date"
-                  required
-                  mt="sm"
-                  max={todayLocal()}
-                  value={ownDate}
-                  onChange={(e) => setOwnDate(e.currentTarget.value)}
-                />
-              ) : null}
               <Textarea
                 label="Note (optional)"
                 autosize
@@ -307,8 +290,7 @@ export function ReplaceDialog({
             {where ? `${where}: ` : ''}
             <strong className="mono">{drive.serial}</strong> ({capacityOf(drive)}) →{' '}
             <strong className="mono">{incoming.serial}</strong> ({capacityOf(incoming)}), swapped on{' '}
-            {swapDate === '' ? 'not recorded' : swapDate}, old drive: {oldWord}
-            {choice !== 'spare' && swapDate === '' ? ` on ${effectiveDate}` : ''}.
+            {swapDate === '' ? 'not recorded' : swapDate}, old drive: {oldWord}.
           </p>
           <Text size="sm" c="dimmed">
             {poolName ? `New drive joins ${poolName} as ${roleWord}.` : 'New drive has no pool.'}

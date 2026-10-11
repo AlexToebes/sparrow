@@ -1,65 +1,20 @@
 import { useState } from 'react';
-import { Button, Group, Radio, Select, Text, Textarea, TextInput } from '@mantine/core';
+import { Radio, Select, Text, Textarea } from '@mantine/core';
 import type { Drive, MembershipRole } from '@sparrow/shared';
 import { useAssignmentDefaults, type OccupantInput } from '../api/driveMutations';
 import { usePools } from '../api/hooks';
+import { NOT_RECORDED_HINT, OptionalDateField } from './OptionalDateField';
 import {
+  RETIREMENT_DATE_HINT,
   RetireFields,
   removedOnError,
+  retirementDateError,
   retireValuesError,
   todayLocal,
   type RetireValues,
 } from './RetireFields';
 
-/** A `type="date"` field that may be left empty ("not recorded"), with Today and Clear shortcuts (R68, R69). */
-export function OptionalDateField({
-  label,
-  description,
-  value,
-  onChange,
-  error,
-  mt = 'sm',
-}: {
-  label: string;
-  description?: string;
-  value: string;
-  onChange: (value: string) => void;
-  error?: string | null;
-  mt?: string;
-}) {
-  return (
-    <TextInput
-      label={label}
-      description={description}
-      type="date"
-      mt={mt}
-      max={todayLocal()}
-      value={value}
-      onChange={(e) => onChange(e.currentTarget.value)}
-      error={error}
-      rightSectionWidth={150}
-      rightSection={
-        <Group gap={4} wrap="nowrap">
-          <Button size="compact-xs" variant="subtle" onClick={() => onChange(todayLocal())}>
-            Today
-          </Button>
-          <Button
-            size="compact-xs"
-            variant="subtle"
-            color="gray"
-            disabled={value === ''}
-            onClick={() => onChange('')}
-          >
-            Clear
-          </Button>
-        </Group>
-      }
-    />
-  );
-}
-
-export const NOT_RECORDED_HINT =
-  'Leave empty if you don’t know — it’s better to show ‘not recorded’ than a guess.';
+export { NOT_RECORDED_HINT, OptionalDateField };
 
 const NO_POOL = '__none__';
 
@@ -159,7 +114,15 @@ export function outcomeToResolution(
     return { resolution: { action: 'spare', removedOn: s.removedOn === '' ? null : s.removedOn } };
   }
   if (s.choice === 'rma') {
-    return { resolution: { action: 'rma', date: s.rmaDate, note: note(s.rmaNote) } };
+    const rmaProblem = retirementDateError(s.rmaDate);
+    if (rmaProblem) return { error: rmaProblem };
+    return {
+      resolution: {
+        action: 'rma',
+        date: s.rmaDate === '' ? null : s.rmaDate,
+        note: note(s.rmaNote),
+      },
+    };
   }
   const problem = retireValuesError(s.retire);
   if (problem) return { error: problem };
@@ -167,7 +130,7 @@ export function outcomeToResolution(
     resolution: {
       action: 'retire',
       reason: s.retire.reason!,
-      date: s.retire.date,
+      date: s.retire.date === '' ? null : s.retire.date,
       note: note(s.retire.note),
       replacedByDriveId: s.retire.replacedByDriveId,
     },
@@ -227,12 +190,12 @@ export function OutcomeFields({
       ) : null}
       {state.choice === 'rma' ? (
         <>
-          <TextInput
-            label="Date"
-            type="date"
+          <OptionalDateField
+            label="RMA date (optional)"
+            description={RETIREMENT_DATE_HINT}
             value={state.rmaDate}
-            onChange={(e) => set({ rmaDate: e.currentTarget.value })}
-            mt="sm"
+            onChange={(rmaDate) => set({ rmaDate })}
+            error={retirementDateError(state.rmaDate)}
           />
           <Textarea
             label="Note"

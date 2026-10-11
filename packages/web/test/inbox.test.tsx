@@ -329,6 +329,30 @@ describe('Import retired drives (R63)', () => {
     });
   });
 
+  it('R63, R60: a cleared date is allowed and sent as null; only a missing reason blocks the import', async () => {
+    const calls = setup(
+      { 'POST /api/inbox/import-retired': [spare] },
+      { retiredCandidates: retired },
+    );
+    renderApp(<App />, '/inbox');
+    await userEvent.click(await screen.findByRole('button', { name: 'Review 2' }));
+    const panel = await screen.findByRole('region', { name: 'Import retired drives' });
+    await userEvent.click(within(panel).getByLabelText('Select RET-1'));
+    await pick(within(panel), 'Reason for RET-1', 'Failed');
+    await userEvent.click(within(panel).getByRole('button', { name: 'Clear date for RET-1' }));
+    expect(within(panel).getByLabelText('Date for RET-1')).toHaveValue('');
+    expect(within(panel).getByText('Not recorded')).toBeInTheDocument();
+    const submit = within(panel).getByRole('button', { name: /^Import/ });
+    expect(submit).toBeEnabled();
+    await userEvent.click(submit);
+    const dlg = await screen.findByRole('dialog', { name: 'Import retired drives' });
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Import 1' }));
+    await waitFor(() => expect(posts(calls, '/api/inbox/import-retired')).toHaveLength(1));
+    expect(posts(calls, '/api/inbox/import-retired')[0]!.body).toEqual({
+      items: [{ observationKey: 'R1', reason: 'failed', date: null }],
+    });
+  });
+
   it('stays disabled when a selected row has no reason', async () => {
     setup({}, { retiredCandidates: retired });
     renderApp(<App />, '/inbox');
@@ -403,12 +427,22 @@ describe('Missing drive (R27)', () => {
     const box = await open();
     await userEvent.click(within(box).getByRole('button', { name: 'Send for RMA' }));
     const dlg = await screen.findByRole('dialog', { name: 'Send for RMA' });
+    // R60: the drive went missing at an unknown time, so the date starts empty and is sent as null.
+    expect(within(dlg).getByLabelText(/RMA date/)).toHaveValue('');
     await userEvent.click(within(dlg).getByRole('button', { name: 'Send for RMA' }));
     await waitFor(() => expect(posts(calls, '/api/drives/d0/rma')).toHaveLength(1));
-    expect(posts(calls, '/api/drives/d0/rma')[0]!.body).toMatchObject({
-      date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-      note: null,
-    });
+    expect(posts(calls, '/api/drives/d0/rma')[0]!.body).toEqual({ date: null, note: null });
+  });
+
+  it('R60: send for RMA with a date typed in sends that date', async () => {
+    const calls = missing();
+    const box = await open();
+    await userEvent.click(within(box).getByRole('button', { name: 'Send for RMA' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Send for RMA' });
+    fireEvent.change(within(dlg).getByLabelText(/RMA date/), { target: { value: '2026-10-02' } });
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Send for RMA' }));
+    await waitFor(() => expect(posts(calls, '/api/drives/d0/rma')).toHaveLength(1));
+    expect(posts(calls, '/api/drives/d0/rma')[0]!.body).toMatchObject({ date: '2026-10-02' });
   });
 });
 

@@ -171,7 +171,12 @@ export function DriveDetail({ drive, view = null, where = null }: DriveDetailPro
           <>
             <Row
               label="Retired"
-              value={[drive.retirementReason, drive.retirementDate].filter(Boolean).join(' · ')}
+              value={[
+                drive.retirementReason,
+                drive.retirementDate ?? 'retirement date not recorded',
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             />
             <Row
               label="Replaced by"
