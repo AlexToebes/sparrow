@@ -247,9 +247,9 @@
           "name": "drives_installed_on_only_when_installed",
           "value": "\"drives\".\"installed_on\" IS NULL OR \"drives\".\"status\" = 'installed'"
         },
-        "drives_retired_needs_reason_and_date": {
-          "name": "drives_retired_needs_reason_and_date",
-          "value": "\"drives\".\"status\" <> 'retired' OR (\"drives\".\"retirement_reason\" IS NOT NULL AND \"drives\".\"retirement_date\" IS NOT NULL)"
+        "drives_retired_needs_reason": {
+          "name": "drives_retired_needs_reason",
+          "value": "\"drives\".\"status\" <> 'retired' OR \"drives\".\"retirement_reason\" IS NOT NULL"
         },
         "drives_not_replaced_by_self": {
           "name": "drives_not_replaced_by_self",

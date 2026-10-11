@@ -33,7 +33,7 @@ CREATE TABLE `drives` (
 	CONSTRAINT "drives_slot_only_when_installed" CHECK("drives"."slot_id" IS NULL OR "drives"."status" = 'installed'),
 	CONSTRAINT "drives_installed_needs_slot" CHECK("drives"."status" <> 'installed' OR "drives"."slot_id" IS NOT NULL),
 	CONSTRAINT "drives_installed_on_only_when_installed" CHECK("drives"."installed_on" IS NULL OR "drives"."status" = 'installed'),
-	CONSTRAINT "drives_retired_needs_reason_and_date" CHECK("drives"."status" <> 'retired' OR ("drives"."retirement_reason" IS NOT NULL AND "drives"."retirement_date" IS NOT NULL)),
+	CONSTRAINT "drives_retired_needs_reason" CHECK("drives"."status" <> 'retired' OR "drives"."retirement_reason" IS NOT NULL),
 	CONSTRAINT "drives_not_replaced_by_self" CHECK("drives"."replaced_by_drive_id" IS NULL OR "drives"."replaced_by_drive_id" <> "drives"."id"),
 	CONSTRAINT "drives_drive_type_enum" CHECK(drive_type IS NULL OR drive_type IN ('HDD', 'SSD', 'NVMe')),
 	CONSTRAINT "drives_status_enum" CHECK(status IN ('spare', 'installed', 'retired')),

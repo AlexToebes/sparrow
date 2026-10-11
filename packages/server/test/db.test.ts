@@ -258,3 +258,22 @@ describe('API (R67)', () => {
     await app.close();
   });
 });
+
+describe('optional retirement date in the baseline (R60)', () => {
+  it('R60: a fresh DB accepts a retired drive without a date, and still requires the reason', () => {
+    const { sqlite } = openDatabase(':memory:');
+    try {
+      const ins = (id: string, reason: string | null, date: string | null) =>
+        sqlite
+          .prepare(
+            "INSERT INTO drives (id, serial, serial_normalized, status, retirement_reason, retirement_date, created_at, updated_at) VALUES (?,?,?,'retired',?,?,'t','t')",
+          )
+          .run(id, id, id, reason, date);
+      ins('a', 'failed', null);
+      expect(() => ins('b', null, '2026-01-01')).toThrow(/CHECK/);
+      expect(sqlite.pragma('foreign_key_check')).toEqual([]);
+    } finally {
+      sqlite.close();
+    }
+  });
+});

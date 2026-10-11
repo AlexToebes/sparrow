@@ -54,7 +54,7 @@ docker compose up -d
 Notes:
 
 - **Data directory.** On a NAS, point the volume at a dataset or share (for example `/mnt/<pool>/apps/sparrow/data:/data`) and make sure the container user can write to it. The image runs as the non-root `node` user (uid and gid 1000), so a bind-mounted directory needs `chown 1000:1000 data` (or set `user:` in the compose file to the owner of the directory). On TrueNAS, if the dataset is owned by the `apps` user, set `user: "568:568"` instead. A named volume works without this. If the directory is not writable, the app exits at startup with a message naming the path and the uid it runs as.
-- **Upgrading from an early build.** The database migrations were squashed into a single baseline before the first release, so a database created by an earlier build cannot be upgraded. Delete the data directory's `app.db`, `app.db-wal` and `app.db-shm` before starting this version.
+- **Upgrading from an early build.** The database migrations are a single baseline that was edited in place before the first release (most recently to make the retirement date optional), so a database created by an earlier build cannot be upgraded. Delete the data directory's `app.db`, `app.db-wal` and `app.db-shm` before starting this version.
 - **Image access.** A newly published package on GitHub Container Registry may be private. If your NAS cannot pull it, set the package to public in its GitHub settings, or run `docker login ghcr.io` with a personal access token that has `read:packages`.
 - **No authentication.** The app has no login by design. Run it on a trusted LAN only, and do not expose it to the internet.
 

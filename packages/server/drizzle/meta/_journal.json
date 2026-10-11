@@ -8,13 +8,6 @@
       "when": 1791727771881,
       "tag": "0000_curly_shriek",
       "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1791737375184,
-      "tag": "0001_optional_retirement_date",
-      "breakpoints": true
     }
   ]
 }
