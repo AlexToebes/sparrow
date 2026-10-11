@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Alert, Badge, Button, Skeleton, Text } from '@mantine/core';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { gridSchema, type LayoutGrid, type SlotStatus } from '@sparrow/shared';
 import {
   queryKeys,
@@ -14,7 +14,6 @@ import {
 import { apiSend } from '../api/client';
 import { BayGrid } from '../components/BayGrid';
 import { FlipIcon, BoxIcon, InboxIcon } from '../components/icons';
-import { AssignDialog } from '../components/AssignDialog';
 import { SlotDetail } from '../components/SlotDetail';
 import { SlotTile, StateIcon, poolColor } from '../components/SlotTile';
 import { SparesShelf } from '../components/SparesShelf';
@@ -63,8 +62,22 @@ export function LayoutPage() {
   const inbox = useInbox();
   const drivePools = useDrivePools();
   const now = useNow();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [assignSlotId, setAssignSlotId] = useState<string | null>(null);
+  // The open slot lives in the URL (/?slot=ID), so a life story can link to a bay's history (R74).
+  // `view=slot` opens its panel on the Slot history tab.
+  const [params, setParams] = useSearchParams();
+  const selectedId = params.get('slot');
+  const historyTab = params.get('view') === 'slot' ? 'slot' : 'drive';
+  const setSelectedId = (id: string | null) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('view');
+        if (id === null) next.delete('slot');
+        else next.set('slot', id);
+        return next;
+      },
+      { replace: true },
+    );
 
   const statusBySlot = useMemo(() => {
     const m = new Map<string, SlotStatus>();
@@ -209,9 +222,7 @@ export function LayoutPage() {
                           view={view}
                           pool={slot.driveId ? drivePools.get(slot.driveId) : undefined}
                           selected={selectedId === slot.id}
-                          onSelect={(id) =>
-                            view.state === 'empty' ? setAssignSlotId(id) : setSelectedId(id)
-                          }
+                          onSelect={setSelectedId}
                         />
                       );
                     }}
@@ -240,10 +251,6 @@ export function LayoutPage() {
         </div>
       ))}
 
-      {assignSlotId ? (
-        <AssignDialog slotId={assignSlotId} onClose={() => setAssignSlotId(null)} />
-      ) : null}
-
       <SparesShelf
         spares={spares.data ?? []}
         retiredCount={(drives.data ?? []).filter((d) => d.status === 'retired').length}
@@ -252,6 +259,7 @@ export function LayoutPage() {
       <SlotDetail
         view={selected}
         gridName={selectedGrid?.name ?? null}
+        historyTab={historyTab}
         onClose={() => setSelectedId(null)}
       />
     </>

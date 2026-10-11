@@ -1,9 +1,10 @@
 import { Skeleton, Text } from '@mantine/core';
+import { Link } from 'react-router';
 import { useDriveEvents, usePools } from '../api/hooks';
 import { formatDuration } from '../lib/format';
 import { buildStory, summarizeStory } from '../lib/lifeStory';
 
-/** The drive's history as a vertical timeline, oldest first (UI_DESIGN, from E). */
+/** The drive's history as a vertical timeline, oldest first (UI_DESIGN, from E). The "History" heading belongs to HistorySection. */
 export function LifeStory({ driveId }: { driveId: string }) {
   const { data, isPending, isError } = useDriveEvents(driveId);
   const pools = usePools();
@@ -21,7 +22,6 @@ export function LifeStory({ driveId }: { driveId: string }) {
   ].filter(Boolean);
   return (
     <section aria-label="Life story">
-      <h3 className="section-title">History</h3>
       {parts.length > 0 ? (
         <Text size="sm" c="dimmed" mb="sm">
           {parts.join(' · ')}
@@ -58,7 +58,21 @@ export function LifeStory({ driveId }: { driveId: string }) {
               </span>
               {item.gap ? <span className="story-gap">{item.gap}</span> : null}
             </div>
-            <div className="story-title">{item.title}</div>
+            <div className="story-title">
+              {item.title}
+              {item.slot ? (
+                <>
+                  {' '}
+                  <Link
+                    className="story-link"
+                    to={`/?slot=${encodeURIComponent(item.slot.id)}&view=slot`}
+                    aria-label={`Slot history of ${item.slot.label}`}
+                  >
+                    Slot history
+                  </Link>
+                </>
+              ) : null}
+            </div>
             {item.detail ? <div className="story-detail">{item.detail}</div> : null}
           </li>
         ))}

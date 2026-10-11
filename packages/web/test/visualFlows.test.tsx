@@ -15,13 +15,18 @@ async function openSlotPanel(name: RegExp) {
   return screen.findByRole('dialog');
 }
 
+/** An empty tile opens the slot panel (its slot history); "Assign a drive" starts the dialog. */
+async function openAssignFromEmpty(name: RegExp = /^Bay 2, Empty/) {
+  const panel = await openSlotPanel(name);
+  await userEvent.click(await within(panel).findByRole('button', { name: 'Assign a drive' }));
+  return screen.findByRole('dialog', { name: 'Assign to a slot' });
+}
+
 describe('Assigning with the slot picker (R70, R8, R35)', () => {
-  it('R70: "+ Assign" on an empty slot opens the dialog with that slot already selected', async () => {
+  it('R70: "Assign a drive" in an the empty slot panel opens the dialog with that slot already selected', async () => {
     const calls = setupServer();
     renderApp(<App />);
-    // An empty tile's "+ Assign" opens the dialog with that slot selected.
-    await userEvent.click(await screen.findByRole('button', { name: /^Bay 2, Empty/ }));
-    const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
+    const dlg = await openAssignFromEmpty();
     // The slot step is skipped: the first step is the drive, with the bay as a read-only summary.
     expect(within(dlg).getByText(/Step 1 of 3 · Choose the drive/)).toBeInTheDocument();
     expect(within(dlg).getByText('Bay 2')).toBeInTheDocument();
@@ -43,9 +48,7 @@ describe('Assigning with the slot picker (R70, R8, R35)', () => {
   it('R8, R70: spare cards show serial, model, capacity, condition and location; retired never appear', async () => {
     setupServer();
     renderApp(<App />);
-    // An empty tile's "+ Assign" opens the dialog with that slot selected.
-    await userEvent.click(await screen.findByRole('button', { name: /^Bay 2, Empty/ }));
-    const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
+    const dlg = await openAssignFromEmpty();
     const cards = await within(dlg).findAllByRole('radio', { name: /SPARE/ });
     expect(cards).toHaveLength(2);
     const big = within(dlg).getByRole('radio', { name: /SPARE9/ });
@@ -67,8 +70,7 @@ describe('Assigning with the slot picker (R70, R8, R35)', () => {
   it('R70: opened from a slot, "Change" brings the slot step back and the step count follows', async () => {
     const calls = setupServer();
     renderApp(<App />);
-    await userEvent.click(await screen.findByRole('button', { name: /^Bay 2, Empty/ }));
-    const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
+    const dlg = await openAssignFromEmpty();
     expect(within(dlg).getByText(/Step 1 of 3 · Choose the drive/)).toBeInTheDocument();
     await userEvent.click(within(dlg).getByRole('button', { name: 'Change' }));
     // The picker is alone on its step, with Bay 2 still selected.
@@ -131,9 +133,7 @@ describe('Assigning with the slot picker (R70, R8, R35)', () => {
       { slots, drives: all },
     );
     renderApp(<App />);
-    // An empty tile's "+ Assign" opens the dialog with that slot selected.
-    await userEvent.click(await screen.findByRole('button', { name: /^Bay 2, Empty/ }));
-    const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
+    const dlg = await openAssignFromEmpty();
     await userEvent.type(
       await within(dlg).findByRole('textbox', { name: 'Search spares' }),
       'findme',
@@ -233,8 +233,8 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     userEvent.click(within(dlg).getByRole('button', { name: 'Confirm move' }));
   const moves = (calls: ReturnType<typeof setupServer>, id = 'd2') =>
     posts(calls, `/api/drives/${id}/move`);
-  /** Through to the date step with the answers "leave it empty". */
-  async function toDate(dlg: HTMLElement, destination: string | RegExp) {
+  /** Through to the confirm step with the answers "leave it empty". */
+  async function toConfirm(dlg: HTMLElement, destination: string | RegExp) {
     await userEvent.click(await card(dlg, destination));
     await nextStep(dlg);
     await userEvent.click(await card(dlg, 'Leave it empty'));
@@ -264,7 +264,7 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
   it('R73: step 1 asks where it goes with four answers; nothing is chosen yet', async () => {
     setupServer();
     const dlg = await openMove();
-    expect(within(dlg).getByText(/Step 1 of 4 · Where does this drive go\?/)).toBeInTheDocument();
+    expect(within(dlg).getByText(/Step 1 of 3 · Where does this drive go\?/)).toBeInTheDocument();
     const radios = within(dlg).getAllByRole('radio');
     expect(radios.map((r) => r.textContent)).toEqual([
       expect.stringContaining('Spares shelf'),
@@ -274,19 +274,22 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     ]);
     expect(radios.every((r) => r.getAttribute('aria-checked') === 'false')).toBe(true);
     expect(within(dlg).getByRole('button', { name: 'Next' })).toBeDisabled();
+    // The one date lives on this step, below the answers.
+    expect(within(dlg).getByLabelText('When? (optional)')).toHaveAttribute('type', 'date');
   });
 
   it('R73, R69: to the spares shelf, leaving the bay empty: ONE move call, date today by default', async () => {
     const calls = setupServer();
     const dlg = await openMove();
-    await toDate(dlg, /Spares shelf/);
-    expect(within(dlg).getByText(/Step 3 of 4 · When\?/)).toBeInTheDocument();
-    const date = within(dlg).getByLabelText('Date (optional)');
+    await userEvent.click(await card(dlg, /Spares shelf/));
+    const date = within(dlg).getByLabelText('When? (optional)');
     expect(date).toHaveAttribute('type', 'date');
     expect((date as HTMLInputElement).value).toMatch(DATE);
     expect(within(dlg).getByText(/better to show ‘not recorded’ than a guess/)).toBeInTheDocument();
     await nextStep(dlg);
-    expect(within(dlg).getByText(/Step 4 of 4 · Confirm/)).toBeInTheDocument();
+    await userEvent.click(await card(dlg, 'Leave it empty'));
+    await nextStep(dlg);
+    expect(within(dlg).getByText(/Step 3 of 3 · Confirm/)).toBeInTheDocument();
     expect(within(dlg).getByText(/goes back to the spares shelf/)).toBeInTheDocument();
     expect(within(dlg).getByText(/is left empty/)).toBeInTheDocument();
     expect(moves(calls)).toHaveLength(0);
@@ -302,14 +305,16 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
   it('R73, R69, R68: a typed date is sent; Clear sends null; Today refills the field', async () => {
     const calls = setupServer();
     const dlg = await openMove();
-    await toDate(dlg, /Spares shelf/);
-    const date = within(dlg).getByLabelText('Date (optional)');
+    await userEvent.click(await card(dlg, /Spares shelf/));
+    const date = within(dlg).getByLabelText('When? (optional)');
     fireEvent.change(date, { target: { value: '2026-09-30' } });
     await userEvent.click(within(dlg).getByRole('button', { name: 'Clear' }));
     expect(date).toHaveValue('');
     await userEvent.click(within(dlg).getByRole('button', { name: 'Today' }));
     expect((date as HTMLInputElement).value).toMatch(DATE);
     fireEvent.change(date, { target: { value: '2026-09-30' } });
+    await nextStep(dlg);
+    await userEvent.click(await card(dlg, 'Leave it empty'));
     await nextStep(dlg);
     expect(dlg.querySelector('.step-content')).toHaveTextContent(/Date: 2026-09-30\./);
     await confirmMove(dlg);
@@ -320,8 +325,10 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
   it('R73, R69: an empty date is sent as null (not recorded for every part of the move)', async () => {
     const calls = setupServer();
     const dlg = await openMove();
-    await toDate(dlg, /Spares shelf/);
+    await userEvent.click(await card(dlg, /Spares shelf/));
     await userEvent.click(within(dlg).getByRole('button', { name: 'Clear' }));
+    await nextStep(dlg);
+    await userEvent.click(await card(dlg, 'Leave it empty'));
     await nextStep(dlg);
     expect(within(dlg).getByText(/No date is recorded\./)).toBeInTheDocument();
     await confirmMove(dlg);
@@ -332,13 +339,14 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
   it('R73, R68: a future date is refused before sending', async () => {
     const calls = setupServer();
     const dlg = await openMove();
-    await toDate(dlg, /Spares shelf/);
-    fireEvent.change(within(dlg).getByLabelText('Date (optional)'), {
+    await userEvent.click(await card(dlg, /Spares shelf/));
+    fireEvent.change(within(dlg).getByLabelText('When? (optional)'), {
       target: { value: '2999-01-01' },
     });
-    await nextStep(dlg);
     expect(await within(dlg).findByText('The date cannot be in the future.')).toBeInTheDocument();
-    expect(within(dlg).getByText(/Step 3 of 4 · When\?/)).toBeInTheDocument();
+    // Next stays disabled on step 1 until the date is fixed.
+    expect(within(dlg).getByRole('button', { name: 'Next' })).toBeDisabled();
+    expect(within(dlg).getByText(/Step 1 of 3 · Where does this drive go\?/)).toBeInTheDocument();
     expect(moves(calls)).toHaveLength(0);
   });
 
@@ -366,7 +374,7 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     const dlg = await openMove();
     await userEvent.click(await card(dlg, /Spares shelf/));
     await nextStep(dlg);
-    expect(within(dlg).getByText(/Step 2 of 4 · What goes into this bay\?/)).toBeInTheDocument();
+    expect(within(dlg).getByText(/Step 2 of 3 · What goes into this bay\?/)).toBeInTheDocument();
     expect(within(dlg).queryByRole('radio', { name: /SPARE/ })).not.toBeInTheDocument();
     await userEvent.click(await card(dlg, /A spare/));
     const cards = await within(dlg).findAllByRole('radio', { name: /SPARE|SMALL|SSD/ });
@@ -390,15 +398,14 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     const calls = setupServer();
     const dlg = await openMove();
     await userEvent.click(await card(dlg, /Spares shelf/));
+    fireEvent.change(within(dlg).getByLabelText('When? (optional)'), {
+      target: { value: '2026-10-01' },
+    });
     await nextStep(dlg);
     await userEvent.click(await card(dlg, /A spare/));
     await userEvent.click(await within(dlg).findByRole('radio', { name: /SPARE9/ }));
     await nextStep(dlg);
-    fireEvent.change(within(dlg).getByLabelText('Date (optional)'), {
-      target: { value: '2026-10-01' },
-    });
-    await nextStep(dlg);
-    expect(within(dlg).getByText(/Step 4 of 5 · Details/)).toBeInTheDocument();
+    expect(within(dlg).getByText(/Step 3 of 4 · Details/)).toBeInTheDocument();
     await waitFor(() => expect(field(within(dlg), 'Pool')).toHaveValue('tank · raidz2'));
     expect(field(within(dlg), 'Role')).toHaveValue('Hot spare');
     await nextStep(dlg);
@@ -416,7 +423,7 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1);
   });
 
-  it('R73, R62, R60: retire needs a reason (no default); with a spare it is the replaced-by drive', async () => {
+  it('R73, R62, R60: retire needs a reason (no default); a spare can take the bay', async () => {
     const calls = setupServer();
     const dlg = await openMove();
     await userEvent.click(await card(dlg, /^Retire/));
@@ -426,13 +433,12 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     await userEvent.click(field(within(dlg), /^Reason/));
     await userEvent.click(await screen.findByRole('option', { name: 'Failed', hidden: true }));
     await userEvent.type(within(dlg).getByLabelText(/^Note/), 'Clicking');
+    fireEvent.change(within(dlg).getByLabelText('When? (optional)'), {
+      target: { value: '2026-09-12' },
+    });
     await nextStep(dlg);
     await userEvent.click(await card(dlg, /A spare/));
     await userEvent.click(await within(dlg).findByRole('radio', { name: /SPARE9/ }));
-    await nextStep(dlg);
-    fireEvent.change(within(dlg).getByLabelText('Date (optional)'), {
-      target: { value: '2026-09-12' },
-    });
     await nextStep(dlg);
     await nextStep(dlg);
     expect(within(dlg).getByText(/is retired \(failed\)/)).toBeInTheDocument();
@@ -456,10 +462,9 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     expect(within(dlg).getByRole('button', { name: 'Next' })).toBeDisabled();
     await userEvent.click(field(within(dlg), /^Reason/));
     await userEvent.click(await screen.findByRole('option', { name: 'Other', hidden: true }));
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Clear' }));
     await nextStep(dlg);
     await userEvent.click(await card(dlg, 'Leave it empty'));
-    await nextStep(dlg);
-    await userEvent.click(within(dlg).getByRole('button', { name: 'Clear' }));
     await nextStep(dlg);
     expect(within(dlg).getByText(/No date is recorded/)).toBeInTheDocument();
     await confirmMove(dlg);
@@ -478,7 +483,6 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     await nextStep(dlg);
     await userEvent.click(await card(dlg, 'Leave it empty'));
     await nextStep(dlg);
-    await nextStep(dlg);
     expect(within(dlg).getByText(/is sent for RMA/)).toBeInTheDocument();
     await confirmMove(dlg);
     await waitFor(() => expect(moves(calls)).toHaveLength(1));
@@ -493,7 +497,7 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     const dlg = await openMove();
     await userEvent.click(await card(dlg, /Another bay/));
     await nextStep(dlg);
-    expect(within(dlg).getByText(/Step 2 of 5 · Which bay\?/)).toBeInTheDocument();
+    expect(within(dlg).getByText(/Step 2 of 4 · Which bay\?/)).toBeInTheDocument();
     const current = within(dlg).getByRole('radio', {
       name: 'Front bays, Bay 3, current bay, occupied by CCC2',
     });
@@ -501,11 +505,10 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     expect(within(current).getByText('Current')).toBeInTheDocument();
     expect(within(dlg).getByRole('button', { name: 'Next' })).toBeDisabled();
     await pickSlot(within(dlg), /Bay 2, empty/);
-    expect(within(dlg).getByText(/Step 2 of 5 · Which bay\?/)).toBeInTheDocument();
+    expect(within(dlg).getByText(/Step 2 of 4 · Which bay\?/)).toBeInTheDocument();
     await nextStep(dlg);
-    expect(within(dlg).getByText(/Step 3 of 5 · What goes into this bay\?/)).toBeInTheDocument();
+    expect(within(dlg).getByText(/Step 3 of 4 · What goes into this bay\?/)).toBeInTheDocument();
     await userEvent.click(await card(dlg, 'Leave it empty'));
-    await nextStep(dlg);
     await nextStep(dlg);
     expect(dlg.querySelector('.step-content')).toHaveTextContent(
       /CCC2 \(4 TB\) moves from Front bays, Bay 3 to Front bays, Bay 2 and keeps its pool membership/,
@@ -518,16 +521,16 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     });
   });
 
-  it('R73, R37, R62: an occupied bay adds the occupant step; retiring it needs a reason and names the moving drive as replaced-by', async () => {
+  it('R73, R37, R62: an occupied bay adds the occupant step; retiring it needs a reason (no preset)', async () => {
     const calls = setupServer();
     const dlg = await openMove();
     await userEvent.click(await card(dlg, /Another bay/));
     await nextStep(dlg);
     await pickSlot(within(dlg), /Bay 1, occupied by AAA0/);
-    expect(within(dlg).getByText(/Step 2 of 6 · Which bay\?/)).toBeInTheDocument();
+    expect(within(dlg).getByText(/Step 2 of 5 · Which bay\?/)).toBeInTheDocument();
     await nextStep(dlg);
     expect(
-      within(dlg).getByText(/Step 3 of 6 · What happens to the drive in that bay\?/),
+      within(dlg).getByText(/Step 3 of 5 · What happens to the drive in that bay\?/),
     ).toBeInTheDocument();
     expect(within(dlg).getByText(/AAA0/)).toBeInTheDocument();
     await userEvent.click(await card(dlg, /^Retire/));
@@ -541,7 +544,6 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     await userEvent.click(await within(dlg).findByRole('radio', { name: /SPARE8/ }));
     await nextStep(dlg);
     await nextStep(dlg);
-    await nextStep(dlg);
     expect(dlg.querySelector('.step-content')).toHaveTextContent(
       /AAA0 is retired \(replaced\) first/,
     );
@@ -551,7 +553,7 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
       destination: {
         kind: 'slot',
         slotId: 's0',
-        occupant: { action: 'retire', reason: 'replaced', note: null, replacedByDriveId: 'd2' },
+        occupant: { action: 'retire', reason: 'replaced', note: null },
       },
       replacement: { driveId: 'd8', poolId: 'p1', role: 'hot-spare' },
       date: expect.stringMatching(DATE),
@@ -562,19 +564,18 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     const calls = setupServer();
     const dlg = await openMove();
     await userEvent.click(await card(dlg, /Another bay/));
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Clear' }));
     await nextStep(dlg);
     await pickSlot(within(dlg), /Bay 1, occupied by AAA0/);
     await nextStep(dlg);
-    expect(within(dlg).queryByLabelText(/date/i)).not.toBeInTheDocument();
+    expect(within(dlg).queryByLabelText(/date|when/i)).not.toBeInTheDocument();
     await userEvent.click(await card(dlg, 'Send for RMA'));
     await nextStep(dlg);
     await userEvent.click(await card(dlg, 'Leave it empty'));
     await nextStep(dlg);
-    await userEvent.click(within(dlg).getByRole('button', { name: 'Clear' }));
-    await nextStep(dlg);
     await confirmMove(dlg);
     await waitFor(() => expect(moves(calls)).toHaveLength(1));
-    expect(moves(calls)[0]!.body).toEqual({
+    expect(moves(calls)[0]!.body).toMatchObject({
       destination: { kind: 'slot', slotId: 's0', occupant: { action: 'rma', note: null } },
       date: null,
     });
@@ -610,14 +611,12 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     await nextStep(dlg);
     await userEvent.click(await card(dlg, 'Leave it empty'));
     await nextStep(dlg);
-    await nextStep(dlg);
     await confirmMove(dlg);
     expect(
       await within(dlg).findByText(/What happens to the drive in that bay\?/),
     ).toBeInTheDocument();
     expect(moves(calls)).toHaveLength(1);
     await nextStep(dlg); // spare is preselected
-    await nextStep(dlg);
     await nextStep(dlg);
     await confirmMove(dlg);
     await waitFor(() => expect(moves(calls)).toHaveLength(2));
@@ -632,8 +631,7 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
         errorResponse(400, 'invalid', "A drive can't be moved before it was installed."),
     });
     const dlg = await openMove();
-    await toDate(dlg, /Spares shelf/);
-    await nextStep(dlg);
+    await toConfirm(dlg, /Spares shelf/);
     await confirmMove(dlg);
     expect(
       await within(dlg).findByText(/can't be moved before it was installed/),

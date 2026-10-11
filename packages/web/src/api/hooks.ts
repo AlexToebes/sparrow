@@ -6,6 +6,7 @@ import {
   driveSuggestionsResponseSchema,
   inboxResponseSchema,
   layoutSchema,
+  slotHistorySchema,
   statusResponseSchema,
   suggestionSummaryResponseSchema,
   type DriveStatus,
@@ -20,6 +21,7 @@ const poolsSchema = z.array(poolSummarySchema);
 export const queryKeys = {
   layout: ['layout'] as const,
   drives: (status?: DriveStatus) => ['drives', status ?? 'all'] as const,
+  slotHistory: (id: string) => ['slots', id, 'history'] as const,
   driveEvents: (id: string) => ['drives', id, 'events'] as const,
   inbox: ['inbox'] as const,
   providerStatus: ['provider-status'] as const,
@@ -43,6 +45,14 @@ export const useDriveEvents = (driveId: string | null) =>
     queryKey: queryKeys.driveEvents(driveId ?? ''),
     queryFn: () => apiGet(`/api/drives/${driveId}/events`, eventsSchema),
     enabled: driveId !== null,
+  });
+
+/** R74: the bay's history, newest first, computed by the server from the event log. */
+export const useSlotHistory = (slotId: string | null) =>
+  useQuery({
+    queryKey: queryKeys.slotHistory(slotId ?? ''),
+    queryFn: () => apiGet(`/api/slots/${slotId}/history`, slotHistorySchema),
+    enabled: slotId !== null,
   });
 
 export const useInbox = () =>

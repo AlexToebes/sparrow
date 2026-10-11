@@ -17,6 +17,8 @@ export interface StoryItem {
   /** R60: a retirement or RMA whose date is unknown; `date` is then the day it was logged ("recorded"). */
   retirementUnrecorded: boolean;
   kind: DriveEvent['type'];
+  /** The bay a plain install / removal entry is about, so the story can link to its history (R74). */
+  slot: { id: string; label: string } | null;
   title: string;
   detail: string | null;
   /** Gap since the previous item, "after 28 d", or null for the first one. */
@@ -107,6 +109,13 @@ function installedOnChange(e: DriveEvent): { from: string | null; to: string | n
 }
 
 const dateOrNotRecorded = (v: string | null) => v ?? 'not recorded';
+
+/** The bay of a plain drive-installed / drive-removed event; the stable slot id is the link target (R39). */
+function slotOf(e: DriveEvent): StoryItem['slot'] {
+  if (e.type !== 'drive-installed' && e.type !== 'drive-removed') return null;
+  const id = str(e.payload.slotId);
+  return id ? { id, label: str(e.payload.slotLabel) ?? 'this slot' } : null;
+}
 
 function where(p: Record<string, unknown>): string | null {
   const label = str(p.slotLabel);
@@ -252,6 +261,7 @@ export function buildStory(
         removalUnrecorded: false,
         retirementUnrecorded: false,
         kind: 'drive-installed',
+        slot: null,
         title: `Moved from ${moveWhere(o.event.payload, pair.event.payload, 'from')} to ${moveWhere(
           o.event.payload,
           pair.event.payload,
@@ -273,6 +283,7 @@ export function buildStory(
       removalUnrecorded: isUnrecordedRemoval(o.event),
       retirementUnrecorded: isUnrecordedRetirement(o.event),
       kind: o.event.type,
+      slot: slotOf(o.event),
       title,
       detail,
       gap,

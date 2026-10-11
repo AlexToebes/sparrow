@@ -2,14 +2,14 @@ import { useState } from 'react';
 import { Badge, Button, Text } from '@mantine/core';
 import type { Drive } from '@sparrow/shared';
 import { useDriveAction } from '../api/driveMutations';
-import { useDrivePools, useDrives } from '../api/hooks';
+import { useDrivePools } from '../api/hooks';
 import { formatBytes, formatRelative } from '../lib/format';
 import { HEALTH_WORD, type SlotView } from '../lib/health';
 import { AssignDialog } from './AssignDialog';
 import { ConfirmDialog } from './ConfirmDialog';
 import { DriveFormDialog } from './DriveFormDialog';
 import { InstalledOnDialog } from './InstalledOnDialog';
-import { LifeStory } from './LifeStory';
+import { HistorySection, type HistoryTab } from './HistorySection';
 import { MembershipSection } from './MembershipSection';
 import { MissingDrivePanel } from './MissingDrivePanel';
 import { MoveDialog } from './MoveDialog';
@@ -48,21 +48,19 @@ interface DriveDetailProps {
   view?: SlotView | null;
   /** "Front bays, Bay 3" for an installed drive. */
   where?: string | null;
+  /** Which History tab opens first (an installed drive; default Drive). */
+  historyTab?: HistoryTab;
 }
 
 type Dialog =
   'assign' | 'move' | 'move-retire' | 'edit' | 'installed-on' | 'retire' | 'reinstate' | null;
 
 /** One drive: facts, health (when in a slot), actions and life story. Used by the slot panel and the Drives page. */
-export function DriveDetail({ drive, view = null, where = null }: DriveDetailProps) {
+export function DriveDetail({ drive, view = null, where = null, historyTab }: DriveDetailProps) {
   const [dialog, setDialog] = useState<Dialog>(null);
   const pool = useDrivePools().get(drive.id);
-  const drives = useDrives();
   const reinstate = useDriveAction(drive.id, 'reinstate');
   const status = view?.status ?? null;
-  const replacedBy = drive.replacedByDriveId
-    ? (drives.data?.find((d) => d.id === drive.replacedByDriveId) ?? null)
-    : null;
   const close = () => setDialog(null);
 
   return (
@@ -180,16 +178,6 @@ export function DriveDetail({ drive, view = null, where = null }: DriveDetailPro
                 .filter(Boolean)
                 .join(' · ')}
             />
-            <Row
-              label="Replaced by"
-              value={
-                drive.replacedByDriveId
-                  ? `${replacedBy?.serial ?? drive.replacedByDriveId}${
-                      replacedBy?.capacityBytes ? ` (${formatBytes(replacedBy.capacityBytes)})` : ''
-                    }`
-                  : null
-              }
-            />
             <Row label="Retirement note" value={drive.retirementNote} />
           </>
         ) : null}
@@ -226,7 +214,11 @@ export function DriveDetail({ drive, view = null, where = null }: DriveDetailPro
       <SuggestedUpdates drive={drive} />
 
       {drive.status === 'installed' ? <MembershipSection drive={drive} /> : null}
-      <LifeStory driveId={drive.id} />
+      <HistorySection
+        drive={drive}
+        slotId={drive.status === 'installed' ? drive.slotId : null}
+        {...(historyTab ? { initialTab: historyTab } : {})}
+      />
 
       {dialog === 'assign' ? <AssignDialog driveId={drive.id} onClose={close} /> : null}
       {dialog === 'edit' ? <DriveFormDialog drive={drive} onClose={close} /> : null}

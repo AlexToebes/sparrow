@@ -66,6 +66,7 @@ export function useInvalidateAll() {
       [
         ['layout'],
         ['drives'],
+        ['slots'],
         ['status'],
         ['inbox'],
         ['pools'],

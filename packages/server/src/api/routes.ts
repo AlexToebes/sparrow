@@ -8,6 +8,7 @@ import { inboxRoutes } from './inbox.js';
 import { layoutRoutes } from './layout.js';
 import { poolRoutes } from './pools.js';
 import { providerStatusRoutes } from './provider-status.js';
+import { slotHistoryRoutes } from './slot-history.js';
 import { statusRoutes } from './status.js';
 import { suggestionRoutes } from './suggestions.js';
 
@@ -37,4 +38,6 @@ export const routeModules: FastifyPluginAsync<{ db: AppDb }>[] = [
   configInfoRoutes,
   // Post-MVP 5: suggested updates from provider observations (R72)
   suggestionRoutes,
+  // Post-MVP 7: bay history (R74)
+  slotHistoryRoutes,
 ];

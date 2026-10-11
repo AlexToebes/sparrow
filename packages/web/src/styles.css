@@ -1177,3 +1177,33 @@ body {
 .update-list li {
   padding: 4px 0;
 }
+
+/* Slot history (R74) */
+.history-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+.history-head .section-title {
+  margin: 0;
+}
+.story-link {
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.slot-history-item .story-title .mono {
+  font-weight: 600;
+}
+
+.history-cap {
+  font-weight: 400;
+  color: var(--sp-dim);
+}
+
+.history {
+  margin-top: 20px;
+}
