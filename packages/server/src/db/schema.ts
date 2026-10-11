@@ -129,12 +129,17 @@ export const pools = sqliteTable(
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     layoutLabel: text('layout_label'),
+    expectedMembers: integer('expected_members'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
   },
   (t) => [
     uniqueIndex('pools_name_unique').on(t.name),
     check('pools_name_not_empty', sql`length(${t.name}) > 0`),
+    check(
+      'pools_expected_members_min',
+      sql`${t.expectedMembers} IS NULL OR ${t.expectedMembers} >= 1`,
+    ),
   ],
 );
 

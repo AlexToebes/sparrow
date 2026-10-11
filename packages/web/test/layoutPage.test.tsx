@@ -79,12 +79,21 @@ function fixtures(over: { providerStale?: boolean } = {}) {
       ],
     },
     '/api/pools': [
-      { id: 'p1', name: 'tank', layoutLabel: 'raidz2', createdAt: T, updatedAt: T, memberCount: 1 },
+      {
+        id: 'p1',
+        name: 'tank',
+        layoutLabel: 'raidz2',
+        expectedMembers: null,
+        createdAt: T,
+        updatedAt: T,
+        memberCount: 1,
+      },
     ],
     '/api/pools/p1': {
       id: 'p1',
       name: 'tank',
       layoutLabel: 'raidz2',
+      expectedMembers: null,
       createdAt: T,
       updatedAt: T,
       memberCount: 1,

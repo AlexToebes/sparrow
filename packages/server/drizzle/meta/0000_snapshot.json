@@ -358,7 +358,7 @@
       "checkConstraints": {
         "events_type_enum": {
           "name": "events_type_enum",
-          "value": "type IN ('drive-created', 'drive-updated', 'drive-installed', 'drive-removed', 'drive-retired', 'drive-reinstated', 'drive-sent-for-rma', 'drive-linked', 'pool-joined', 'pool-left', 'pool-role-changed')"
+          "value": "type IN ('drive-created', 'drive-updated', 'drive-installed', 'drive-removed', 'drive-retired', 'drive-reinstated', 'drive-sent-for-rma', 'drive-linked', 'pool-joined', 'pool-left', 'pool-role-changed', 'health-changed', 'suggestion-dismissed', 'enclosure-created', 'enclosure-renamed', 'enclosure-deleted', 'grid-created', 'grid-updated', 'grid-deleted', 'slot-relabeled', 'pool-created', 'pool-updated', 'pool-deleted')"
         }
       }
     },
@@ -590,6 +590,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "expected_members": {
+          "name": "expected_members",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -619,6 +626,10 @@
         "pools_name_not_empty": {
           "name": "pools_name_not_empty",
           "value": "length(\"pools\".\"name\") > 0"
+        },
+        "pools_expected_members_min": {
+          "name": "pools_expected_members_min",
+          "value": "\"pools\".\"expected_members\" IS NULL OR \"pools\".\"expected_members\" >= 1"
         }
       }
     },

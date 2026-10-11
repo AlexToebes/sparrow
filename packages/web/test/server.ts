@@ -108,12 +108,21 @@ export function setupServer(
         })),
     },
     'GET /api/pools': [
-      { id: 'p1', name: 'tank', layoutLabel: 'raidz2', createdAt: T, updatedAt: T, memberCount: 0 },
+      {
+        id: 'p1',
+        name: 'tank',
+        layoutLabel: 'raidz2',
+        expectedMembers: null,
+        createdAt: T,
+        updatedAt: T,
+        memberCount: 0,
+      },
     ],
     'GET /api/pools/p1': {
       id: 'p1',
       name: 'tank',
       layoutLabel: 'raidz2',
+      expectedMembers: null,
       createdAt: T,
       updatedAt: T,
       memberCount: 0,

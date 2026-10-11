@@ -125,6 +125,17 @@ function backfillInstalledOn(input: unknown): unknown {
   return { ...input, data: { ...input.data, drives: upgraded } };
 }
 
+/** R41, R42: export files written before expectedMembers existed import with it set to null. */
+function backfillPoolExpectedMembers(input: unknown): unknown {
+  if (!isRecord(input) || !isRecord(input.data)) return input;
+  const { pools: poolRows } = input.data;
+  if (!Array.isArray(poolRows)) return input;
+  const upgraded = poolRows.map((p) =>
+    !isRecord(p) || 'expectedMembers' in p ? p : { ...p, expectedMembers: null },
+  );
+  return { ...input, data: { ...input.data, pools: upgraded } };
+}
+
 /** Every id is unique per table and every foreign key points at an existing row in the file. */
 function checkReferences(data: ExportData): string[] {
   const problems: string[] = [];
@@ -179,7 +190,9 @@ export function importData(db: AppDb, input: unknown, opts: ImportOptions): Impo
   checkVersion(input);
 
   // 2. Full structural validation, then referential integrity, all before touching the DB.
-  const parsed = exportFileSchema.safeParse(backfillInstalledOn(input));
+  const parsed = exportFileSchema.safeParse(
+    backfillPoolExpectedMembers(backfillInstalledOn(input)),
+  );
   if (!parsed.success) {
     throw invalid('Export file failed validation', parsed.error.issues);
   }

@@ -82,12 +82,21 @@ function setup(extra: Record<string, Handler> = {}, inbox: Record<string, unknow
       slots: [],
     },
     'GET /api/pools': [
-      { id: 'p1', name: 'tank', layoutLabel: 'raidz2', createdAt: T, updatedAt: T, memberCount: 1 },
+      {
+        id: 'p1',
+        name: 'tank',
+        layoutLabel: 'raidz2',
+        expectedMembers: null,
+        createdAt: T,
+        updatedAt: T,
+        memberCount: 1,
+      },
     ],
     'GET /api/pools/p1': {
       id: 'p1',
       name: 'tank',
       layoutLabel: 'raidz2',
+      expectedMembers: null,
       createdAt: T,
       updatedAt: T,
       memberCount: 1,

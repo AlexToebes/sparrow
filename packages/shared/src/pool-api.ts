@@ -6,11 +6,13 @@ import { membershipRoleSchema } from './enums.js';
 
 const name = z.string().trim().min(1, 'Name is required').max(100);
 const layoutLabel = z.string().trim().min(1).max(50).nullish();
+const expectedMembers = z.number().int().min(1).max(100).nullish();
 
 /** POST /api/pools. */
 export const createPoolInputSchema = z.strictObject({
   name,
   layoutLabel,
+  expectedMembers,
 });
 export type CreatePoolInput = z.infer<typeof createPoolInputSchema>;
 
@@ -19,10 +21,14 @@ export const updatePoolInputSchema = z
   .strictObject({
     name: name.optional(),
     layoutLabel,
+    expectedMembers,
   })
-  .refine((v) => v.name !== undefined || v.layoutLabel !== undefined, {
-    message: 'Nothing to update',
-  });
+  .refine(
+    (v) => v.name !== undefined || v.layoutLabel !== undefined || v.expectedMembers !== undefined,
+    {
+      message: 'Nothing to update',
+    },
+  );
 export type UpdatePoolInput = z.infer<typeof updatePoolInputSchema>;
 
 /** POST /api/drives/:id/membership. Role defaults to data (R35); startedAt defaults to now. */

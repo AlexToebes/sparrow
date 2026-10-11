@@ -352,3 +352,36 @@ describe('R43: failed imports leave data untouched', () => {
     expect(backupName).toMatch(/^sparrow-backup-.*\.json$/);
   });
 });
+
+describe('R72: pool expectedMembers in export and import', () => {
+  it('round-trips expectedMembers through export and import', () => {
+    createPool(db(), { name: 'tank', layoutLabel: null, expectedMembers: 6 });
+    const file = exportData(db());
+    expect(file.data.pools[0]?.expectedMembers).toBe(6);
+
+    const fresh = openDatabase(':memory:');
+    try {
+      importData(fresh.db, JSON.parse(JSON.stringify(file)), { backupDir });
+      expect(exportData(fresh.db).data.pools[0]?.expectedMembers).toBe(6);
+    } finally {
+      fresh.sqlite.close();
+    }
+  });
+
+  it('R42: an export written before expectedMembers existed imports with it set to null', () => {
+    createPool(db(), { name: 'tank', layoutLabel: null });
+    const old = JSON.parse(JSON.stringify(exportData(db()))) as {
+      data: { pools: Record<string, unknown>[] };
+    };
+    for (const p of old.data.pools) delete p.expectedMembers;
+    expect(old.data.pools[0]).not.toHaveProperty('expectedMembers');
+
+    const fresh = openDatabase(':memory:');
+    try {
+      importData(fresh.db, old, { backupDir });
+      expect(exportData(fresh.db).data.pools[0]?.expectedMembers).toBeNull();
+    } finally {
+      fresh.sqlite.close();
+    }
+  });
+});
