@@ -15,11 +15,12 @@ export function LifeStory({ driveId }: { driveId: string }) {
   const parts = [
     sum.inService > 0 ? `${formatDuration(sum.inService)} in service` : null,
     sum.installUnrecorded ? 'Installation date not recorded' : null,
+    sum.removalUnrecorded ? 'Removal date not recorded' : null,
     sum.onShelf > 0 ? `${formatDuration(sum.onShelf)} on the shelf` : null,
   ].filter(Boolean);
   return (
     <section aria-label="Life story">
-      <h3 className="section-title">Life story</h3>
+      <h3 className="section-title">History</h3>
       {parts.length > 0 ? (
         <Text size="sm" c="dimmed" mb="sm">
           {parts.join(' · ')}
@@ -31,7 +32,7 @@ export function LifeStory({ driveId }: { driveId: string }) {
             key={item.id}
             className="story-item"
             data-kind={item.kind}
-            data-unrecorded={item.unrecorded ? 'true' : undefined}
+            data-unrecorded={item.unrecorded || item.removalUnrecorded ? 'true' : undefined}
           >
             <span className="story-dot" aria-hidden="true" />
             <div className="story-head">
@@ -39,6 +40,9 @@ export function LifeStory({ driveId }: { driveId: string }) {
                 <span className="mono story-date">{item.date}</span>
                 {item.unrecorded ? (
                   <span className="story-recorded"> · date recorded, install date unknown</span>
+                ) : null}
+                {item.removalUnrecorded ? (
+                  <span className="story-recorded"> · date recorded, removal date unknown</span>
                 ) : null}
                 {item.recorded ? (
                   <span className="story-recorded"> · recorded {item.recorded}</span>

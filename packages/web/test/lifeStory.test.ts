@@ -129,3 +129,93 @@ describe('life story with a backdated installation (R68)', () => {
     expect(sum.onShelf).toBe(31 * DAY + (NOW - Date.parse('2026-03-01T00:00:00.000Z')));
   });
 });
+
+describe('life story with an optional removal date (R69)', () => {
+  const created = ev('drive-created', '2022-01-01T08:00:00.000Z');
+  const installed = ev('drive-installed', '2022-02-01T10:00:00.000Z', {
+    slotLabel: 'Bay 3',
+    installedOn: '2022-02-01',
+  });
+  const INSTALLED_AT = Date.parse('2022-02-01T10:00:00.000Z'); // same day as installedOn: the exact time is kept
+  const edited = ev('drive-updated', '2026-09-15T08:00:00.000Z', { changes: { notes: {} } });
+
+  it('orders a backdated removal by removedOn and shows when it was recorded', () => {
+    // Logged on 11 Oct but the drive came out on 1 Sep, before a note edited on 15 Sep.
+    const removed = ev('drive-removed', '2026-10-11T09:00:00.000Z', {
+      slotLabel: 'Bay 3',
+      removedOn: '2026-09-01',
+    });
+    const story = buildStory(newestFirst(created, installed, edited, removed));
+    expect(story.map((s) => s.kind)).toEqual([
+      'drive-created',
+      'drive-installed',
+      'drive-removed',
+      'drive-updated',
+    ]);
+    const item = story[2]!;
+    expect(item).toMatchObject({ date: '2026-09-01', removalUnrecorded: false });
+    expect(item.recorded).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(item.recorded).not.toBe('2026-09-01');
+    expect(item.title).toBe('Removed from Bay 3');
+  });
+
+  it('counts in-service time up to the real removal date and shelf time after it', () => {
+    const removed = ev('drive-removed', '2026-10-11T09:00:00.000Z', {
+      slotLabel: 'Bay 3',
+      removedOn: '2026-09-01',
+    });
+    const sum = summarizeStory(newestFirst(created, installed, removed), NOW);
+    expect(sum.inService).toBe(Date.parse('2026-09-01T00:00:00.000Z') - INSTALLED_AT);
+    expect(sum.onShelf).toBe(
+      INSTALLED_AT -
+        Date.parse('2022-01-01T08:00:00.000Z') +
+        (NOW - Date.parse('2026-09-01T00:00:00.000Z')),
+    );
+    expect(sum.removalUnrecorded).toBe(false);
+  });
+
+  it('marks a null removedOn as not recorded, keeps it at its logged position and does not count a recording date as real', () => {
+    const removed = ev('drive-removed', '2026-10-11T09:00:00.000Z', {
+      slotLabel: 'Bay 3',
+      removedOn: null,
+    });
+    const log = newestFirst(created, installed, removed);
+    const item = buildStory(log).at(-1)!;
+    expect(item.title).toBe('Removed from Bay 3 (removal date not recorded)');
+    expect(item).toMatchObject({ removalUnrecorded: true, unrecorded: false, recorded: null });
+    const sum = summarizeStory(log, NOW);
+    expect(sum.inService).toBe(0);
+    expect(sum.onShelf).toBe(INSTALLED_AT - Date.parse('2022-01-01T08:00:00.000Z'));
+    expect(sum.removalUnrecorded).toBe(true);
+    expect(sum.installUnrecorded).toBe(false);
+  });
+
+  it('falls back to the logged time when an older event has no removedOn key', () => {
+    const removed = ev('drive-removed', '2026-10-11T09:00:00.000Z', { slotLabel: 'Bay 3' });
+    const log = newestFirst(created, installed, edited, removed);
+    const story = buildStory(log);
+    expect(story.at(-1)!).toMatchObject({
+      kind: 'drive-removed',
+      removalUnrecorded: false,
+      recorded: null,
+    });
+    expect(story.at(-1)!.title).toBe('Removed from Bay 3');
+    const sum = summarizeStory(log, NOW);
+    expect(sum.removalUnrecorded).toBe(false);
+    expect(sum.inService).toBe(Date.parse('2026-10-11T09:00:00.000Z') - INSTALLED_AT);
+  });
+
+  it('a retirement from a slot carries removedOn equal to the retirement date', () => {
+    const removed = ev('drive-removed', '2026-10-11T09:00:00.000Z', {
+      slotLabel: 'Bay 3',
+      removedOn: '2026-08-20',
+    });
+    const retired = ev('drive-retired', '2026-10-11T09:00:00.000Z', {
+      reason: 'failed',
+      date: '2026-08-20',
+    });
+    const story = buildStory(newestFirst(created, installed, removed, retired));
+    expect(story.map((s) => s.kind).slice(-2)).toEqual(['drive-removed', 'drive-retired']);
+    expect(story.at(-2)!.date).toBe('2026-08-20');
+  });
+});

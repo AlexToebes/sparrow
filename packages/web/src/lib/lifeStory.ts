@@ -11,6 +11,8 @@ export interface StoryItem {
   recorded: string | null;
   /** R68: an install whose date is unknown; `date` is then the day it was logged ("recorded"). */
   unrecorded: boolean;
+  /** R69: a removal whose date is unknown; `date` is then the day it was logged ("recorded"). */
+  removalUnrecorded: boolean;
   kind: DriveEvent['type'];
   title: string;
   detail: string | null;
@@ -32,12 +34,18 @@ const midnight = (date: string) => `${date}T00:00:00.000Z`;
 const isUnrecordedInstall = (e: DriveEvent): boolean =>
   e.type === 'drive-installed' && 'installedOn' in e.payload && e.payload.installedOn === null;
 
+/** R69: a drive-removed event that says the removal date was not recorded (explicit null). */
+const isUnrecordedRemoval = (e: DriveEvent): boolean =>
+  e.type === 'drive-removed' && 'removedOn' in e.payload && e.payload.removedOn === null;
+
 /**
- * R68: the event log records WHEN a change was made (`at`); an installation can describe an earlier
+ * R68, R69: the event log records WHEN a change was made (`at`); an installation can describe an earlier
  * day. The story orders by the effective instant: for drive-installed the payload's installedOn
  * (unless it is the very day the event was logged, then `at` keeps same-day order exact), for
  * pool-joined the membership start. Midnight-UTC instants stand for calendar dates (how the server
  * stores a backdated start), so they are shown as the date itself, never shifted by the time zone.
+ * R69: drive-removed works like drive-installed with `removedOn`; when the key is absent (older
+ * events) or null (not recorded) the instant stays the logging time.
  */
 function effective(e: DriveEvent): { at: string; date: string; recorded: string | null } {
   const logged = formatDate(e.at);
@@ -45,6 +53,12 @@ function effective(e: DriveEvent): { at: string; date: string; recorded: string 
   let date = logged;
   if (e.type === 'drive-installed') {
     const on = dateStr(e.payload.installedOn);
+    if (on !== null) {
+      if (on !== e.at.slice(0, 10)) at = midnight(on);
+      date = on;
+    }
+  } else if (e.type === 'drive-removed') {
+    const on = dateStr(e.payload.removedOn);
     if (on !== null) {
       if (on !== e.at.slice(0, 10)) at = midnight(on);
       date = on;
@@ -128,7 +142,12 @@ function describe(
         detail: join(str(p.role), note),
       };
     case 'drive-removed':
-      return { title: `Removed from ${where(p) ?? 'a slot'}`, detail: note };
+      return {
+        title: `Removed from ${where(p) ?? 'a slot'}${
+          isUnrecordedRemoval(e) ? ' (removal date not recorded)' : ''
+        }`,
+        detail: note,
+      };
     case 'drive-retired':
       return {
         title: 'Retired',
@@ -171,6 +190,7 @@ export function buildStory(
       date: o.date,
       recorded: o.recorded,
       unrecorded: isUnrecordedInstall(o.event),
+      removalUnrecorded: isUnrecordedRemoval(o.event),
       kind: o.event.type,
       title,
       detail,
@@ -187,6 +207,12 @@ export interface StorySummary {
    * `inService`: the day it was logged is when it was recorded, not when it went in.
    */
   installUnrecorded: boolean;
+  /**
+   * R69: a drive was taken out on an unknown date. The installed time before it is NOT counted in
+   * `inService` and the shelf time after it is NOT counted in `onShelf`: the day the removal was
+   * logged is when it was recorded, not when it happened.
+   */
+  removalUnrecorded: boolean;
 }
 
 /** Time installed and time on the shelf, from the event sequence up to `end` (now, or retirement). */
@@ -194,15 +220,21 @@ export function summarizeStory(
   eventsNewestFirst: DriveEvent[],
   now: number = Date.now(),
 ): StorySummary {
-  const out: StorySummary = { inService: 0, onShelf: 0, installUnrecorded: false };
+  const out: StorySummary = {
+    inService: 0,
+    onShelf: 0,
+    installUnrecorded: false,
+    removalUnrecorded: false,
+  };
   type Phase = 'shelf' | 'installed' | 'retired' | null;
   let state: Phase = null as Phase;
   let since = 0;
-  let known = true; // is the start of the running installed phase a real installation date?
-  const close = (at: number) => {
-    if (state === 'shelf') out.onShelf += Math.max(0, at - since);
-    if (state === 'installed' && known) out.inService += Math.max(0, at - since);
+  let known = true; // is the start of the running phase a real date (R68, R69)?
+  const close = (at: number, endKnown: boolean) => {
+    if (state === 'shelf' && known) out.onShelf += Math.max(0, at - since);
+    if (state === 'installed' && known && endKnown) out.inService += Math.max(0, at - since);
     if (state === 'installed' && !known) out.installUnrecorded = true;
+    if (state === 'installed' && !endKnown) out.removalUnrecorded = true;
   };
   for (const o of orderedByEffective(eventsNewestFirst)) {
     const at = Date.parse(o.at);
@@ -222,10 +254,10 @@ export function summarizeStory(
               ? 'retired'
               : state;
     if (next !== state) {
-      close(at);
+      close(at, !isUnrecordedRemoval(e));
       state = next;
       since = at;
-      known = !isUnrecordedInstall(e);
+      known = !isUnrecordedInstall(e) && !isUnrecordedRemoval(e);
     }
     // Editing the installation date moves the start of the phase that is running.
     const edit = installedOnChange(e);
@@ -236,6 +268,6 @@ export function summarizeStory(
       known = false;
     }
   }
-  close(now);
+  close(now, true);
   return out;
 }
