@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent from './user';
 import { App } from '../src/App';
 import { makeDrive, makeSlot, renderApp } from './utils';
 

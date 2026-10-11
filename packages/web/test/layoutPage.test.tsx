@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent from './user';
 import { App } from '../src/App';
 import { makeDrive, makeSlot, mockApi, renderApp } from './utils';
 

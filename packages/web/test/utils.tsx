@@ -1,17 +1,21 @@
 import type { ReactElement } from 'react';
 import { render, waitFor, within } from '@testing-library/react';
 import { expect } from 'vitest';
-import userEvent from '@testing-library/user-event';
-import { MantineProvider } from '@mantine/core';
+import userEvent from './user';
+import { MantineProvider, mergeThemeOverrides } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { theme } from '../src/theme';
 import type { Drive, LayoutSlot } from '@sparrow/shared';
 
+// Transitions off: with respectReducedMotion Mantine skips them when the media query matches, and
+// test/setup.ts answers prefers-reduced-motion with true. Portals stay on (D8 relies on them).
+const testTheme = mergeThemeOverrides(theme, { respectReducedMotion: true });
+
 export function renderApp(ui: ReactElement, route = '/') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MantineProvider theme={theme}>
+    <MantineProvider theme={testTheme}>
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
       </QueryClientProvider>

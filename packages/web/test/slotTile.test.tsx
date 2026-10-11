@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent from './user';
 import { MantineProvider } from '@mantine/core';
 import type { SlotStatus } from '@sparrow/shared';
 import { SlotTile } from '../src/components/SlotTile';

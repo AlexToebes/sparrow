@@ -19,5 +19,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./test/setup.ts'],
     css: false,
+    // Full-suite load (parallel jsdom workers) made multi-step dialog flows exceed the 5 s default.
+    testTimeout: 20000,
+    hookTimeout: 20000,
   },
 });

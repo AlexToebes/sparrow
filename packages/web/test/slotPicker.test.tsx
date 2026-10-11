@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { describe, expect, it } from 'vitest';
 import { screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent from './user';
 import { SlotPicker } from '../src/components/SlotPicker';
 import { makeSlot, renderApp } from './utils';
 import { enclosure, fixtureData, grid, setupServer } from './server';

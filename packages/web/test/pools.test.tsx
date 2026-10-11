@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent from './user';
 import { App } from '../src/App';
 import { sizeCheckText } from '../src/lib/poolSize';
 import { errorResponse, posts, setupServer, T } from './server';
