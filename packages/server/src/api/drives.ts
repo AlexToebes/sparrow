@@ -2,11 +2,12 @@ import type { FastifyPluginAsync } from 'fastify';
 import {
   createDriveInputSchema,
   listDrivesQuerySchema,
+  recentEventsQuerySchema,
   updateDriveInputSchema,
 } from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
 import { createDrive, getDrive, listDrives, updateDrive } from '../core/drives.js';
-import { listDriveEvents } from '../core/events.js';
+import { listDriveEvents, listRecentEvents } from '../core/events.js';
 
 /** Drive routes (R3, R14, D5). Thin: parse, call the service, return. There is no DELETE route. */
 export const driveRoutes: FastifyPluginAsync<{ db: AppDb }> = async (app, opts) => {
@@ -28,6 +29,11 @@ export const driveRoutes: FastifyPluginAsync<{ db: AppDb }> = async (app, opts) 
 
   app.patch<{ Params: { id: string } }>('/api/drives/:id', async (req) =>
     updateDrive(db, req.params.id, updateDriveInputSchema.parse(req.body)),
+  );
+
+  // R75: the latest events of all kinds (drive and non-drive), newest first.
+  app.get('/api/events/recent', async (req) =>
+    listRecentEvents(db, recentEventsQuerySchema.parse(req.query).limit),
   );
 
   app.get<{ Params: { id: string } }>('/api/drives/:id/events', async (req) => {

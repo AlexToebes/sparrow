@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { sql } from 'drizzle-orm';
 import { layoutSchema } from '@sparrow/shared';
+import { events as eventsTable } from '../src/db/schema.js';
 import { buildApp } from '../src/api/app.js';
 import { createLayoutService, seedInitialLayout } from '../src/core/layout.js';
 import { DomainError } from '../src/core/errors.js';
@@ -308,5 +310,83 @@ describe('HTTP API (app.inject)', () => {
     });
     expect(invalid.statusCode).toBe(400);
     await app.close();
+  });
+});
+
+describe('R75: layout changes write events with no drive', () => {
+  const allEvents = () =>
+    opened.db
+      .select()
+      .from(eventsTable)
+      .orderBy(sql`rowid`)
+      .all();
+
+  it('records enclosure, grid and slot changes with their details', () => {
+    const svc = createLayoutService(opened.db);
+    const enc = svc.createEnclosure({ name: 'NAS' });
+    svc.renameEnclosure(enc.id, { name: 'Vault' });
+    svc.renameEnclosure(enc.id, { name: 'Vault' }); // no-op
+    const grid = svc.createGrid(enc.id, {
+      name: 'Front',
+      rows: 1,
+      columns: 2,
+      orientation: 'landscape',
+    });
+    svc.updateGrid(grid.id, { name: 'Bays', rows: 2 });
+    svc.updateGrid(grid.id, { name: 'Bays' }); // no-op
+    const slot = svc.getLayout().enclosures[0]!.grids[0]!.slots[0]!;
+    svc.updateSlotLabel(slot.id, { label: 'A1' });
+    svc.updateSlotLabel(slot.id, { label: 'A1' }); // no-op
+    svc.deleteGrid(grid.id);
+    svc.deleteEnclosure(enc.id);
+
+    const rows = allEvents();
+    expect(rows.map((e) => e.type)).toEqual([
+      'enclosure-created',
+      'enclosure-renamed',
+      'grid-created',
+      'grid-updated',
+      'slot-relabeled',
+      'grid-deleted',
+      'enclosure-deleted',
+    ]);
+    expect(rows.every((e) => e.driveId === null)).toBe(true);
+    expect(rows[1]!.payload).toMatchObject({ enclosureId: enc.id, from: 'NAS', to: 'Vault' });
+    expect(rows[3]!.payload).toMatchObject({
+      gridId: grid.id,
+      enclosureId: enc.id,
+      changes: { name: { from: 'Front', to: 'Bays' }, rows: { from: 1, to: 2 } },
+    });
+    expect(rows[4]!.payload).toMatchObject({
+      slotId: slot.id,
+      gridId: grid.id,
+      from: null,
+      to: 'A1',
+    });
+    expect(rows[5]!.payload).toMatchObject({ gridId: grid.id, name: 'Bays' });
+    expect(rows[6]!.payload).toMatchObject({ enclosureId: enc.id, name: 'Vault' });
+  });
+
+  it('a refused change (occupied slot) writes no event', () => {
+    const svc = createLayoutService(opened.db);
+    const enc = svc.createEnclosure({ name: 'NAS' });
+    const grid = svc.createGrid(enc.id, {
+      name: 'Front',
+      rows: 1,
+      columns: 2,
+      orientation: 'landscape',
+    });
+    const slot = svc.getLayout().enclosures[0]!.grids[0]!.slots[1]!;
+    installDrive(slot.id);
+    const before = allEvents().length;
+    expect(() => svc.updateGrid(grid.id, { columns: 1 })).toThrow(DomainError);
+    expect(() => svc.deleteGrid(grid.id)).toThrow(DomainError);
+    expect(() => svc.deleteEnclosure(enc.id)).toThrow(DomainError);
+    expect(allEvents().length).toBe(before);
+  });
+
+  it('the first-run seed writes no events', () => {
+    seedInitialLayout(opened.db);
+    expect(allEvents()).toEqual([]);
   });
 });

@@ -16,7 +16,12 @@ export const providerStatusSchema = z.object({
 export type ProviderStatus = z.infer<typeof providerStatusSchema>;
 
 /** GET /api/pools (core listPools). */
-export const poolSummarySchema = poolSchema.extend({ memberCount: z.number().int().min(0) });
+export const poolSizeCheckSchema = z.enum(['ok', 'fewer', 'more']);
+export const poolSummarySchema = poolSchema.extend({
+  memberCount: z.number().int().min(0),
+  /** R34: null when the pool has no expected size. */
+  sizeCheck: poolSizeCheckSchema.nullable(),
+});
 export type PoolSummary = z.infer<typeof poolSummarySchema>;
 
 /** GET /api/pools/:id (core getPool). Members are the open memberships. */
@@ -26,6 +31,7 @@ export const poolDetailSchema = poolSummarySchema.extend({
       membershipId: idSchema,
       driveId: idSchema,
       serial: z.string(),
+      capacityBytes: z.number().nullable(),
       role: membershipRoleSchema,
       startedAt: timestampSchema,
       slotLabel: z.string().nullable(),

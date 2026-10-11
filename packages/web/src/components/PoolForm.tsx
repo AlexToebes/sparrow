@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { Alert, Button, Modal, Skeleton, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Modal, Text, TextInput } from '@mantine/core';
 import { createPoolInputSchema, updatePoolInputSchema } from '@sparrow/shared';
-import { usePools } from '../api/hooks';
 import { useCreatePool, useDeletePool, useUpdatePool } from '../api/poolMutations';
 import type { PoolSummary } from '../api/schemas';
 import { ApiError } from '../api/client';
@@ -9,16 +8,25 @@ import { ConfirmDialog } from './ConfirmDialog';
 
 const orNull = (s: string) => (s.trim() === '' ? null : s.trim());
 
-function PoolForm({ pool, onClose }: { pool: PoolSummary | null; onClose: () => void }) {
+/** Create or edit a pool (R30): name, layout label and the optional expected drive count (R34). */
+export function PoolForm({ pool, onClose }: { pool: PoolSummary | null; onClose: () => void }) {
   const create = useCreatePool();
   const update = useUpdatePool(pool?.id ?? '');
   const [name, setName] = useState(pool?.name ?? '');
   const [label, setLabel] = useState(pool?.layoutLabel ?? '');
+  const [expected, setExpected] = useState(
+    pool?.expectedMembers != null ? String(pool.expectedMembers) : '',
+  );
   const [error, setError] = useState<string | null>(null);
   const pending = create.isPending || update.isPending;
 
   const save = () => {
-    const body = { name, layoutLabel: orNull(label) };
+    const expectedText = expected.trim();
+    const expectedMembers = expectedText === '' ? null : Number(expectedText);
+    if (expectedMembers !== null && !Number.isInteger(expectedMembers)) {
+      return setError('Expected drives must be a whole number.');
+    }
+    const body = { name, layoutLabel: orNull(label), expectedMembers };
     const onError = (e: Error) =>
       setError(e instanceof ApiError ? e.message : 'Could not save the pool.');
     const opts = { onSuccess: onClose, onError };
@@ -50,6 +58,14 @@ function PoolForm({ pool, onClose }: { pool: PoolSummary | null; onClose: () => 
         value={label}
         onChange={(e) => setLabel(e.currentTarget.value)}
       />
+      <TextInput
+        label="Expected drives"
+        description="Optional. Sparrow warns when the pool has fewer or more drives than this."
+        mt="sm"
+        inputMode="numeric"
+        value={expected}
+        onChange={(e) => setExpected(e.currentTarget.value)}
+      />
       {error ? (
         <Alert color="red" mt="sm" role="alert">
           {error}
@@ -67,7 +83,7 @@ function PoolForm({ pool, onClose }: { pool: PoolSummary | null; onClose: () => 
   );
 }
 
-function DeletePool({ pool, onClose }: { pool: PoolSummary; onClose: () => void }) {
+export function DeletePool({ pool, onClose }: { pool: PoolSummary; onClose: () => void }) {
   const del = useDeletePool(pool.id);
   return (
     <ConfirmDialog
@@ -83,64 +99,5 @@ function DeletePool({ pool, onClose }: { pool: PoolSummary; onClose: () => void 
         a member; once drives have belonged to it, its history is kept and it cannot be deleted.
       </Text>
     </ConfirmDialog>
-  );
-}
-
-/** Pool management (R29, R30): list with member counts, create, rename and label, delete when allowed. */
-export function PoolsSection() {
-  const pools = usePools();
-  const [form, setForm] = useState<PoolSummary | 'new' | null>(null);
-  const [deleting, setDeleting] = useState<PoolSummary | null>(null);
-
-  return (
-    <section className="card" aria-label="Pools">
-      <div className="card-head">
-        <h2 className="card-title">Pools</h2>
-        <Button size="compact-md" onClick={() => setForm('new')}>
-          New pool
-        </Button>
-      </div>
-      <Text size="sm" c="dimmed" mb="sm">
-        Pools group drives (for example a ZFS pool). A drive joins a pool when you assign it to a
-        slot, or later from its detail.
-      </Text>
-      {pools.isPending ? <Skeleton height={60} /> : null}
-      {pools.isError ? <Text c="red">Could not load the pools.</Text> : null}
-      {pools.data?.length === 0 ? <Text c="dimmed">No pools yet.</Text> : null}
-      {pools.data?.map((p) => (
-        <div key={p.id} className="pool-row">
-          <div>
-            <strong>{p.name}</strong>
-            {p.layoutLabel ? <span className="dim"> · {p.layoutLabel}</span> : null}
-            <div className="dim">
-              {p.memberCount} {p.memberCount === 1 ? 'member' : 'members'}
-            </div>
-          </div>
-          <div className="inline-form">
-            <Button
-              size="compact-md"
-              variant="default"
-              aria-label={`Edit ${p.name}`}
-              onClick={() => setForm(p)}
-            >
-              Edit
-            </Button>
-            <Button
-              size="compact-md"
-              variant="light"
-              color="red"
-              aria-label={`Delete ${p.name}`}
-              onClick={() => setDeleting(p)}
-            >
-              Delete
-            </Button>
-          </div>
-        </div>
-      ))}
-      {form !== null ? (
-        <PoolForm pool={form === 'new' ? null : form} onClose={() => setForm(null)} />
-      ) : null}
-      {deleting ? <DeletePool pool={deleting} onClose={() => setDeleting(null)} /> : null}
-    </section>
   );
 }

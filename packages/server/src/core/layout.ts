@@ -11,6 +11,7 @@ import type { AppDb } from '../db/client.js';
 import * as repo from '../db/layout-repo.js';
 import type { EnclosureRow, GridRow, SlotRow, Tx } from '../db/layout-repo.js';
 import { conflict, notFound } from './errors.js';
+import { recordEvent } from './events.js';
 
 /** app_meta key that records the one-time seeding (R5). */
 export const LAYOUT_SEEDED_KEY = 'layout.seeded';
@@ -154,14 +155,27 @@ export function createLayoutService(db: AppDb) {
       return run((tx) => {
         const row = makeEnclosure(input.name);
         repo.insertEnclosure(tx, row);
+        recordEvent(tx, {
+          driveId: null,
+          type: 'enclosure-created',
+          payload: { enclosureId: row.id, name: row.name },
+        });
         return row;
       });
     },
 
     renameEnclosure(id: string, input: CreateEnclosureInput): EnclosureRow {
       return run((tx) => {
-        const row = { ...requireEnclosure(tx, id), name: input.name, updatedAt: nowIso() };
+        const before = requireEnclosure(tx, id);
+        const row = { ...before, name: input.name, updatedAt: nowIso() };
         repo.updateEnclosure(tx, row);
+        if (before.name !== row.name) {
+          recordEvent(tx, {
+            driveId: null,
+            type: 'enclosure-renamed',
+            payload: { enclosureId: id, name: row.name, from: before.name, to: row.name },
+          });
+        }
         return row;
       });
     },
@@ -183,6 +197,11 @@ export function createLayoutService(db: AppDb) {
         );
         for (const grid of gridRows) repo.deleteGrid(tx, grid.id);
         repo.deleteEnclosure(tx, id);
+        recordEvent(tx, {
+          driveId: null,
+          type: 'enclosure-deleted',
+          payload: { enclosureId: id, name: enclosure.name, gridCount: gridRows.length },
+        });
       });
     },
 
@@ -193,6 +212,18 @@ export function createLayoutService(db: AppDb) {
         const grid = makeGrid(enclosureId, input);
         repo.insertGrid(tx, grid);
         repo.insertSlots(tx, makeSlots(grid.id, positionsUpTo(grid.rows * grid.columns)));
+        recordEvent(tx, {
+          driveId: null,
+          type: 'grid-created',
+          payload: {
+            gridId: grid.id,
+            enclosureId,
+            name: grid.name,
+            rows: grid.rows,
+            columns: grid.columns,
+            orientation: grid.orientation,
+          },
+        });
         return grid;
       });
     },
@@ -235,6 +266,19 @@ export function createLayoutService(db: AppDb) {
         repo.insertSlots(tx, makeSlots(id, missing));
 
         repo.updateGrid(tx, next);
+        const changes: Record<string, { from: unknown; to: unknown }> = {};
+        for (const field of ['name', 'rows', 'columns', 'orientation'] as const) {
+          if (current[field] !== next[field]) {
+            changes[field] = { from: current[field], to: next[field] };
+          }
+        }
+        if (Object.keys(changes).length > 0) {
+          recordEvent(tx, {
+            driveId: null,
+            type: 'grid-updated',
+            payload: { gridId: id, enclosureId: current.enclosureId, name: next.name, changes },
+          });
+        }
         return next;
       });
     },
@@ -250,15 +294,34 @@ export function createLayoutService(db: AppDb) {
           slotRows.map((s) => s.id),
         );
         repo.deleteGrid(tx, id);
+        recordEvent(tx, {
+          driveId: null,
+          type: 'grid-deleted',
+          payload: { gridId: id, enclosureId: grid.enclosureId, name: grid.name },
+        });
       });
     },
 
     /** R39: a label change touches only the label. The slot ID and any occupant stay put. */
     updateSlotLabel(id: string, input: UpdateSlotInput): SlotRow {
       return run((tx) => {
-        requireSlot(tx, id);
+        const before = requireSlot(tx, id);
         repo.updateSlotLabel(tx, id, input.label, nowIso());
-        return requireSlot(tx, id);
+        const after = requireSlot(tx, id);
+        if (before.label !== after.label) {
+          recordEvent(tx, {
+            driveId: null,
+            type: 'slot-relabeled',
+            payload: {
+              slotId: id,
+              gridId: before.gridId,
+              position: before.position,
+              from: before.label,
+              to: after.label,
+            },
+          });
+        }
+        return after;
       });
     },
   };

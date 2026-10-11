@@ -3,6 +3,7 @@ import { AppShell } from './components/AppShell';
 import { LayoutPage } from './pages/LayoutPage';
 import { DrivesPage } from './pages/DrivesPage';
 import { InboxPage } from './pages/InboxPage';
+import { PoolsPage } from './pages/PoolsPage';
 import { SettingsPage } from './pages/SettingsPage';
 
 export function App() {
@@ -14,6 +15,7 @@ export function App() {
         <Route path="drives/discovered" element={<InboxPage />} />
         <Route path="drives/inbox" element={<Navigate to="/drives/discovered" replace />} />
         <Route path="inbox" element={<Navigate to="/drives/discovered" replace />} />
+        <Route path="pools" element={<PoolsPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="*" element={<LayoutPage />} />
       </Route>

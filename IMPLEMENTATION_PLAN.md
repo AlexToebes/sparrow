@@ -188,6 +188,11 @@ Backend steps 2 to 10 expose their behavior through API routes as they go, so th
   - Why: "Maybe we can drop replaced by completely, we can see what replaced what by looking at the history of the slot."
   - What changed: `core/slot-history.ts` and `GET /api/slots/:id/history` (computed from `drive-installed` / `drive-removed` events, never stored); the History section of the drive and slot panels has a Drive | Slot toggle (empty slot: slot history only; spare or retired drive: drive history only); the life story links install and removal entries to that slot's history (`/?slot=ID&view=slot`); an empty tile now opens the slot panel (history plus "Assign a drive"). `replacedByDriveId` is gone from the schema, shared types, API inputs, core, export and UI. Move's "When?" date moved onto its first step.
   - Done when: server tests cover pairing, each outcome, unrecorded dates, renamed bays and the 404; an old export with `replacedByDriveId` imports; web tests cover the toggle in each context.
+- [x] **Post-MVP (Pools, layout events)**
+  - Requirements: R34 (into scope), R75, R76 (new, at the owner's request), R14, R38, R30.
+  - Why: AGENTS rule 6 says every state change writes an event, but layout and pool changes wrote none; pools were buried in Settings and had no sanity check.
+  - What changed: `core/layout.ts` and `core/pools.ts` record `enclosure-*`, `grid-*`, `slot-relabeled` and `pool-*` events (driveId null) in the same transaction; no-ops and the seed write none. `GET /api/events/recent`. Pool list and detail carry `expectedMembers`, `memberCount`, `sizeCheck` (`ok|fewer|more|null`); detail members gained `capacityBytes`. Web: `/pools` page (nav Layout, Drives, Pools, Settings), `PoolsSection` removed from Settings, `PoolForm` has "Expected drives".
+  - Done when: server tests cover an event per mutation, atomicity (refused change writes none), the seed, the recent endpoint and the three size states; web tests cover the nav, the page, create and edit with the expected count.
 
 ---
 - [x] **Post-MVP (Dismiss suggestions)**
@@ -200,7 +205,7 @@ Backend steps 2 to 10 expose their behavior through API routes as they go, so th
 Copy from `REQUIREMENTS.md` section 6 and add new ideas here. Do not build these without a plan step.
 
 - R12 compatibility check (compare against the vdev's usable per-disk size).
-- R34 pool leaf-count sanity check.
+- A "recent changes" feed in the UI on top of `GET /api/events/recent` (R75).
 - Richer slot display (model, capacity, serial, temperature, pool badge).
 - Reject a retirement or removal date earlier than the installation date (only the removal to spares is checked today, R69).
 - Enclosure-wide "recent changes" feed (all installs, removals and retirements across the NAS, newest first).
@@ -212,6 +217,7 @@ Copy from `REQUIREMENTS.md` section 6 and add new ideas here. Do not build these
 - Investigate why the boot NVMe is stale in Scrutiny (collector likely lacks `--cap-add SYS_ADMIN` or the NVMe device mapping). This is a Scrutiny setup issue, not a Sparrow bug.
 
 ## Notes log
+- 2026-10-11, Post-MVP (Pools, layout events): reverses the Step 2 note "layout edits write no drive events". Decisions: the seed writes no events; no-op edits write none; deleting an enclosure writes one `enclosure-deleted` (with `gridCount`), not one `grid-deleted` per grid; `slot-relabeled` and `grid-created` payloads also carry position / dimensions. Recent events join the drive serial (`driveSerial`, null without a drive); the web life story only shows drive events, so nothing there changed. A pool's size check counts open memberships (hot spares included). Pool member rows open the drive in a drawer on the Pools page (`/pools?drive=ID`).
 
 - 2026-10-11, Post-MVP 7 (R74, replaced-by removed): the baseline migration `0000_curly_shriek.sql` and `meta/0000_snapshot.json` were EDITED IN PLACE (no new migration; `db:generate` reports no changes), so an existing database must be wiped. The self-FK, `replaced_by_drive_id` and the `drives_not_replaced_by_self` CHECK are gone. Request schemas are strict, so `replacedByDriveId` in a retire, RMA, occupant or move body is now a 400; an OLD export that has it still imports (the field is stripped before validation). Old `drive-retired` / `drive-reinstated` events may still carry `replacedByDriveId` / `previousReplacedByDriveId` in their payload; nothing reads them. Slot history pairs `drive-installed` / `drive-removed` per drive in insertion order (rowid) by the payload `slotId`; a `drive-retired` / `drive-sent-for-rma` event with the same `slotId` right after a removal makes it retired / RMA, `movedToSlotId` makes it moved. Tapping an empty tile now opens the slot panel (history and an "Assign a drive" button) instead of going straight to the Assign dialog. Move's date moved from its own step onto step 1.
 - 2026-10-11, Post-MVP (Dismiss suggestions, R72): no schema change (uses the foundation's `suggestion-dismissed` event type). Dismissal is per drive and field and keyed by the suggested value, so it follows the provider's current value rather than blocking the field forever. Undo is a second event with `value: null` rather than a delete (events are append-only). Dismiss and undismiss answer 204 and are confirm-free in the UI because they are reversible.

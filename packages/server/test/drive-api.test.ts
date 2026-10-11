@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/api/app.js';
+import { createLayoutService } from '../src/core/layout.js';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
 import type { FastifyInstance } from 'fastify';
 
@@ -139,5 +140,25 @@ describe('drive API (R3, R11, R13, R14, R21, D5, D6)', () => {
     const after = await get(`/api/drives/${created.id}`);
     expect(after.statusCode).toBe(200);
     expect(after.json()).toMatchObject({ serial: 'NODEL' });
+  });
+});
+
+describe('GET /api/events/recent (R75)', () => {
+  it('returns the latest events of all kinds, newest first, with the drive serial when set', async () => {
+    const layout = createLayoutService(opened.db);
+    layout.createEnclosure({ name: 'NAS' });
+    await app.inject({ method: 'POST', url: '/api/drives', payload: { serial: 'ABC123' } });
+    await app.inject({ method: 'POST', url: '/api/pools', payload: { name: 'tank' } });
+
+    const res = await app.inject({ method: 'GET', url: '/api/events/recent' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { type: string; driveSerial: string | null }[];
+    expect(body.map((e) => e.type)).toEqual(['pool-created', 'drive-created', 'enclosure-created']);
+    expect(body.map((e) => e.driveSerial)).toEqual([null, 'ABC123', null]);
+
+    const limited = await app.inject({ method: 'GET', url: '/api/events/recent?limit=2' });
+    expect(limited.json()).toHaveLength(2);
+    const bad = await app.inject({ method: 'GET', url: '/api/events/recent?limit=0' });
+    expect(bad.statusCode).toBe(400);
   });
 });

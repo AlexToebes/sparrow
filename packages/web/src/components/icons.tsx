@@ -85,6 +85,12 @@ export const DriveIcon = (p: IconProps) => (
     <path d="M7 12h.01M11 12h6" />
   </Svg>
 );
+export const PoolIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <ellipse cx="12" cy="6" rx="7" ry="2.5" />
+    <path d="M5 6v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6M5 12v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-6" />
+  </Svg>
+);
 export const SettingsIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M5 7h9M18 7h1M5 17h1M10 17h9" />

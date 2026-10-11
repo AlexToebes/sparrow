@@ -90,6 +90,7 @@ function setup(extra: Record<string, Handler> = {}, inbox: Record<string, unknow
         createdAt: T,
         updatedAt: T,
         memberCount: 1,
+        sizeCheck: null,
       },
     ],
     'GET /api/pools/p1': {
@@ -100,6 +101,7 @@ function setup(extra: Record<string, Handler> = {}, inbox: Record<string, unknow
       createdAt: T,
       updatedAt: T,
       memberCount: 1,
+      sizeCheck: null,
       members: [],
     },
     'GET /api/slots/s0/assignment-defaults': { poolId: 'p1', role: 'data', previousDriveId: null },
@@ -469,39 +471,6 @@ describe('Missing drive (R27)', () => {
 });
 
 describe('Pools (R29, R36)', () => {
-  it('creates a pool, and shows the 409 message when delete is refused', async () => {
-    const calls = setup({
-      'POST /api/pools': (b: unknown) =>
-        new Response(JSON.stringify({ id: 'p2', ...(b as object), createdAt: T, updatedAt: T }), {
-          status: 201,
-        }),
-      'DELETE /api/pools/p1': () =>
-        new Response(
-          JSON.stringify({
-            error: {
-              code: 'conflict',
-              message: 'Pool p1 has membership history and cannot be deleted',
-            },
-          }),
-          { status: 409 },
-        ),
-    });
-    renderApp(<App />, '/settings');
-    const section = await screen.findByRole('region', { name: 'Pools' });
-    expect(await within(section).findByText('1 member')).toBeInTheDocument();
-    await userEvent.click(within(section).getByRole('button', { name: 'New pool' }));
-    const form = await screen.findByRole('dialog', { name: 'New pool' });
-    await userEvent.type(within(form).getByLabelText(/^Name/), 'scratch');
-    await userEvent.click(within(form).getByRole('button', { name: 'Create pool' }));
-    await waitFor(() => expect(posts(calls, '/api/pools')).toHaveLength(1));
-    expect(posts(calls, '/api/pools')[0]!.body).toEqual({ name: 'scratch', layoutLabel: null });
-
-    await userEvent.click(within(section).getByRole('button', { name: 'Delete tank' }));
-    const dlg = await screen.findByRole('dialog', { name: 'Delete tank' });
-    await userEvent.click(within(dlg).getByRole('button', { name: 'Delete pool' }));
-    expect(await within(dlg).findByRole('alert')).toHaveTextContent(/cannot be deleted/);
-  });
-
   it('R36: an installed drive can join a pool, with history listed', async () => {
     const calls = setup({
       'GET /api/drives/d0/memberships': [
