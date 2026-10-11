@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { useDriveEvents, usePools } from '../api/hooks';
 import { formatDuration } from '../lib/format';
 import { buildStory, summarizeStory } from '../lib/lifeStory';
+import { StateIcon } from './SlotTile';
 
 /** The drive's history as a vertical timeline, oldest first (UI_DESIGN, from E). The "History" heading belongs to HistorySection. */
 export function LifeStory({ driveId }: { driveId: string }) {
@@ -59,7 +60,13 @@ export function LifeStory({ driveId }: { driveId: string }) {
               {item.gap ? <span className="story-gap">{item.gap}</span> : null}
             </div>
             <div className="story-title">
-              {item.title}
+              {item.health ? (
+                <span className="story-health" data-health={item.health.to}>
+                  <StateIcon state={item.health.to} size={14} /> {item.title}
+                </span>
+              ) : (
+                item.title
+              )}
               {item.slot ? (
                 <>
                   {' '}

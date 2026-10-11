@@ -32,7 +32,9 @@ material, not code to copy: build with Mantine components, the shared zod types 
 - **Life story** in the drive detail panel: a vertical timeline built from the drive's events (newest last
   or first — pick one and be consistent; E used oldest first with relative gaps like "after 1 mo"), with an
   icon per event type and a header line like "1 y 7 mo in service · 1 mo on the shelf". It is the drive's
-  history view everywhere (slot panel and drive page).
+  history view everywhere (slot panel and drive page). Health entries (R20) read "Health: OK → Warning" or
+  "Health first reported: OK", with the health icon and colour of the new value (icon plus text, never colour
+  alone), and sit at the time the provider reported them.
 - **History section** (R74): one "History" heading in the drive detail and the slot panel. An installed drive (in the slot panel or on the Drives page) and an occupied slot show a `SegmentedControl` labelled "History for" with **Drive** (default, the life story) and **Slot** (the current bay's history). An empty slot shows only the slot history, with no toggle; a spare or retired drive shows only its own history. The slot history is a compact timeline, newest first: the serial (a link that opens that drive) and capacity, then "installed 2022-08-19 → removed 2026-03-14, retired (failed)", "… moved to Bay 7", "… back to spares", "… sent for RMA", and for the current drive "in this slot since 2022-08-19". Unrecorded dates read "not recorded" with the day it was logged as a hint. The life story's "Installed in / Removed from Bay 3" entries carry a "Slot history" link that opens that bay's panel on the Slot tab (`/?slot=ID&view=slot`). Replaced-by was dropped: the slot history shows what replaced what. Tapping an empty tile opens this panel (with "Assign a drive").
 - Per-grid orientation toggle button ("Flip to 2 x 4") in the grid card header (R7) — in Settings/edit mode
   only, or directly on the card; keep it unobtrusive.
