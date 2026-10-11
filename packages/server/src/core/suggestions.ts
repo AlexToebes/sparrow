@@ -152,8 +152,8 @@ export function dismissSuggestions(
     });
     for (const s of picked) {
       recordEvent(tx, {
-        driveId,
         type: 'suggestion-dismissed',
+        drives: [{ id: driveId }],
         payload: { field: s.field, value: s.suggested },
       });
     }
@@ -183,7 +183,11 @@ export function undismissSuggestions(
       return field;
     });
     for (const field of picked) {
-      recordEvent(tx, { driveId, type: 'suggestion-dismissed', payload: { field, value: null } });
+      recordEvent(tx, {
+        type: 'suggestion-dismissed',
+        drives: [{ id: driveId }],
+        payload: { field, value: null },
+      });
     }
   });
 }

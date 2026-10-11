@@ -7,7 +7,7 @@ import { conflict, invalid } from './errors.js';
 import { recordEvent } from './events.js';
 import { requirePool } from './memberships.js';
 
-// Pool records (R30). Pool CRUD writes events with no drive (R75). A pool that has
+// Pool records (R30). Pool CRUD writes events linked to the pool and to no drive (R75). A pool that has
 // ever had a membership cannot be deleted, because the history must stay readable (R29).
 
 /** R34: how the current member count compares with the expected one (null expected = no check). */
@@ -84,10 +84,9 @@ export function createPool(db: AppDb, input: CreatePoolInput): Pool {
       .returning()
       .get();
     recordEvent(tx, {
-      driveId: null,
       type: 'pool-created',
+      pools: [{ id: row.id }],
       payload: {
-        poolId: row.id,
         name: row.name,
         layoutLabel: row.layoutLabel,
         expectedMembers: row.expectedMembers,
@@ -123,9 +122,9 @@ export function updatePool(db: AppDb, id: string, input: UpdatePoolInput): Pool 
     }
     if (Object.keys(changes).length > 0) {
       recordEvent(tx, {
-        driveId: null,
         type: 'pool-updated',
-        payload: { poolId: id, name: row.name, changes },
+        pools: [{ id }],
+        payload: { name: row.name, changes },
       });
     }
     return row;
@@ -203,9 +202,9 @@ export function deletePool(db: AppDb, id: string): void {
     }
     tx.delete(pools).where(eq(pools.id, id)).run();
     recordEvent(tx, {
-      driveId: null,
       type: 'pool-deleted',
-      payload: { poolId: id, name: pool.name },
+      pools: [{ id, name: pool.name }],
+      payload: { name: pool.name },
     });
   });
 }

@@ -1,7 +1,7 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Health, Observation } from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
-import { events } from '../db/schema.js';
+import { eventDrives, events } from '../db/schema.js';
 import { listDrives } from './drives.js';
 import { recordEvent, type DbTransaction } from './events.js';
 import { matchObservations } from './matching.js';
@@ -20,10 +20,11 @@ export interface HealthChangedPayload {
 /** The `to` of the drive's latest health-changed event, or undefined when it has none. */
 function lastRecordedHealth(tx: DbTransaction, driveId: string): Health | undefined {
   const row = tx
-    .select()
+    .select({ payload: events.payload })
     .from(events)
-    .where(and(eq(events.driveId, driveId), eq(events.type, 'health-changed')))
-    .orderBy(desc(events.at), desc(sql`rowid`))
+    .innerJoin(eventDrives, eq(eventDrives.eventId, events.id))
+    .where(and(eq(eventDrives.driveId, driveId), eq(events.type, 'health-changed')))
+    .orderBy(desc(events.at), desc(sql`"events".rowid`))
     .limit(1)
     .get();
   const to = row?.payload.to;
@@ -53,7 +54,12 @@ export function recordHealthChanges(
         to: observation.health,
         reportedAt: observation.lastReportedAt,
       };
-      recordEvent(tx, { driveId: drive.id, type: 'health-changed', payload: { ...payload }, at });
+      recordEvent(tx, {
+        type: 'health-changed',
+        at,
+        drives: [{ id: drive.id }],
+        payload: { ...payload },
+      });
       written++;
     }
     return written;

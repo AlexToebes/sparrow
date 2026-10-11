@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type {
   AssignmentDefaults,
   Drive,
@@ -8,9 +8,9 @@ import type {
 } from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
 import { getGrid, getSlot } from '../db/layout-repo.js';
-import { drives, events, pools } from '../db/schema.js';
+import { eventSlots, events, drives, pools } from '../db/schema.js';
 import { conflict, invalid, notFound } from './errors.js';
-import { recordEvent, type DbTransaction } from './events.js';
+import { loadLinks, recordEvent, type DbTransaction } from './events.js';
 import {
   parseInstalledOn,
   parseNotFutureDate,
@@ -21,7 +21,9 @@ import { endOpenMembership, openMembership, startMembership } from './membership
 
 // Slot assignment and retirement (R8, R35, R37, R60, R61, R62, D7). Every public function runs in
 // ONE transaction and writes its events through recordEvent in that same transaction (R14), so a
-// failure at any point leaves no partial state. D7 (one drive per slot, one slot per drive) is
+// failure at any point leaves no partial state. One real action is ONE event with links to every
+// drive and slot it involves: a drive arriving in an occupied bay is a single drive-replaced event
+// (outgoing + incoming drive, the bay as slot `at`), never a removal plus an installation. D7 (one drive per slot, one slot per drive) is
 // enforced by the unique index on drives.slot_id plus the status/slot CHECKs; the checks here give
 // readable errors before the constraints would fire.
 
@@ -106,13 +108,23 @@ function assertRemovalAfterStart(
   }
 }
 
-/** installed -> spare. Ends the membership, clears the slot, logs drive-removed (R14, R69). */
-export function freeSlot(tx: Tx, drive: Drive, note: string | null, removal: Removal): Drive {
+/** The pool and role a drive held when it left its bay; copied into events so R35 can default from them. */
+export interface PoolRef {
+  poolId: string | null;
+  role: MembershipRole | null;
+}
+
+/** DB part of installed -> spare: ends the membership (pool-left), clears the slot. Writes no drive event. */
+function leaveSlot(
+  tx: Tx,
+  drive: Drive,
+  removal: Removal,
+): { drive: Drive; pool: PoolRef; slotId: string } {
   if (drive.status !== 'installed' || drive.slotId === null) {
     throw conflict(`Drive ${drive.id} is not installed (${drive.status})`);
   }
   const at = nowIso();
-  const info = slotInfo(tx, drive.slotId);
+  const slotId = drive.slotId;
   // R69: a past removal date backdates the membership end; the event is still stamped at `at`.
   const backdated =
     removal.backdate && removal.removedOn !== null && removal.removedOn < todayUtc(new Date(at));
@@ -122,31 +134,37 @@ export function freeSlot(tx: Tx, drive: Drive, note: string | null, removal: Rem
     assertRemovalAfterStart(drive, open?.startedAt ?? null, removal.removedOn);
   }
   const endAt = backdated ? `${removal.removedOn}T00:00:00.000Z` : at;
-  const pool = endOpenMembership(tx, drive.id, endAt, backdated);
+  const ended = endOpenMembership(tx, drive.id, endAt, backdated);
   const updated = tx
     .update(drives)
     .set({ status: 'spare', slotId: null, installedOn: null, updatedAt: at })
     .where(eq(drives.id, drive.id))
     .returning()
     .get();
+  return {
+    drive: updated,
+    pool: { poolId: ended?.poolId ?? null, role: ended?.role ?? null },
+    slotId,
+  };
+}
+
+/** installed -> spare. Ends the membership, clears the slot, logs drive-removed (R14, R69). */
+export function freeSlot(tx: Tx, drive: Drive, note: string | null, removal: Removal): Drive {
+  const left = leaveSlot(tx, drive, removal);
   recordEvent(tx, {
-    driveId: drive.id,
     type: 'drive-removed',
-    at,
+    drives: [{ id: drive.id }],
+    slots: [{ id: left.slotId, role: 'from' }],
     payload: {
-      slotId: info.slotId,
-      slotLabel: info.slotLabel,
-      gridName: info.gridName,
-      poolId: pool?.poolId ?? null,
-      role: pool?.role ?? null,
+      ...left.pool,
       // R68: the history keeps the installation date, so time in the slot can be computed.
       installedOn: drive.installedOn,
-      // R69: the day it physically left (null = not recorded). `at` above is when it was recorded.
+      // R69: the day it physically left (null = not recorded). The event's `at` is when it was recorded.
       removedOn: removal.removedOn,
       note,
     },
   });
-  return updated;
+  return left.drive;
 }
 
 export interface RetireOptions {
@@ -156,14 +174,22 @@ export interface RetireOptions {
   note: string | null;
 }
 
-/** spare|installed -> retired (R60). Frees the slot first when installed. */
-export function retireInternal(tx: Tx, driveId: string, opts: RetireOptions): Drive {
+/** DB part of spare|installed -> retired (R60). Frees the slot first when installed. Writes no drive event. */
+function retireCore(
+  tx: Tx,
+  driveId: string,
+  opts: RetireOptions,
+): { drive: Drive; slotId: string | null; pool: PoolRef; installedOn: string | null } {
   let drive = loadDrive(tx, driveId);
   if (drive.status === 'retired') throw conflict(`Drive ${drive.id} is already retired`);
   const slotId = drive.slotId;
+  const installedOn = drive.installedOn;
+  let pool: PoolRef = { poolId: null, role: null };
   // R69: the retirement date is the day the drive left the slot.
   if (drive.status === 'installed') {
-    drive = freeSlot(tx, drive, null, { removedOn: opts.date, backdate: false });
+    const left = leaveSlot(tx, drive, { removedOn: opts.date, backdate: false });
+    drive = left.drive;
+    pool = left.pool;
   }
   const at = nowIso();
   const updated = tx
@@ -180,64 +206,136 @@ export function retireInternal(tx: Tx, driveId: string, opts: RetireOptions): Dr
     .where(eq(drives.id, drive.id))
     .returning()
     .get();
+  return { drive: updated, slotId, pool, installedOn };
+}
+
+/** spare|installed -> retired (R60): ONE drive-retired event, linked to the bay it left when installed. */
+export function retireInternal(tx: Tx, driveId: string, opts: RetireOptions): Drive {
+  const r = retireCore(tx, driveId, opts);
   recordEvent(tx, {
-    driveId: drive.id,
     type: 'drive-retired',
-    at,
+    drives: [{ id: driveId }],
+    slots: r.slotId === null ? [] : [{ id: r.slotId, role: 'from' }],
     payload: {
       reason: opts.reason,
       date: opts.date,
       note: opts.note,
-      slotId,
+      ...r.pool,
+      installedOn: r.installedOn,
     },
   });
-  return updated;
+  return r.drive;
 }
 
+/** Retire as failed (R27): ONE drive-sent-for-rma event, which implies the retirement. */
 export function rmaInternal(
   tx: Tx,
   driveId: string,
   date: string | null,
   note: string | null,
 ): Drive {
-  const slotId = loadDrive(tx, driveId).slotId;
-  const updated = retireInternal(tx, driveId, {
-    reason: 'failed',
-    date,
-    note,
-  });
+  const r = retireCore(tx, driveId, { reason: 'failed', date, note });
   recordEvent(tx, {
-    driveId,
     type: 'drive-sent-for-rma',
-    payload: { date, note, slotId },
+    drives: [{ id: driveId }],
+    slots: r.slotId === null ? [] : [{ id: r.slotId, role: 'from' }],
+    payload: { date, note, ...r.pool, installedOn: r.installedOn },
   });
-  return updated;
+  return r.drive;
 }
 
-/** Pool and role a slot's most recent occupant had, from the events (R35). */
+/** What became of the drive a replacement displaced; the drive-replaced event carries it (R74). */
+export interface Outgoing {
+  /** The displaced drive after the change. */
+  drive: Drive;
+  outcome: 'spares' | 'retired' | 'rma' | 'moved';
+  /** removedOn (spares), the retirement date (retired / rma) or the move date (moved); null = not recorded. */
+  date: string | null;
+  reason?: RetirementReason;
+  note?: string | null;
+  /** Where it went, when the outcome is `moved`. */
+  toSlotId?: string;
+  pool: PoolRef;
+  /** R68: when it had gone in, before this change. */
+  installedOn: string | null;
+}
+
+/** The `outgoing` object of a drive-replaced payload. */
+export const outgoingPayload = (o: Outgoing): Record<string, unknown> => ({
+  outcome: o.outcome,
+  date: o.date,
+  ...(o.reason === undefined ? {} : { reason: o.reason }),
+  ...(o.note === undefined ? {} : { note: o.note }),
+  ...(o.toSlotId === undefined ? {} : { toSlotId: o.toSlotId }),
+  ...o.pool,
+  installedOn: o.installedOn,
+});
+
+/** Event types that put a drive into a bay or take one out, i.e. the ones that change who sits there. */
+const OCCUPANCY_TYPES = [
+  'drive-installed',
+  'drive-removed',
+  'drive-retired',
+  'drive-sent-for-rma',
+  'drive-moved',
+  'drives-swapped',
+  'drive-replaced',
+] as const;
+
+const asRole = (v: unknown): MembershipRole | null =>
+  v === 'data' || v === 'hot-spare' ? v : null;
+const asPoolId = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/**
+ * The drive that most recently sat in, or left, a bay, with the pool and role it had there (R35).
+ * Read from the events linked to the slot, newest first by insertion order (rowid), not by the `at` text.
+ */
 function previousOccupantOf(
   tx: Tx,
   slotId: string,
 ): { driveId: string; poolId: string | null; role: MembershipRole | null } | null {
-  // Latest install or removal for this slot by insertion order (rowid), not by the `at` text.
   const hit = tx
-    .select()
-    .from(events)
-    .where(
-      and(
-        inArray(events.type, ['drive-installed', 'drive-removed']),
-        isNotNull(events.driveId),
-        sql`json_extract(${events.payload}, '$.slotId') = ${slotId}`,
-      ),
-    )
-    .orderBy(desc(sql`rowid`))
+    .select({
+      id: events.id,
+      type: events.type,
+      payload: events.payload,
+      slotRole: eventSlots.role,
+    })
+    .from(eventSlots)
+    .innerJoin(events, eq(events.id, eventSlots.eventId))
+    .where(and(eq(eventSlots.slotId, slotId), inArray(events.type, [...OCCUPANCY_TYPES])))
+    .orderBy(desc(sql`"events".rowid`))
     .limit(1)
     .get();
-  if (!hit || hit.driveId === null) return null;
-  const poolId = typeof hit.payload.poolId === 'string' ? hit.payload.poolId : null;
-  const role =
-    hit.payload.role === 'data' || hit.payload.role === 'hot-spare' ? hit.payload.role : null;
-  return { driveId: hit.driveId, poolId, role };
+  if (!hit) return null;
+  const links = loadLinks(tx, [hit.id]).get(hit.id)!;
+  const p = hit.payload;
+  const driveWith = (role: 'subject' | 'outgoing' | 'incoming') =>
+    links.drives.find((d) => d.role === role)?.driveId;
+
+  if (hit.type === 'drive-replaced') {
+    const outgoing = isRecord(p.outgoing) ? p.outgoing : {};
+    // `at` is the bay itself (the incoming drive sits there now); `to` is where the outgoing one went.
+    if (hit.slotRole === 'to') {
+      const id = driveWith('outgoing');
+      return id
+        ? { driveId: id, poolId: asPoolId(outgoing.poolId), role: asRole(outgoing.role) }
+        : null;
+    }
+    const id = driveWith('incoming');
+    return id ? { driveId: id, poolId: asPoolId(p.poolId), role: asRole(p.role) } : null;
+  }
+  if (hit.type === 'drives-swapped') {
+    const moves = Array.isArray(p.moves) ? p.moves.filter(isRecord) : [];
+    const arrived = moves.find((m) => m.toSlotId === slotId);
+    return arrived && typeof arrived.driveId === 'string'
+      ? { driveId: arrived.driveId, poolId: asPoolId(arrived.poolId), role: asRole(arrived.role) }
+      : null;
+  }
+  const id = driveWith('subject');
+  return id ? { driveId: id, poolId: asPoolId(p.poolId), role: asRole(p.role) } : null;
 }
 
 export function defaultsFor(tx: Tx, slotId: string): AssignmentDefaults {
@@ -276,6 +374,8 @@ export function occupiedError(info: SlotInfo, occupant: Drive) {
 /**
  * R37, R62: resolve the drive in a slot before another one goes in. A date the action leaves out
  * (undefined) falls back to `defaultDate` when that is given (R73: the one move date), else today.
+ * It changes the drive but writes no event: the caller records the single drive-replaced event for
+ * the whole replacement from the returned description.
  */
 export function resolveOccupant(
   tx: Tx,
@@ -283,26 +383,48 @@ export function resolveOccupant(
   action: OccupantResolution,
   clock: Date,
   defaultDate: string | null | undefined,
-): Drive {
+): Outgoing {
+  const installedOn = occupant.installedOn;
   if (action.action === 'spare') {
-    return freeSlot(tx, occupant, null, {
-      removedOn:
-        action.removedOn === undefined && defaultDate !== undefined
-          ? defaultDate
-          : removalDateOf(action.removedOn, clock),
-      backdate: true,
-    });
+    const removedOn =
+      action.removedOn === undefined && defaultDate !== undefined
+        ? defaultDate
+        : removalDateOf(action.removedOn, clock);
+    const left = leaveSlot(tx, occupant, { removedOn, backdate: true });
+    return {
+      drive: left.drive,
+      outcome: 'spares',
+      date: removedOn,
+      note: null,
+      pool: left.pool,
+      installedOn,
+    };
   }
   const date = (value: string | null | undefined): string | null =>
     value === undefined && defaultDate !== undefined ? defaultDate : retirementDateOf(value, clock);
   if (action.action === 'retire') {
-    return retireInternal(tx, occupant.id, {
-      reason: action.reason,
-      date: date(action.date),
-      note: action.note ?? null,
-    });
+    const opts = { reason: action.reason, date: date(action.date), note: action.note ?? null };
+    const r = retireCore(tx, occupant.id, opts);
+    return {
+      drive: r.drive,
+      outcome: 'retired',
+      date: opts.date,
+      reason: opts.reason,
+      note: opts.note,
+      pool: r.pool,
+      installedOn,
+    };
   }
-  return rmaInternal(tx, occupant.id, date(action.date), action.note ?? null);
+  const opts = { reason: 'failed' as const, date: date(action.date), note: action.note ?? null };
+  const r = retireCore(tx, occupant.id, opts);
+  return {
+    drive: r.drive,
+    outcome: 'rma',
+    date: opts.date,
+    note: opts.note,
+    pool: r.pool,
+    installedOn,
+  };
 }
 
 /** R35: the pool and role a drive joins (undefined = default from the slot's previous occupant; null = no pool). */
@@ -320,18 +442,22 @@ export function resolvePoolRole(
   return { poolId, role: roleInput ?? defaults.role ?? DEFAULT_ROLE };
 }
 
-/** spare -> installed in an empty slot: opens the membership (R29) and logs drive-installed (R14). */
+/**
+ * spare -> installed in a slot: opens the membership (R29) and logs ONE event (R14). Into an empty
+ * slot that is drive-installed; into an occupied one (`replaced` describes the displaced drive,
+ * already resolved) it is drive-replaced, linking both drives and the bay.
+ */
 export function placeSpare(
   tx: Tx,
   drive: Drive,
   slotId: string,
-  info: SlotInfo,
   o: {
     poolId: string | null;
     role: MembershipRole | null;
     installedOn: string | null;
-    /** Extra drive-installed payload keys. */
-    payload?: Record<string, unknown>;
+    replaced?: Outgoing | undefined;
+    /** Extra slot links on a drive-replaced event, e.g. the bay a mover came from or the outgoing drive went to. */
+    extraSlots?: { id: string; role: 'from' | 'to' }[];
   },
 ): Drive {
   const at = nowIso();
@@ -353,17 +479,31 @@ export function placeSpare(
       poolId: o.poolId,
       role: o.role,
       startedAt: start.startedAt,
-      slotId,
       userSupplied: start.userSupplied,
     });
   }
   // R14: `at` is when the change was recorded; the installation date travels in the payload.
-  recordEvent(tx, {
-    driveId: drive.id,
-    type: 'drive-installed',
-    at,
-    payload: { ...info, poolId: o.poolId, role: o.role, installedOn: o.installedOn, ...o.payload },
-  });
+  const pool = { poolId: o.poolId, role: o.role };
+  if (o.replaced) {
+    recordEvent(tx, {
+      type: 'drive-replaced',
+      at,
+      drives: [
+        { id: o.replaced.drive.id, role: 'outgoing' },
+        { id: drive.id, role: 'incoming' },
+      ],
+      slots: [{ id: slotId, role: 'at' }, ...(o.extraSlots ?? [])],
+      payload: { installedOn: o.installedOn, ...pool, outgoing: outgoingPayload(o.replaced) },
+    });
+  } else {
+    recordEvent(tx, {
+      type: 'drive-installed',
+      at,
+      drives: [{ id: drive.id }],
+      slots: [{ id: slotId, role: 'to' }],
+      payload: { installedOn: o.installedOn, ...pool },
+    });
+  }
   return updated;
 }
 
@@ -406,15 +546,15 @@ export function assignDrive(db: AppDb, input: AssignDriveInput): AssignDriveResu
     const defaults = defaultsFor(tx, input.slotId);
     const occupant = tx.select().from(drives).where(eq(drives.slotId, input.slotId)).get();
 
-    let resolved: Drive | undefined;
+    let replaced: Outgoing | undefined;
     if (occupant) {
       if (!input.occupant) throw occupiedError(info, occupant);
-      resolved = resolveOccupant(tx, occupant, input.occupant, clock, undefined);
+      replaced = resolveOccupant(tx, occupant, input.occupant, clock, undefined);
     }
 
     const { poolId, role } = resolvePoolRole(tx, input.poolId, input.role, defaults);
-    const updated = placeSpare(tx, drive, input.slotId, info, { poolId, role, installedOn });
-    return resolved ? { drive: updated, occupant: resolved } : { drive: updated };
+    const updated = placeSpare(tx, drive, input.slotId, { poolId, role, installedOn, replaced });
+    return replaced ? { drive: updated, occupant: replaced.drive } : { drive: updated };
   });
 }
 
@@ -455,7 +595,7 @@ export function retireDrive(db: AppDb, driveId: string, opts: RetireDriveOptions
   );
 }
 
-/** Retire as failed plus a drive-sent-for-rma event (R27). */
+/** Retire as failed with a single drive-sent-for-rma event (R27). */
 export function sendForRma(
   db: AppDb,
   driveId: string,
@@ -490,9 +630,9 @@ export function reinstateDrive(
       .returning()
       .get();
     recordEvent(tx, {
-      driveId: drive.id,
       type: 'drive-reinstated',
       at,
+      drives: [{ id: drive.id }],
       payload: {
         previousReason: drive.retirementReason,
         previousDate: drive.retirementDate,

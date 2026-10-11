@@ -327,10 +327,11 @@ describe('R27: the three missing-drive outcomes clear the flag and log the outco
     expect(slotOf(status(), slot)).toBeUndefined();
     const retired = listDriveEvents(db(), driveId)[0]!;
     expect(retired.type).toBe('drive-retired');
-    expect(retired.payload).toMatchObject({ reason: 'failed', date: '2026-10-10', slotId: slot });
+    expect(retired.payload).toMatchObject({ reason: 'failed', date: '2026-10-10' });
+    expect(retired.links.slots.map((l) => [l.slotId, l.role])).toEqual([[slot, 'from']]);
   });
 
-  it('sent for RMA: retired as failed, then drive-sent-for-rma is logged', () => {
+  it('sent for RMA: retired as failed with ONE drive-sent-for-rma event', () => {
     const { slot, driveId } = flaggedSlot();
     sendForRma(db(), driveId, { date: '2026-10-10', note: 'RMA #42' });
 
@@ -338,12 +339,10 @@ describe('R27: the three missing-drive outcomes clear the flag and log the outco
     const log = listDriveEvents(db(), driveId);
     expect(log.map((e) => e.type)).toEqual([
       'drive-sent-for-rma',
-      'drive-retired',
-      'drive-removed',
       'drive-installed',
       'drive-created',
     ]);
-    expect(log[1]!.payload).toMatchObject({ reason: 'failed', date: '2026-10-10' });
+    expect(log[0]!.links.slots.map((l) => [l.slotId, l.role])).toEqual([[slot, 'from']]);
     expect(log[0]!.payload).toMatchObject({ date: '2026-10-10', note: 'RMA #42' });
   });
 });

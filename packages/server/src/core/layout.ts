@@ -156,7 +156,6 @@ export function createLayoutService(db: AppDb) {
         const row = makeEnclosure(input.name);
         repo.insertEnclosure(tx, row);
         recordEvent(tx, {
-          driveId: null,
           type: 'enclosure-created',
           payload: { enclosureId: row.id, name: row.name },
         });
@@ -171,7 +170,6 @@ export function createLayoutService(db: AppDb) {
         repo.updateEnclosure(tx, row);
         if (before.name !== row.name) {
           recordEvent(tx, {
-            driveId: null,
             type: 'enclosure-renamed',
             payload: { enclosureId: id, name: row.name, from: before.name, to: row.name },
           });
@@ -198,7 +196,6 @@ export function createLayoutService(db: AppDb) {
         for (const grid of gridRows) repo.deleteGrid(tx, grid.id);
         repo.deleteEnclosure(tx, id);
         recordEvent(tx, {
-          driveId: null,
           type: 'enclosure-deleted',
           payload: { enclosureId: id, name: enclosure.name, gridCount: gridRows.length },
         });
@@ -213,7 +210,6 @@ export function createLayoutService(db: AppDb) {
         repo.insertGrid(tx, grid);
         repo.insertSlots(tx, makeSlots(grid.id, positionsUpTo(grid.rows * grid.columns)));
         recordEvent(tx, {
-          driveId: null,
           type: 'grid-created',
           payload: {
             gridId: grid.id,
@@ -274,7 +270,6 @@ export function createLayoutService(db: AppDb) {
         }
         if (Object.keys(changes).length > 0) {
           recordEvent(tx, {
-            driveId: null,
             type: 'grid-updated',
             payload: { gridId: id, enclosureId: current.enclosureId, name: next.name, changes },
           });
@@ -295,7 +290,6 @@ export function createLayoutService(db: AppDb) {
         );
         repo.deleteGrid(tx, id);
         recordEvent(tx, {
-          driveId: null,
           type: 'grid-deleted',
           payload: { gridId: id, enclosureId: grid.enclosureId, name: grid.name },
         });
@@ -310,15 +304,9 @@ export function createLayoutService(db: AppDb) {
         const after = requireSlot(tx, id);
         if (before.label !== after.label) {
           recordEvent(tx, {
-            driveId: null,
             type: 'slot-relabeled',
-            payload: {
-              slotId: id,
-              gridId: before.gridId,
-              position: before.position,
-              from: before.label,
-              to: after.label,
-            },
+            slots: [{ id, role: 'at' }],
+            payload: { from: before.label, to: after.label },
           });
         }
         return after;

@@ -7,6 +7,7 @@ import {
   appMeta,
   drives,
   enclosures,
+  eventDrives,
   events,
   grids,
   memberships,
@@ -28,7 +29,13 @@ export type NewSlot = Omit<typeof slots.$inferInsert, Omitted>;
 export type NewDrive = Omit<typeof drives.$inferInsert, Omitted | 'serialNormalized'>;
 export type NewPool = Omit<typeof pools.$inferInsert, Omitted>;
 export type NewMembership = Omit<typeof memberships.$inferInsert, 'id' | 'createdAt'>;
-export type NewEvent = Omit<typeof events.$inferInsert, 'id' | 'at'> & { at?: string };
+/** A bare event row, optionally linked to one drive as its subject. Services use core/events.ts instead. */
+export interface NewEvent {
+  type: typeof events.$inferInsert.type;
+  payload: Record<string, unknown>;
+  at?: string;
+  driveId?: string | null;
+}
 
 export interface NewSnapshot {
   providerId: string;
@@ -190,15 +197,34 @@ export function createRepositories(db: AppDb) {
     },
     events: {
       create(input: NewEvent) {
-        return db
-          .insert(events)
-          .values({ ...input, id: randomUUID(), at: input.at ?? now() })
-          .returning()
-          .get();
+        return db.transaction((tx) => {
+          const row = tx
+            .insert(events)
+            .values({
+              id: randomUUID(),
+              type: input.type,
+              payload: input.payload,
+              at: input.at ?? now(),
+            })
+            .returning()
+            .get();
+          if (input.driveId) {
+            tx.insert(eventDrives)
+              .values({ eventId: row.id, driveId: input.driveId, role: 'subject' })
+              .run();
+          }
+          return row;
+        });
       },
       get: (id: string) => db.select().from(events).where(eq(events.id, id)).get(),
       listByDrive: (driveId: string) =>
-        db.select().from(events).where(eq(events.driveId, driveId)).orderBy(asc(events.at)).all(),
+        db
+          .select({ id: events.id, type: events.type, at: events.at, payload: events.payload })
+          .from(events)
+          .innerJoin(eventDrives, eq(eventDrives.eventId, events.id))
+          .where(eq(eventDrives.driveId, driveId))
+          .orderBy(asc(events.at))
+          .all(),
     },
   };
 }

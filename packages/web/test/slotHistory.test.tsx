@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import userEvent from './user';
 import { App } from '../src/App';
+import { bay, drive, makeEvent } from './events';
 import { renderApp } from './utils';
 import { setupServer } from './server';
 
@@ -19,6 +20,7 @@ const history = (slotId: string, label: string) => ({
       removedOn: null,
       removedRecordedAt: null,
       outcome: null,
+      replacedBy: null,
     },
     {
       driveId: 'x1',
@@ -30,6 +32,7 @@ const history = (slotId: string, label: string) => ({
       removedOn: '2021-06-01',
       removedRecordedAt: T,
       outcome: { kind: 'spares' },
+      replacedBy: null,
     },
     {
       driveId: 'x2',
@@ -41,6 +44,7 @@ const history = (slotId: string, label: string) => ({
       removedOn: '2020-02-02',
       removedRecordedAt: T,
       outcome: { kind: 'moved', toSlotId: 's3', toLabel: 'Bay 4', toGridName: 'Front bays' },
+      replacedBy: null,
     },
     {
       driveId: 'x3',
@@ -52,6 +56,38 @@ const history = (slotId: string, label: string) => ({
       removedOn: '2020-01-01',
       removedRecordedAt: T,
       outcome: { kind: 'retired', reason: 'failed' },
+      replacedBy: null,
+    },
+    {
+      driveId: 'x4',
+      serial: 'GONE-REPLACED',
+      capacityBytes: 4e12,
+      driveType: 'HDD',
+      installedOn: '2018-01-01',
+      installedRecordedAt: T,
+      removedOn: '2019-01-01',
+      removedRecordedAt: T,
+      outcome: { kind: 'retired', reason: 'failed' },
+      replacedBy: { driveId: 'x3', serial: 'GONE-RETIRED', capacityBytes: 8e12 },
+    },
+    {
+      driveId: 'x5',
+      serial: 'GONE-SWAPPED',
+      capacityBytes: 4e12,
+      driveType: 'HDD',
+      installedOn: '2017-01-01',
+      installedRecordedAt: T,
+      removedOn: '2018-01-01',
+      removedRecordedAt: T,
+      outcome: {
+        kind: 'swapped',
+        withDriveId: 'x1',
+        withSerial: 'GONE-SPARES',
+        toSlotId: 's3',
+        toLabel: 'Bay 4',
+        toGridName: 'Front bays',
+      },
+      replacedBy: null,
     },
   ],
 });
@@ -73,13 +109,25 @@ describe('Slot history (R74)', () => {
     const list = await within(panel).findByRole('region', { name: 'Slot history of Bay 3' });
     expect(within(panel).queryByText('No history yet.')).not.toBeInTheDocument();
     const items = within(list).getAllByRole('listitem');
-    expect(items).toHaveLength(4);
+    expect(items).toHaveLength(6);
     expect(items[0]).toHaveTextContent('CCC2');
     expect(items[0]).toHaveTextContent('in this slot since 2022-08-19');
     expect(items[1]).toHaveTextContent('installed 2021-01-01 → removed 2021-06-01, back to spares');
     expect(items[2]).toHaveTextContent('installed not recorded');
     expect(items[2]).toHaveTextContent('→ removed 2020-02-02, moved to Bay 4');
     expect(items[3]).toHaveTextContent('→ removed 2020-01-01, retired (failed)');
+    expect(items[3]).not.toHaveTextContent('replaced by');
+    // A replacement names the drive that took the bay (a link to it), then how the old one left.
+    expect(items[4]).toHaveTextContent(
+      'installed 2018-01-01 → removed 2019-01-01, replaced by GONE-RETIRED (8 TB), retired (failed)',
+    );
+    expect(within(items[4]!).getByRole('link', { name: 'GONE-RETIRED' })).toHaveAttribute(
+      'href',
+      '/drives?drive=x3',
+    );
+    expect(items[5]).toHaveTextContent(
+      'removed 2018-01-01, swapped with GONE-SPARES, moved to Bay 4',
+    );
     expect(within(items[1]!).getByRole('link', { name: 'GONE-SPARES' })).toHaveAttribute(
       'href',
       '/drives?drive=x1',
@@ -124,18 +172,12 @@ describe('Slot history (R74)', () => {
   it('R74: a life-story "Slot history" link opens that bay on its slot history', async () => {
     setupServer({
       'GET /api/drives/d2/events': [
-        {
-          id: 'e1',
-          driveId: 'd2',
-          type: 'drive-installed',
-          at: T,
-          payload: {
-            slotId: 's2',
-            slotLabel: 'Bay 3',
-            gridName: 'Front bays',
-            installedOn: '2022-08-19',
-          },
-        },
+        makeEvent(
+          'drive-installed',
+          T,
+          { installedOn: '2022-08-19' },
+          { drives: [drive('d2', 'CCC2')], slots: [bay('s2', 'to', 'Bay 3', 'Front bays')] },
+        ),
       ],
       'GET /api/slots/s2/history': history('s2', 'Bay 3'),
     });

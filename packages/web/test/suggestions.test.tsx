@@ -4,6 +4,7 @@ import userEvent from './user';
 import { App } from '../src/App';
 import { buildStory } from '../src/lib/lifeStory';
 import { errorResponse, posts, setupServer } from './server';
+import { makeEvent } from './events';
 import { makeDrive, renderApp } from './utils';
 
 const provider = {
@@ -187,28 +188,24 @@ describe('Suggested updates (R72)', () => {
   });
 
   it('R72: the life story reads "Details updated from the provider: model, capacity"', () => {
-    const story = buildStory([
-      {
-        id: 'e1',
-        driveId: 'd0',
-        type: 'drive-updated',
-        at: '2026-03-01T10:00:00.000Z',
-        payload: {
+    const story = buildStory(
+      [
+        makeEvent('drive-updated', '2026-03-01T10:00:00.000Z', {
           source: 'provider',
           changes: { model: { from: null, to: 'M' }, capacityBytes: { from: null, to: 1 } },
-        },
-      },
-    ]);
+        }),
+      ],
+      'd1',
+    );
     expect(story[0]!.title).toBe('Details updated from the provider: model, capacity');
-    const manual = buildStory([
-      {
-        id: 'e2',
-        driveId: 'd0',
-        type: 'drive-updated',
-        at: '2026-03-01T10:00:00.000Z',
-        payload: { changes: { model: { from: null, to: 'M' } } },
-      },
-    ]);
+    const manual = buildStory(
+      [
+        makeEvent('drive-updated', '2026-03-01T10:00:00.000Z', {
+          changes: { model: { from: null, to: 'M' } },
+        }),
+      ],
+      'd1',
+    );
     expect(manual[0]!.title).toBe('Details edited');
   });
 
@@ -258,22 +255,16 @@ describe('Suggested updates (R72)', () => {
 
   it('R72: the life story reads "Dismissed suggested model \'...\'" and "Restored suggestion for model"', () => {
     const at = '2026-03-01T10:00:00.000Z';
-    const story = buildStory([
-      {
-        id: 'e2',
-        driveId: 'd0',
-        type: 'suggestion-dismissed',
-        at: '2026-03-02T10:00:00.000Z',
-        payload: { field: 'model', value: null },
-      },
-      {
-        id: 'e1',
-        driveId: 'd0',
-        type: 'suggestion-dismissed',
-        at,
-        payload: { field: 'model', value: 'WDC WD80EFZX' },
-      },
-    ]);
+    const story = buildStory(
+      [
+        makeEvent('suggestion-dismissed', '2026-03-02T10:00:00.000Z', {
+          field: 'model',
+          value: null,
+        }),
+        makeEvent('suggestion-dismissed', at, { field: 'model', value: 'WDC WD80EFZX' }),
+      ],
+      'd1',
+    );
     const titles = story.map((i) => i.title);
     expect(titles).toContain("Dismissed suggested model 'WDC WD80EFZX'");
     expect(titles).toContain('Restored suggestion for model');

@@ -4,6 +4,7 @@ import userEvent from './user';
 import { App } from '../src/App';
 import { makeDrive } from './utils';
 import { errorResponse, fixtureData, posts, setupServer } from './server';
+import { bay, drive, makeEvent } from './events';
 import { next, pickSlot, renderApp } from './utils';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -684,13 +685,12 @@ describe('Spare and retired history (owner request)', () => {
   it('a spares-shelf row opens the drive drawer with its History; Assign stays separate', async () => {
     setupServer({
       'GET /api/drives/d9/events': [
-        {
-          id: 'h1',
-          driveId: 'd9',
-          type: 'drive-created',
-          at: '2026-03-01T09:00:00.000Z',
-          payload: {},
-        },
+        makeEvent(
+          'drive-created',
+          '2026-03-01T09:00:00.000Z',
+          {},
+          { drives: [drive('d9', 'SPARE9')] },
+        ),
       ],
     });
     renderApp(<App />);
@@ -734,37 +734,32 @@ describe('Spare and retired history (owner request)', () => {
 
 describe('Life story shows removal dates (R69)', () => {
   it('R69: a backdated removal and an unrecorded one render with their markers', async () => {
-    const event = (id: string, type: string, at: string, payload: Record<string, unknown>) => ({
-      id,
-      driveId: 'd0',
-      type,
-      at,
-      payload,
-    });
+    const d0 = [drive('d0', 'AAA0')];
+    const from = [bay('s0', 'from', 'Bay 1', 'Front bays')];
+    const to = [bay('s0', 'to', 'Bay 1', 'Front bays')];
     const at = '2026-10-11T09:00:00.000Z';
     setupServer({
       'GET /api/drives/d0/events': [
-        event('e5', 'drive-removed', at, {
-          slotLabel: 'Bay 1',
-          gridName: 'Front bays',
-          removedOn: null,
-        }),
-        event('e4', 'drive-installed', '2026-06-01T09:00:00.000Z', {
-          slotLabel: 'Bay 1',
-          gridName: 'Front bays',
-          installedOn: '2026-06-01',
-        }),
-        event('e3', 'drive-removed', '2026-05-20T09:00:00.000Z', {
-          slotLabel: 'Bay 1',
-          gridName: 'Front bays',
-          removedOn: '2026-05-01',
-        }),
-        event('e2', 'drive-installed', '2025-01-01T09:00:00.000Z', {
-          slotLabel: 'Bay 1',
-          gridName: 'Front bays',
-          installedOn: '2025-01-01',
-        }),
-        event('e1', 'drive-created', '2024-12-01T09:00:00.000Z', {}),
+        makeEvent('drive-removed', at, { removedOn: null }, { drives: d0, slots: from }),
+        makeEvent(
+          'drive-installed',
+          '2026-06-01T09:00:00.000Z',
+          { installedOn: '2026-06-01' },
+          { drives: d0, slots: to },
+        ),
+        makeEvent(
+          'drive-removed',
+          '2026-05-20T09:00:00.000Z',
+          { removedOn: '2026-05-01' },
+          { drives: d0, slots: from },
+        ),
+        makeEvent(
+          'drive-installed',
+          '2025-01-01T09:00:00.000Z',
+          { installedOn: '2025-01-01' },
+          { drives: d0, slots: to },
+        ),
+        makeEvent('drive-created', '2024-12-01T09:00:00.000Z', {}, { drives: d0 }),
       ],
     });
     renderApp(<App />);

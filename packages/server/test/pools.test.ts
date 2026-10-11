@@ -9,6 +9,7 @@ import { createPool, deletePool, getPool, listPools, updatePool } from '../src/c
 import { changeMembership, joinPool, leavePool, listMemberships } from '../src/core/memberships.js';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
 import { events, memberships } from '../src/db/schema.js';
+import { loadLinks } from '../src/core/events.js';
 
 let opened: OpenedDatabase;
 beforeEach(() => {
@@ -91,20 +92,29 @@ describe('pool CRUD (R30)', () => {
     updatePool(db(), pool.id, { layoutLabel: 'raidz1', expectedMembers: 4 });
     updatePool(db(), pool.id, { layoutLabel: 'raidz1' }); // no-op: no event
     deletePool(db(), pool.id);
-    const rows = db().select().from(events).where(like(events.type, 'pool-%')).all();
-    expect(rows.every((e) => e.driveId === null)).toBe(true);
+    const rows = db()
+      .select()
+      .from(events)
+      .where(like(events.type, 'pool-%'))
+      .all()
+      .map((e) => ({ ...e, links: loadLinks(db(), [e.id]).get(e.id)! }));
+    // Pool record events link the pool (with its name at the time) and no drive.
+    expect(rows.flatMap((e) => e.links.drives)).toEqual([]);
+    expect(
+      rows.every((e) => e.links.pools.length === 1 && e.links.pools[0]!.poolId === pool.id),
+    ).toBe(true);
+    expect(rows.map((e) => e.links.pools[0]!.poolName)).toEqual(['tank', 'tank', 'tank']);
     const byType = (t: string) => rows.filter((e) => e.type === t);
     expect(byType('pool-created')).toHaveLength(1);
-    expect(byType('pool-created')[0]!.payload).toMatchObject({ poolId: pool.id, name: 'tank' });
+    expect(byType('pool-created')[0]!.payload).toMatchObject({ name: 'tank' });
     expect(byType('pool-updated')).toHaveLength(1);
     expect(byType('pool-updated')[0]!.payload).toMatchObject({
-      poolId: pool.id,
       changes: {
         layoutLabel: { from: null, to: 'raidz1' },
         expectedMembers: { from: 6, to: 4 },
       },
     });
-    expect(byType('pool-deleted')[0]!.payload).toMatchObject({ poolId: pool.id, name: 'tank' });
+    expect(byType('pool-deleted')[0]!.payload).toMatchObject({ name: 'tank' });
   });
 
   it('R75: a refused pool delete or rename writes no event', () => {
@@ -224,11 +234,10 @@ describe('join (R29, R33)', () => {
       endedAt: null,
       source: 'manual',
     });
-    expect(eventsOf(driveId, 'pool-joined')[0]!.payload).toMatchObject({
-      poolId: pool.id,
-      role: 'hot-spare',
-      slotId: slots[0],
-    });
+    const joined = eventsOf(driveId, 'pool-joined')[0]!;
+    expect(joined.payload).toMatchObject({ role: 'hot-spare' });
+    expect(joined.links.drives.map((d) => [d.driveId, d.role])).toEqual([[driveId, 'subject']]);
+    expect(joined.links.pools).toEqual([{ poolId: pool.id, poolName: 'tank' }]);
   });
 
   it('R29: rejects a start date in the future (beyond clock skew)', () => {
@@ -326,11 +335,10 @@ describe('later edits: role and pool change (R29, R36)', () => {
       endedAt: null,
     });
     expect(listMemberships(db(), driveId)).toHaveLength(1);
-    expect(eventsOf(driveId, 'pool-role-changed')[0]!.payload).toMatchObject({
-      poolId: pool.id,
-      from: 'data',
-      to: 'hot-spare',
-    });
+    const changed = eventsOf(driveId, 'pool-role-changed')[0]!;
+    expect(changed.payload).toMatchObject({ from: 'data', to: 'hot-spare' });
+    expect(changed.links.drives.map((d) => [d.driveId, d.role])).toEqual([[driveId, 'subject']]);
+    expect(changed.links.pools.map((p) => p.poolId)).toEqual([pool.id]);
   });
 
   it('same role on the same pool is a no-op with no event', () => {
@@ -357,8 +365,8 @@ describe('later edits: role and pool change (R29, R36)', () => {
     ]);
     expect(history[1]!.id).toBe(old.id);
     expect(history[1]!.endedAt).not.toBeNull();
-    expect(eventsOf(driveId, 'pool-left')[0]!.payload).toMatchObject({ poolId: a.id });
-    expect(eventsOf(driveId, 'pool-joined')[0]!.payload).toMatchObject({ poolId: b.id });
+    expect(eventsOf(driveId, 'pool-left')[0]!.links.pools.map((p) => p.poolId)).toEqual([a.id]);
+    expect(eventsOf(driveId, 'pool-joined')[0]!.links.pools.map((p) => p.poolId)).toEqual([b.id]);
   });
 
   it('pool change can also set a new role', () => {

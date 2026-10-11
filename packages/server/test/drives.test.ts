@@ -75,7 +75,14 @@ describe('spare creation (R3, R11, R21)', () => {
     const d = createDrive(db(), { serial: ' abc ', model: 'M' });
     const evs = listDriveEvents(db(), d.id);
     expect(evs).toHaveLength(1);
-    expect(evs[0]).toMatchObject({ driveId: d.id, type: 'drive-created' });
+    expect(evs[0]).toMatchObject({ type: 'drive-created' });
+    expect(evs[0]!.links).toEqual({
+      drives: [
+        { driveId: d.id, role: 'subject', serial: 'abc', capacityBytes: null, driveType: null },
+      ],
+      slots: [],
+      pools: [],
+    });
     expect(evs[0]!.payload).toMatchObject({ serial: 'abc', model: 'M', capacityBytes: null });
   });
 

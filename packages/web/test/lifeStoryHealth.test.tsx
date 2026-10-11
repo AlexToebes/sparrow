@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import { LifeStory } from '../src/components/LifeStory';
+import { makeEvent } from './events';
 import { renderApp } from './utils';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -8,20 +9,16 @@ afterEach(() => vi.unstubAllGlobals());
 describe('life story health entries (R20)', () => {
   it('R20: shows each health entry as an icon plus text, never colour alone', async () => {
     const events = [
-      {
-        id: 'e2',
-        driveId: 'd1',
-        type: 'health-changed',
-        at: '2026-03-06T00:00:00.000Z',
-        payload: { from: 'ok', to: 'warning', reportedAt: '2026-03-06T00:00:00.000Z' },
-      },
-      {
-        id: 'e1',
-        driveId: 'd1',
-        type: 'health-changed',
-        at: '2026-03-05T00:00:00.000Z',
-        payload: { from: null, to: 'ok', reportedAt: '2026-03-05T00:00:00.000Z' },
-      },
+      makeEvent('health-changed', '2026-03-06T00:00:00.000Z', {
+        from: 'ok',
+        to: 'warning',
+        reportedAt: '2026-03-06T00:00:00.000Z',
+      }),
+      makeEvent('health-changed', '2026-03-05T00:00:00.000Z', {
+        from: null,
+        to: 'ok',
+        reportedAt: '2026-03-05T00:00:00.000Z',
+      }),
     ];
     vi.stubGlobal(
       'fetch',

@@ -296,6 +296,202 @@
         }
       }
     },
+    "event_drives": {
+      "name": "event_drives",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "drive_id": {
+          "name": "drive_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "event_drives_drive_idx": {
+          "name": "event_drives_drive_idx",
+          "columns": ["drive_id", "event_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "event_drives_event_id_events_id_fk": {
+          "name": "event_drives_event_id_events_id_fk",
+          "tableFrom": "event_drives",
+          "tableTo": "events",
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "event_drives_drive_id_drives_id_fk": {
+          "name": "event_drives_drive_id_drives_id_fk",
+          "tableFrom": "event_drives",
+          "tableTo": "drives",
+          "columnsFrom": ["drive_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "event_drives_event_id_drive_id_pk": {
+          "columns": ["event_id", "drive_id"],
+          "name": "event_drives_event_id_drive_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "event_drives_role_enum": {
+          "name": "event_drives_role_enum",
+          "value": "role IN ('subject', 'outgoing', 'incoming')"
+        }
+      }
+    },
+    "event_pools": {
+      "name": "event_pools",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pool_id": {
+          "name": "pool_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pool_name": {
+          "name": "pool_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "event_pools_pool_idx": {
+          "name": "event_pools_pool_idx",
+          "columns": ["pool_id", "event_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "event_pools_event_id_events_id_fk": {
+          "name": "event_pools_event_id_events_id_fk",
+          "tableFrom": "event_pools",
+          "tableTo": "events",
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "event_pools_event_id_pool_id_pk": {
+          "columns": ["event_id", "pool_id"],
+          "name": "event_pools_event_id_pool_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "event_slots": {
+      "name": "event_slots",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "slot_id": {
+          "name": "slot_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "slot_label": {
+          "name": "slot_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "grid_id": {
+          "name": "grid_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "grid_name": {
+          "name": "grid_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "event_slots_slot_idx": {
+          "name": "event_slots_slot_idx",
+          "columns": ["slot_id", "event_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "event_slots_event_id_events_id_fk": {
+          "name": "event_slots_event_id_events_id_fk",
+          "tableFrom": "event_slots",
+          "tableTo": "events",
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "event_slots_event_id_slot_id_role_pk": {
+          "columns": ["event_id", "slot_id", "role"],
+          "name": "event_slots_event_id_slot_id_role_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "event_slots_role_enum": {
+          "name": "event_slots_role_enum",
+          "value": "role IN ('from', 'to', 'at')"
+        }
+      }
+    },
     "events": {
       "name": "events",
       "columns": {
@@ -304,13 +500,6 @@
           "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "autoincrement": false
-        },
-        "drive_id": {
-          "name": "drive_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
           "autoincrement": false
         },
         "type": {
@@ -336,29 +525,19 @@
         }
       },
       "indexes": {
-        "events_drive_at_idx": {
-          "name": "events_drive_at_idx",
-          "columns": ["drive_id", "at"],
+        "events_at_idx": {
+          "name": "events_at_idx",
+          "columns": ["at"],
           "isUnique": false
         }
       },
-      "foreignKeys": {
-        "events_drive_id_drives_id_fk": {
-          "name": "events_drive_id_drives_id_fk",
-          "tableFrom": "events",
-          "tableTo": "drives",
-          "columnsFrom": ["drive_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
         "events_type_enum": {
           "name": "events_type_enum",
-          "value": "type IN ('drive-created', 'drive-updated', 'drive-installed', 'drive-removed', 'drive-retired', 'drive-reinstated', 'drive-sent-for-rma', 'drive-linked', 'pool-joined', 'pool-left', 'pool-role-changed', 'health-changed', 'suggestion-dismissed', 'enclosure-created', 'enclosure-renamed', 'enclosure-deleted', 'grid-created', 'grid-updated', 'grid-deleted', 'slot-relabeled', 'pool-created', 'pool-updated', 'pool-deleted')"
+          "value": "type IN ('drive-created', 'drive-updated', 'drive-linked', 'drive-installed', 'drive-removed', 'drive-retired', 'drive-sent-for-rma', 'drive-reinstated', 'drive-moved', 'drives-swapped', 'drive-replaced', 'pool-joined', 'pool-left', 'pool-role-changed', 'health-changed', 'suggestion-dismissed', 'enclosure-created', 'enclosure-renamed', 'enclosure-deleted', 'grid-created', 'grid-updated', 'grid-deleted', 'slot-relabeled', 'pool-created', 'pool-updated', 'pool-deleted')"
         }
       }
     },

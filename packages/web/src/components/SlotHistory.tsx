@@ -28,6 +28,14 @@ function Outcome({ entry, gridName }: { entry: SlotHistoryEntry; gridName: strin
           {o.toLabel}
         </>
       );
+    case 'swapped':
+      return (
+        <>
+          swapped with <span className="mono">{o.withSerial}</span>, moved to{' '}
+          {o.toGridName && o.toGridName !== gridName ? `${o.toGridName}, ` : ''}
+          {o.toLabel}
+        </>
+      );
     case 'spares':
       return <>back to spares</>;
     case 'retired':
@@ -73,6 +81,24 @@ export function SlotHistory({ slotId }: { slotId: string }) {
                 <>
                   installed <When on={e.installedOn} recordedAt={e.installedRecordedAt} /> → removed{' '}
                   <When on={e.removedOn} recordedAt={e.removedRecordedAt} />,{' '}
+                  {e.replacedBy ? (
+                    <>
+                      replaced by{' '}
+                      <Link
+                        className="mono"
+                        to={`/drives?drive=${encodeURIComponent(e.replacedBy.driveId)}`}
+                      >
+                        {e.replacedBy.serial}
+                      </Link>
+                      {e.replacedBy.capacityBytes ? (
+                        <span className="history-cap">
+                          {' '}
+                          ({formatBytes(e.replacedBy.capacityBytes)})
+                        </span>
+                      ) : null}
+                      ,{' '}
+                    </>
+                  ) : null}
                   <Outcome entry={e} gridName={data.slot.gridName} />
                 </>
               )}

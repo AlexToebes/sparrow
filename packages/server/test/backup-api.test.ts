@@ -49,7 +49,7 @@ describe('R43, R44: POST /api/import', () => {
     createDrive(opened.db, { serial: 'BEFORE' });
     const incoming = {
       format: 'sparrow-export',
-      schemaVersion: 1,
+      schemaVersion: 2,
       exportedAt: '2026-10-10T00:00:00.000Z',
       data: {
         enclosures: [],
@@ -87,14 +87,14 @@ describe('R43, R44: POST /api/import', () => {
 
   it('returns 400 for an export made by a newer version, and changes nothing', async () => {
     createDrive(opened.db, { serial: 'KEEP' });
-    const file = { ...((await exportJson()) as object), schemaVersion: 2 };
+    const file = { ...((await exportJson()) as object), schemaVersion: 3 };
     const res = await app.inject({ method: 'POST', url: '/api/import', payload: file });
     expect(res.statusCode).toBe(400);
     expect(res.json()).toEqual({
       error: {
         code: 'invalid',
         message:
-          'This export was made by a newer Sparrow (schema 2); this version supports up to 1.',
+          'This export was made by a newer Sparrow (schema 3); this version supports up to 2.',
       },
     });
     expect(

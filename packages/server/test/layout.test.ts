@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { sql } from 'drizzle-orm';
 import { layoutSchema } from '@sparrow/shared';
-import { events as eventsTable } from '../src/db/schema.js';
+import { listRecentEvents } from '../src/core/events.js';
 import { buildApp } from '../src/api/app.js';
 import { createLayoutService, seedInitialLayout } from '../src/core/layout.js';
 import { DomainError } from '../src/core/errors.js';
@@ -314,12 +313,8 @@ describe('HTTP API (app.inject)', () => {
 });
 
 describe('R75: layout changes write events with no drive', () => {
-  const allEvents = () =>
-    opened.db
-      .select()
-      .from(eventsTable)
-      .orderBy(sql`rowid`)
-      .all();
+  /** Oldest first, each with its links. */
+  const allEvents = () => listRecentEvents(opened.db, 1000).reverse();
 
   it('records enclosure, grid and slot changes with their details', () => {
     const svc = createLayoutService(opened.db);
@@ -350,19 +345,29 @@ describe('R75: layout changes write events with no drive', () => {
       'grid-deleted',
       'enclosure-deleted',
     ]);
-    expect(rows.every((e) => e.driveId === null)).toBe(true);
+    // Layout events involve no drive; only the relabel is linked to a bay (role `at`).
+    expect(rows.flatMap((e) => e.links.drives)).toEqual([]);
+    expect(rows.map((e) => e.links.slots.map((l) => l.role))).toEqual([
+      [],
+      [],
+      [],
+      [],
+      ['at'],
+      [],
+      [],
+    ]);
+    expect(rows.flatMap((e) => e.links.pools)).toEqual([]);
     expect(rows[1]!.payload).toMatchObject({ enclosureId: enc.id, from: 'NAS', to: 'Vault' });
     expect(rows[3]!.payload).toMatchObject({
       gridId: grid.id,
       enclosureId: enc.id,
       changes: { name: { from: 'Front', to: 'Bays' }, rows: { from: 1, to: 2 } },
     });
-    expect(rows[4]!.payload).toMatchObject({
-      slotId: slot.id,
-      gridId: grid.id,
-      from: null,
-      to: 'A1',
-    });
+    expect(rows[4]!.payload).toEqual({ from: null, to: 'A1' });
+    // The link copies the bay's label (as relabeled) and its grid, so history survives a grid delete.
+    expect(rows[4]!.links.slots).toEqual([
+      { slotId: slot.id, role: 'at', slotLabel: 'A1', gridId: grid.id, gridName: 'Bays' },
+    ]);
     expect(rows[5]!.payload).toMatchObject({ gridId: grid.id, name: 'Bays' });
     expect(rows[6]!.payload).toMatchObject({ enclosureId: enc.id, name: 'Vault' });
   });

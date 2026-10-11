@@ -1,6 +1,6 @@
 import { Skeleton, Text } from '@mantine/core';
 import { Link } from 'react-router';
-import { useDriveEvents, usePools } from '../api/hooks';
+import { useDriveEvents } from '../api/hooks';
 import { formatDuration } from '../lib/format';
 import { buildStory, summarizeStory } from '../lib/lifeStory';
 import { StateIcon } from './SlotTile';
@@ -8,12 +8,11 @@ import { StateIcon } from './SlotTile';
 /** The drive's history as a vertical timeline, oldest first (UI_DESIGN, from E). The "History" heading belongs to HistorySection. */
 export function LifeStory({ driveId }: { driveId: string }) {
   const { data, isPending, isError } = useDriveEvents(driveId);
-  const pools = usePools();
   if (isPending) return <Skeleton height={80} />;
   if (isError) return <Text c="red">Could not load the history.</Text>;
   if (data.length === 0) return <Text c="dimmed">No history yet.</Text>;
-  const items = buildStory(data, (id) => pools.data?.find((p) => p.id === id)?.name ?? null);
-  const sum = summarizeStory(data);
+  const items = buildStory(data, driveId);
+  const sum = summarizeStory(data, driveId);
   const parts = [
     sum.inService > 0 ? `${formatDuration(sum.inService)} in service` : null,
     sum.installUnrecorded ? 'Installation date not recorded' : null,

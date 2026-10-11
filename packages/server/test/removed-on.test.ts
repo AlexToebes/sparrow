@@ -161,7 +161,7 @@ describe('R69: removal date when a drive goes back to the spares', () => {
     expect(listDriveEvents(db(), d.id).map((e) => e.type)).not.toContain('pool-left');
   });
 
-  it('R69, R37: occupant { action: "spare", removedOn } backdates the old occupant and keeps its date in drive-removed', () => {
+  it('R69, R37: occupant { action: "spare", removedOn } backdates the old occupant and keeps its date in drive-replaced', () => {
     const [slot] = slotIds();
     const pool = makePool();
     const a = spare('A');
@@ -175,7 +175,9 @@ describe('R69: removal date when a drive goes back to the spares', () => {
       occupant: { action: 'spare', removedOn: date },
     });
     expect(out.occupant!.status).toBe('spare');
-    expect(event(a.id, 'drive-removed').payload).toMatchObject({ removedOn: date });
+    expect(event(a.id, 'drive-replaced').payload).toMatchObject({
+      outgoing: { outcome: 'spares', date },
+    });
     expect(members(a.id)[0]!.endedAt).toBe(`${date}T00:00:00.000Z`);
     expect(getDrive(db(), b.id).status).toBe('installed');
   });
@@ -186,10 +188,12 @@ describe('R69: removal date when a drive goes back to the spares', () => {
     const b = spare('B');
     assignDrive(db(), { driveId: a.id, slotId: slot!, installedOn: daysAgo(90) });
     assignDrive(db(), { driveId: b.id, slotId: slot!, occupant: { action: 'spare' } });
-    expect(event(a.id, 'drive-removed').payload).toMatchObject({ removedOn: TODAY() });
+    expect(event(a.id, 'drive-replaced').payload).toMatchObject({
+      outgoing: { outcome: 'spares', date: TODAY() },
+    });
   });
 
-  it('R69, R60, R27: retire and RMA put the retirement date into drive-removed', () => {
+  it('R69, R60, R27: a retired / RMA drive leaves the bay on its retirement date (slot from)', () => {
     const [s1, s2] = slotIds();
     const a = spare('A');
     const b = spare('B');
@@ -197,16 +201,18 @@ describe('R69: removal date when a drive goes back to the spares', () => {
     assignDrive(db(), { driveId: b.id, slotId: s2!, installedOn: '2025-01-01' });
     retireDrive(db(), a.id, { reason: 'failed', date: '2026-01-02' });
     sendForRma(db(), b.id, { date: '2026-03-04' });
-    expect(event(a.id, 'drive-removed').payload).toMatchObject({ removedOn: '2026-01-02' });
-    expect(event(b.id, 'drive-removed').payload).toMatchObject({ removedOn: '2026-03-04' });
+    expect(event(a.id, 'drive-retired').payload).toMatchObject({ date: '2026-01-02' });
+    expect(event(a.id, 'drive-retired').links.slots.map((l) => l.role)).toEqual(['from']);
+    expect(event(b.id, 'drive-sent-for-rma').payload).toMatchObject({ date: '2026-03-04' });
+    expect(event(b.id, 'drive-sent-for-rma').links.slots.map((l) => l.role)).toEqual(['from']);
   });
 
-  it('R69, R60: retire defaults the removal date to today', () => {
+  it('R69, R60: retire defaults the date it left the bay to today', () => {
     const [slot] = slotIds();
     const a = spare('A');
     assignDrive(db(), { driveId: a.id, slotId: slot!, installedOn: '2025-01-01' });
     retireDrive(db(), a.id, { reason: 'other' });
-    expect(event(a.id, 'drive-removed').payload).toMatchObject({ removedOn: TODAY() });
+    expect(event(a.id, 'drive-retired').payload).toMatchObject({ date: TODAY() });
   });
 
   it('R69, R43: removedOn survives an export, import and export round trip', () => {

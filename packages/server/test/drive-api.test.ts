@@ -152,9 +152,18 @@ describe('GET /api/events/recent (R75)', () => {
 
     const res = await app.inject({ method: 'GET', url: '/api/events/recent' });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { type: string; driveSerial: string | null }[];
+    const body = res.json() as {
+      type: string;
+      links: { drives: { serial: string; role: string }[]; pools: { poolName: string }[] };
+    }[];
     expect(body.map((e) => e.type)).toEqual(['pool-created', 'drive-created', 'enclosure-created']);
-    expect(body.map((e) => e.driveSerial)).toEqual([null, 'ABC123', null]);
+    // Each event carries its links resolved for display: drive serials, pool names (R75).
+    expect(body.map((e) => e.links.drives.map((d) => `${d.role}:${d.serial}`))).toEqual([
+      [],
+      ['subject:ABC123'],
+      [],
+    ]);
+    expect(body[0]!.links.pools).toEqual([{ poolId: expect.any(String), poolName: 'tank' }]);
 
     const limited = await app.inject({ method: 'GET', url: '/api/events/recent?limit=2' });
     expect(limited.json()).toHaveLength(2);

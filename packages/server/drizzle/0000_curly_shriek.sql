@@ -48,17 +48,48 @@ CREATE TABLE `enclosures` (
 	CONSTRAINT "enclosures_name_not_empty" CHECK(length("enclosures"."name") > 0)
 );
 --> statement-breakpoint
+CREATE TABLE `event_drives` (
+	`event_id` text NOT NULL,
+	`drive_id` text NOT NULL,
+	`role` text NOT NULL,
+	PRIMARY KEY(`event_id`, `drive_id`),
+	FOREIGN KEY (`event_id`) REFERENCES `events`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`drive_id`) REFERENCES `drives`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "event_drives_role_enum" CHECK(role IN ('subject', 'outgoing', 'incoming'))
+);
+--> statement-breakpoint
+CREATE INDEX `event_drives_drive_idx` ON `event_drives` (`drive_id`,`event_id`);--> statement-breakpoint
+CREATE TABLE `event_pools` (
+	`event_id` text NOT NULL,
+	`pool_id` text NOT NULL,
+	`pool_name` text NOT NULL,
+	PRIMARY KEY(`event_id`, `pool_id`),
+	FOREIGN KEY (`event_id`) REFERENCES `events`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `event_pools_pool_idx` ON `event_pools` (`pool_id`,`event_id`);--> statement-breakpoint
+CREATE TABLE `event_slots` (
+	`event_id` text NOT NULL,
+	`slot_id` text NOT NULL,
+	`role` text NOT NULL,
+	`slot_label` text,
+	`grid_id` text NOT NULL,
+	`grid_name` text NOT NULL,
+	PRIMARY KEY(`event_id`, `slot_id`, `role`),
+	FOREIGN KEY (`event_id`) REFERENCES `events`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "event_slots_role_enum" CHECK(role IN ('from', 'to', 'at'))
+);
+--> statement-breakpoint
+CREATE INDEX `event_slots_slot_idx` ON `event_slots` (`slot_id`,`event_id`);--> statement-breakpoint
 CREATE TABLE `events` (
 	`id` text PRIMARY KEY NOT NULL,
-	`drive_id` text,
 	`type` text NOT NULL,
 	`at` text NOT NULL,
 	`payload` text NOT NULL,
-	FOREIGN KEY (`drive_id`) REFERENCES `drives`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "events_type_enum" CHECK(type IN ('drive-created', 'drive-updated', 'drive-installed', 'drive-removed', 'drive-retired', 'drive-reinstated', 'drive-sent-for-rma', 'drive-linked', 'pool-joined', 'pool-left', 'pool-role-changed', 'health-changed', 'suggestion-dismissed', 'enclosure-created', 'enclosure-renamed', 'enclosure-deleted', 'grid-created', 'grid-updated', 'grid-deleted', 'slot-relabeled', 'pool-created', 'pool-updated', 'pool-deleted'))
+	CONSTRAINT "events_type_enum" CHECK(type IN ('drive-created', 'drive-updated', 'drive-linked', 'drive-installed', 'drive-removed', 'drive-retired', 'drive-sent-for-rma', 'drive-reinstated', 'drive-moved', 'drives-swapped', 'drive-replaced', 'pool-joined', 'pool-left', 'pool-role-changed', 'health-changed', 'suggestion-dismissed', 'enclosure-created', 'enclosure-renamed', 'enclosure-deleted', 'grid-created', 'grid-updated', 'grid-deleted', 'slot-relabeled', 'pool-created', 'pool-updated', 'pool-deleted'))
 );
 --> statement-breakpoint
-CREATE INDEX `events_drive_at_idx` ON `events` (`drive_id`,`at`);--> statement-breakpoint
+CREATE INDEX `events_at_idx` ON `events` (`at`);--> statement-breakpoint
 CREATE TABLE `grids` (
 	`id` text PRIMARY KEY NOT NULL,
 	`enclosure_id` text NOT NULL,

@@ -89,7 +89,11 @@ export function createDrive(
       })
       .returning()
       .get();
-    recordEvent(tx, { driveId: row.id, type: 'drive-created', payload: initial });
+    recordEvent(tx, {
+      type: 'drive-created',
+      drives: [{ id: row.id }],
+      payload: initial,
+    });
     return row;
   });
 }
@@ -193,8 +197,8 @@ export function updateDrive(
       .returning()
       .get();
     recordEvent(tx, {
-      driveId: id,
       type: 'drive-updated',
+      drives: [{ id }],
       payload: {
         changes,
         ...(membershipStartedAt ? { membershipStartedAt } : {}),

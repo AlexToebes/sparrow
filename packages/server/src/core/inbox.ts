@@ -167,8 +167,8 @@ export function linkObservation(
         .run();
     }
     recordEvent(tx, {
-      driveId: drive.id,
       type: 'drive-linked',
+      drives: [{ id: drive.id }],
       payload: { observationSerial: entry.observation.serial ?? null, filled },
     });
     return assignDrive(nested(tx), { driveId: drive.id, ...placementOf(input) });

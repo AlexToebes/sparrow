@@ -64,11 +64,11 @@ export function endOpenMembership(
   const endedAt = at < open.startedAt ? open.startedAt : at;
   tx.update(memberships).set({ endedAt }).where(eq(memberships.id, open.id)).run();
   recordEvent(tx, {
-    driveId,
     type: 'pool-left',
     at: userSupplied ? nowIso() : at,
+    drives: [{ id: driveId }],
+    pools: [{ id: open.poolId }],
     payload: {
-      poolId: open.poolId,
       role: open.role,
       membershipId: open.id,
       ...(userSupplied ? { endedAt } : {}),
@@ -85,7 +85,6 @@ export function startMembership(
     poolId: string;
     role: MembershipRole;
     startedAt: string;
-    slotId: string | null;
     /** True when startedAt came from the user: the event is stamped now and carries the date. */
     userSupplied?: boolean;
   },
@@ -106,13 +105,12 @@ export function startMembership(
     .returning()
     .get();
   recordEvent(tx, {
-    driveId: input.driveId,
     type: 'pool-joined',
     at: input.userSupplied ? nowIso() : input.startedAt,
+    drives: [{ id: input.driveId }],
+    pools: [{ id: input.poolId }],
     payload: {
-      poolId: input.poolId,
       role: input.role,
-      slotId: input.slotId,
       membershipId: id,
       ...(input.userSupplied ? { startedAt: input.startedAt } : {}),
     },
@@ -143,7 +141,6 @@ export function joinPool(db: AppDb, driveId: string, input: JoinPoolInput): Memb
       poolId: input.poolId,
       role: input.role ?? 'data',
       startedAt: toIso(input.startedAt) ?? nowIso(),
-      slotId: drive.slotId,
       userSupplied: input.startedAt !== undefined,
     });
   });
@@ -179,16 +176,15 @@ export function changeMembership(
         poolId: targetPoolId,
         role: targetRole,
         startedAt: at,
-        slotId: drive.slotId,
       });
     }
 
     tx.update(memberships).set({ role: targetRole }).where(eq(memberships.id, open.id)).run();
     recordEvent(tx, {
-      driveId,
       type: 'pool-role-changed',
+      drives: [{ id: driveId }],
+      pools: [{ id: open.poolId }],
       payload: {
-        poolId: open.poolId,
         from: open.role,
         to: targetRole,
         membershipId: open.id,

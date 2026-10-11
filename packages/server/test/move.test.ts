@@ -10,6 +10,7 @@ import { createLayoutService } from '../src/core/layout.js';
 import { moveDrive } from '../src/core/move.js';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
 import { events, memberships, pools } from '../src/db/schema.js';
+import { driveLinks, slotLinks, subject } from './event-helpers.js';
 
 let opened: OpenedDatabase;
 let app: FastifyInstance;
@@ -77,10 +78,12 @@ function setup() {
 
 describe('R73: move to the spares shelf', () => {
   it('R73, R69: goes back to spares with the move date, membership ended', () => {
-    const { a } = setup();
+    const { a, s1 } = setup();
     const result = moveDrive(db(), a.id, { destination: { kind: 'spares' }, date: daysAgo(3) });
     expect(result.drive).toMatchObject({ status: 'spare', slotId: null });
-    expect(ofType(a.id, 'drive-removed')[0]!.payload).toMatchObject({ removedOn: daysAgo(3) });
+    const removed = ofType(a.id, 'drive-removed')[0]!;
+    expect(removed.payload).toMatchObject({ removedOn: daysAgo(3) });
+    expect(slotLinks(removed)).toEqual([{ slotId: s1, role: 'from' }]);
     expect(members(a.id)[0]!.endedAt).not.toBeNull();
   });
 
@@ -95,10 +98,21 @@ describe('R73: move to the spares shelf', () => {
     expect(result.replacement).toMatchObject({ id: c.id, status: 'installed', slotId: s1 });
     expect(getDrive(db(), c.id).installedOn).toBe(daysAgo(2));
     expect(members(c.id)[0]).toMatchObject({ poolId: pool, role: 'data', endedAt: null });
-    expect(ofType(c.id, 'drive-installed')[0]!.payload).toMatchObject({
-      slotId: s1,
+    // ONE drive-replaced event for the vacated bay: A outgoing (to the spares), C incoming.
+    expect(ofType(c.id, 'drive-installed')).toHaveLength(0);
+    expect(ofType(a.id, 'drive-removed')).toHaveLength(0);
+    const replaced = ofType(c.id, 'drive-replaced');
+    expect(replaced).toHaveLength(1);
+    expect(ofType(a.id, 'drive-replaced')[0]!.id).toBe(replaced[0]!.id);
+    expect(driveLinks(replaced[0]!)).toEqual([
+      { driveId: c.id, role: 'incoming' },
+      { driveId: a.id, role: 'outgoing' },
+    ]);
+    expect(slotLinks(replaced[0]!)).toEqual([{ slotId: s1, role: 'at' }]);
+    expect(replaced[0]!.payload).toMatchObject({
       poolId: pool,
       installedOn: daysAgo(2),
+      outgoing: { outcome: 'spares', date: daysAgo(2), installedOn: daysAgo(60) },
     });
     expect(ofType(c.id, 'pool-joined')).toHaveLength(1);
   });
@@ -109,15 +123,19 @@ describe('R73: move to the spares shelf', () => {
     const d = spare('D');
     moveDrive(db(), a.id, { destination: { kind: 'spares' }, replacement: { driveId: c.id } });
     expect(getDrive(db(), c.id).installedOn).toBe(TODAY());
-    expect(ofType(a.id, 'drive-removed')[0]!.payload).toMatchObject({ removedOn: TODAY() });
+    expect(ofType(a.id, 'drive-replaced')[0]!.payload).toMatchObject({
+      outgoing: { outcome: 'spares', date: TODAY() },
+    });
     moveDrive(db(), b.id, {
       destination: { kind: 'spares' },
       replacement: { driveId: d.id },
       date: null,
     });
     expect(getDrive(db(), d.id).installedOn).toBeNull();
-    expect(ofType(b.id, 'drive-removed')[0]!.payload).toMatchObject({ removedOn: null });
-    expect(ofType(d.id, 'drive-installed')[0]!.payload).toMatchObject({ installedOn: null });
+    expect(ofType(b.id, 'drive-replaced')[0]!.payload).toMatchObject({
+      installedOn: null,
+      outgoing: { outcome: 'spares', date: null },
+    });
   });
 
   it('R73: the replacement can pick another pool, no pool, and a role', () => {
@@ -140,7 +158,7 @@ describe('R73: move to the spares shelf', () => {
 
 describe('R73: retire and RMA', () => {
   it('R73, R60: retire without a replacement uses the existing retire semantics', () => {
-    const { a } = setup();
+    const { a, s1 } = setup();
     const result = moveDrive(db(), a.id, {
       destination: { kind: 'retire', reason: 'failed', note: 'clicking' },
       date: daysAgo(4),
@@ -151,8 +169,16 @@ describe('R73: retire and RMA', () => {
       retirementDate: daysAgo(4),
       retirementNote: 'clicking',
     });
-    expect(ofType(a.id, 'drive-removed')[0]!.payload).toMatchObject({ removedOn: daysAgo(4) });
-    expect(ofType(a.id, 'drive-retired')).toHaveLength(1);
+    // R14, R74: ONE drive-retired event (slot from); no separate removal.
+    expect(ofType(a.id, 'drive-removed')).toHaveLength(0);
+    const retired = ofType(a.id, 'drive-retired');
+    expect(retired).toHaveLength(1);
+    expect(retired[0]!.payload).toMatchObject({
+      reason: 'failed',
+      date: daysAgo(4),
+      note: 'clicking',
+    });
+    expect(slotLinks(retired[0]!)).toEqual([{ slotId: s1, role: 'from' }]);
     expect(ofType(a.id, 'pool-left')).toHaveLength(1);
   });
 
@@ -165,7 +191,15 @@ describe('R73: retire and RMA', () => {
     });
     expect(result.drive.status).toBe('retired');
     expect(getDrive(db(), c.id)).toMatchObject({ status: 'installed', slotId: s1 });
-    expect(ofType(a.id, 'drive-retired')[0]!.payload).not.toHaveProperty('replacedByDriveId');
+    // The departing drive and the spare are ONE drive-replaced event with the retire outcome.
+    expect(ofType(a.id, 'drive-retired')).toHaveLength(0);
+    expect(ofType(a.id, 'drive-replaced')[0]!.payload).toMatchObject({
+      outgoing: { outcome: 'retired', reason: 'other' },
+    });
+    expect(driveLinks(ofType(a.id, 'drive-replaced')[0]!)).toEqual([
+      { driveId: c.id, role: 'incoming' },
+      { driveId: a.id, role: 'outgoing' },
+    ]);
   });
 
   it('R73, R27: RMA writes the RMA event; with a replacement the spare takes the bay', () => {
@@ -173,25 +207,28 @@ describe('R73: retire and RMA', () => {
     const c = spare('C');
     moveDrive(db(), a.id, { destination: { kind: 'rma', note: 'sent' }, date: daysAgo(1) });
     expect(getDrive(db(), a.id)).toMatchObject({ status: 'retired', retirementReason: 'failed' });
-    expect(ofType(a.id, 'drive-sent-for-rma')[0]!.payload).toMatchObject({
-      date: daysAgo(1),
-      note: 'sent',
-    });
+    const rma = ofType(a.id, 'drive-sent-for-rma');
+    expect(rma).toHaveLength(1);
+    expect(rma[0]!.payload).toMatchObject({ date: daysAgo(1), note: 'sent' });
+    expect(driveLinks(rma[0]!)).toEqual(subject(a.id));
     moveDrive(db(), b.id, { destination: { kind: 'rma' }, replacement: { driveId: c.id } });
     expect(getDrive(db(), b.id).status).toBe('retired');
     expect(getDrive(db(), c.id).status).toBe('installed');
+    expect(ofType(b.id, 'drive-replaced')[0]!.payload).toMatchObject({
+      outgoing: { outcome: 'rma' },
+    });
   });
 
   it('R73, R60: a retire date of null is not recorded', () => {
     const { a } = setup();
     moveDrive(db(), a.id, { destination: { kind: 'retire', reason: 'failed' }, date: null });
     expect(getDrive(db(), a.id).retirementDate).toBeNull();
-    expect(ofType(a.id, 'drive-removed')[0]!.payload).toMatchObject({ removedOn: null });
+    expect(ofType(a.id, 'drive-retired')[0]!.payload).toMatchObject({ date: null });
   });
 });
 
 describe('R73: move to another bay', () => {
-  it('R73, R29: keeps the open membership; writes removed + installed with moved* payloads, no pool events', () => {
+  it('R73, R29, R74: keeps the open membership; ONE drive-moved event (slots from + to), no pool events', () => {
     const { a, s1, s3, pool } = setup();
     const before = members(a.id);
     const poolEvents = ofType(a.id, 'pool-left').length + ofType(a.id, 'pool-joined').length;
@@ -207,21 +244,21 @@ describe('R73: move to another bay', () => {
     expect(members(a.id)).toEqual(before);
     expect(members(a.id)[0]).toMatchObject({ poolId: pool, endedAt: null });
     expect(ofType(a.id, 'pool-left').length + ofType(a.id, 'pool-joined').length).toBe(poolEvents);
-    expect(ofType(a.id, 'drive-removed')[0]!.payload).toMatchObject({
-      slotId: s1,
+    expect(ofType(a.id, 'drive-removed')).toHaveLength(0);
+    expect(ofType(a.id, 'drive-installed')).toHaveLength(1); // the original assignment only
+    const moved = ofType(a.id, 'drive-moved');
+    expect(moved).toHaveLength(1);
+    expect(moved[0]!.payload).toMatchObject({
+      date: daysAgo(5),
       poolId: pool,
       role: 'data',
       installedOn: daysAgo(60),
-      removedOn: daysAgo(5),
-      movedToSlotId: s3,
     });
-    expect(ofType(a.id, 'drive-installed').at(0)!.payload).toMatchObject({
-      slotId: s3,
-      poolId: pool,
-      role: 'data',
-      installedOn: daysAgo(5),
-      movedFromSlotId: s1,
-    });
+    expect(driveLinks(moved[0]!)).toEqual(subject(a.id));
+    expect(slotLinks(moved[0]!)).toEqual([
+      { slotId: s1, role: 'from' },
+      { slotId: s3, role: 'to' },
+    ]);
   });
 
   it('R73, R35: the vacated bay can take a spare in the same step', () => {
@@ -236,13 +273,31 @@ describe('R73: move to another bay', () => {
     // The default pool and role come from the drive that left, which kept its own membership.
     expect(members(c.id)[0]).toMatchObject({ role: 'data', endedAt: null });
     expect(members(a.id)[0]!.endedAt).toBeNull();
+    // The vacated bay's event: A outgoing (moved to s3), C incoming; the target bay is linked `to`.
+    // No drive-moved is written because the one replacement event already says where A went.
+    expect(ofType(a.id, 'drive-moved')).toHaveLength(0);
+    const replaced = ofType(c.id, 'drive-replaced');
+    expect(replaced).toHaveLength(1);
+    expect(driveLinks(replaced[0]!)).toEqual([
+      { driveId: c.id, role: 'incoming' },
+      { driveId: a.id, role: 'outgoing' },
+    ]);
+    expect(slotLinks(replaced[0]!)).toEqual(
+      [
+        { slotId: s3, role: 'to' },
+        { slotId: s1, role: 'at' },
+      ].sort((x, y) => x.role.localeCompare(y.role) || x.slotId.localeCompare(y.slotId)),
+    );
+    expect(replaced[0]!.payload).toMatchObject({
+      outgoing: { outcome: 'moved', toSlotId: s3 },
+    });
   });
 
   it('R73: an unrecorded date makes the new installation date null', () => {
     const { a, s3 } = setup();
     moveDrive(db(), a.id, { destination: { kind: 'slot', slotId: s3 }, date: null });
     expect(getDrive(db(), a.id).installedOn).toBeNull();
-    expect(ofType(a.id, 'drive-removed')[0]!.payload).toMatchObject({ removedOn: null });
+    expect(ofType(a.id, 'drive-moved')[0]!.payload).toMatchObject({ date: null });
   });
 
   it('R73, R68: a move date before the installation date is rejected and nothing changes', () => {
@@ -272,15 +327,75 @@ describe('R73: move to another bay', () => {
   });
 
   it('R73, R37: occupant to spares uses the move date', () => {
-    const { a, b, s2 } = setup();
+    const { a, b, s1, s2 } = setup();
     const result = moveDrive(db(), a.id, {
       destination: { kind: 'slot', slotId: s2, occupant: { action: 'spare' } },
       date: daysAgo(2),
     });
     expect(result.drive.slotId).toBe(s2);
     expect(result.occupant).toMatchObject({ id: b.id, status: 'spare' });
-    expect(ofType(b.id, 'drive-removed')[0]!.payload).toMatchObject({ removedOn: daysAgo(2) });
+    // ONE drive-replaced event for the destination bay: B outgoing (to the spares), A incoming.
+    expect(ofType(b.id, 'drive-removed')).toHaveLength(0);
+    expect(ofType(a.id, 'drive-removed')).toHaveLength(0);
+    const replaced = ofType(b.id, 'drive-replaced');
+    expect(replaced).toHaveLength(1);
+    expect(replaced[0]!.payload).toMatchObject({
+      installedOn: daysAgo(2),
+      outgoing: { outcome: 'spares', date: daysAgo(2) },
+    });
+    expect(driveLinks(replaced[0]!)).toEqual([
+      { driveId: a.id, role: 'incoming' },
+      { driveId: b.id, role: 'outgoing' },
+    ]);
+    // No spare fills the vacated bay, so the event also links it as `from`: its history sees A leave.
+    expect(slotLinks(replaced[0]!)).toEqual(
+      [
+        { slotId: s1, role: 'from' },
+        { slotId: s2, role: 'at' },
+      ].sort((x, y) => x.role.localeCompare(y.role) || x.slotId.localeCompare(y.slotId)),
+    );
     expect(members(b.id)[0]!.endedAt).not.toBeNull();
+  });
+
+  it('R73, R74: into an occupied bay with a spare filling the vacated bay is TWO drive-replaced events in one transaction', () => {
+    const { a, b, s1, s2 } = setup();
+    const c = spare('C');
+    const result = moveDrive(db(), a.id, {
+      destination: { kind: 'slot', slotId: s2, occupant: { action: 'retire', reason: 'failed' } },
+      replacement: { driveId: c.id },
+      date: daysAgo(2),
+    });
+    expect(result.drive.slotId).toBe(s2);
+    expect(result.occupant).toMatchObject({ id: b.id, status: 'retired' });
+    expect(result.replacement).toMatchObject({ id: c.id, slotId: s1 });
+    const all = db()
+      .select()
+      .from(events)
+      .all()
+      .filter((e) => e.type === 'drive-replaced');
+    expect(all).toHaveLength(2);
+    const atS2 = ofType(b.id, 'drive-replaced')[0]!;
+    const atS1 = ofType(c.id, 'drive-replaced')[0]!;
+    expect(atS2.id).not.toBe(atS1.id);
+    expect(driveLinks(atS2)).toEqual([
+      { driveId: a.id, role: 'incoming' },
+      { driveId: b.id, role: 'outgoing' },
+    ]);
+    expect(slotLinks(atS2)).toEqual([{ slotId: s2, role: 'at' }]);
+    expect(atS2.payload).toMatchObject({ outgoing: { outcome: 'retired', reason: 'failed' } });
+    expect(driveLinks(atS1)).toEqual([
+      { driveId: c.id, role: 'incoming' },
+      { driveId: a.id, role: 'outgoing' },
+    ]);
+    expect(slotLinks(atS1)).toEqual(
+      [
+        { slotId: s1, role: 'at' },
+        { slotId: s2, role: 'to' },
+      ].sort((x, y) => x.role.localeCompare(y.role)),
+    );
+    expect(atS1.payload).toMatchObject({ outgoing: { outcome: 'moved', toSlotId: s2 } });
+    // The mover has both, in a sensible order.
+    expect(ofType(a.id, 'drive-replaced')).toHaveLength(2);
   });
 
   it('R73, R37, R62: occupant retired with the chosen reason; dates follow the move', () => {
@@ -308,7 +423,9 @@ describe('R73: move to another bay', () => {
       date: null,
     });
     expect(getDrive(db(), b.id).status).toBe('retired');
-    expect(ofType(b.id, 'drive-sent-for-rma')[0]!.payload).toMatchObject({ date: null });
+    expect(ofType(b.id, 'drive-replaced')[0]!.payload).toMatchObject({
+      outgoing: { outcome: 'rma', date: null },
+    });
   });
 
   it('R73: an explicit date on the occupant resolution wins over the move date', () => {
@@ -465,30 +582,34 @@ describe('R73: swap two installed drives', () => {
     expect(db().select().from(memberships).all()).toEqual(memberRows);
     expect(members(a.id)[0]).toMatchObject({ poolId: pool, role: 'data', endedAt: null });
     expect(members(b.id)[0]).toMatchObject({ poolId: pool, role: 'hot-spare', endedAt: null });
-    expect(log(a.id)).toHaveLength(before[0]! + 2);
-    expect(log(b.id)).toHaveLength(before[1]! + 2);
-    expect(ofType(a.id, 'drive-removed')[0]!.payload).toMatchObject({
-      slotId: s1,
-      removedOn: daysAgo(4),
-      installedOn: daysAgo(60),
-      movedToSlotId: s2,
-      swappedWithDriveId: b.id,
-    });
-    expect(ofType(a.id, 'drive-installed')[0]!.payload).toMatchObject({
-      slotId: s2,
-      installedOn: daysAgo(4),
-      movedFromSlotId: s1,
-      swappedWithDriveId: b.id,
-    });
-    expect(ofType(b.id, 'drive-removed')[0]!.payload).toMatchObject({
-      slotId: s2,
-      movedToSlotId: s1,
-      swappedWithDriveId: a.id,
-    });
-    expect(ofType(b.id, 'drive-installed')[0]!.payload).toMatchObject({
-      slotId: s1,
-      movedFromSlotId: s2,
-      swappedWithDriveId: a.id,
+    // R14, R74: ONE drives-swapped event for both drives and both bays.
+    expect(log(a.id)).toHaveLength(before[0]! + 1);
+    expect(log(b.id)).toHaveLength(before[1]! + 1);
+    const swapped = ofType(a.id, 'drives-swapped');
+    expect(swapped).toHaveLength(1);
+    expect(ofType(b.id, 'drives-swapped')[0]!.id).toBe(swapped[0]!.id);
+    expect(ofType(a.id, 'drive-removed')).toHaveLength(0);
+    expect(driveLinks(swapped[0]!)).toEqual(
+      [
+        { driveId: a.id, role: 'subject' },
+        { driveId: b.id, role: 'subject' },
+      ].sort((x, y) => x.driveId.localeCompare(y.driveId)),
+    );
+    // Both bays are linked as `from` AND `to`.
+    expect(slotLinks(swapped[0]!)).toEqual(
+      [
+        { slotId: s1, role: 'from' },
+        { slotId: s2, role: 'from' },
+        { slotId: s1, role: 'to' },
+        { slotId: s2, role: 'to' },
+      ].sort((x, y) => x.role.localeCompare(y.role) || x.slotId.localeCompare(y.slotId)),
+    );
+    expect(swapped[0]!.payload).toMatchObject({
+      date: daysAgo(4),
+      moves: [
+        { driveId: a.id, fromSlotId: s1, toSlotId: s2, poolId: pool, role: 'data' },
+        { driveId: b.id, fromSlotId: s2, toSlotId: s1, poolId: pool, role: 'hot-spare' },
+      ],
     });
   });
 
@@ -500,7 +621,7 @@ describe('R73: swap two installed drives', () => {
     moveDrive(db(), a.id, { destination: swapTo(s1), date: null });
     expect(getDrive(db(), a.id)).toMatchObject({ slotId: s1, installedOn: null });
     expect(getDrive(db(), b.id)).toMatchObject({ slotId: s2, installedOn: null });
-    expect(ofType(b.id, 'drive-removed')[0]!.payload).toMatchObject({ removedOn: null });
+    expect(ofType(b.id, 'drives-swapped')[0]!.payload).toMatchObject({ date: null });
   });
 
   it('R73: a date before either drive was installed, or in the future, is rejected', () => {
@@ -529,7 +650,7 @@ describe('R73: swap two installed drives', () => {
     const n = eventCount();
     const memberRows = db().select().from(memberships).all();
     opened.sqlite.exec(
-      `CREATE TRIGGER fail_b BEFORE INSERT ON events WHEN NEW.drive_id = '${b.id}' AND NEW.type = 'drive-installed' BEGIN SELECT RAISE(ABORT, 'boom'); END`,
+      "CREATE TRIGGER fail_swap BEFORE INSERT ON events WHEN NEW.type = 'drives-swapped' BEGIN SELECT RAISE(ABORT, 'boom'); END",
     );
     expect(() => moveDrive(db(), a.id, { destination: swapTo(s2) })).toThrow();
     expect(getDrive(db(), a.id)).toMatchObject({

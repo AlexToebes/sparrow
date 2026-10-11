@@ -314,7 +314,7 @@ describe('R68: leaving the slot clears the date, the history keeps it', () => {
     expect(event(d.id, 'drive-removed').payload).toMatchObject({ installedOn: '2025-05-05' });
   });
 
-  it('R60, R27: retiring or sending for RMA an installed drive clears it and logs it on drive-removed', () => {
+  it('R60, R27: retiring or sending for RMA an installed drive clears it and keeps it on the retire / RMA event', () => {
     const [s1, s2] = slotIds();
     const a = spare('A');
     const b = spare('B');
@@ -322,8 +322,8 @@ describe('R68: leaving the slot clears the date, the history keeps it', () => {
     assignDrive(db(), { driveId: b.id, slotId: s2!, installedOn: '2025-06-06' });
     expect(retireDrive(db(), a.id, { reason: 'failed' }).installedOn).toBeNull();
     expect(sendForRma(db(), b.id, {}).installedOn).toBeNull();
-    expect(event(a.id, 'drive-removed').payload).toMatchObject({ installedOn: '2025-05-05' });
-    expect(event(b.id, 'drive-removed').payload).toMatchObject({ installedOn: '2025-06-06' });
+    expect(event(a.id, 'drive-retired').payload).toMatchObject({ installedOn: '2025-05-05' });
+    expect(event(b.id, 'drive-sent-for-rma').payload).toMatchObject({ installedOn: '2025-06-06' });
   });
 
   it('R14, R68: removing a drive with no recorded date logs installedOn null', () => {
@@ -334,7 +334,7 @@ describe('R68: leaving the slot clears the date, the history keeps it', () => {
     expect(event(d.id, 'drive-removed').payload).toMatchObject({ installedOn: null });
   });
 
-  it('R37, R68: resolving an occupant keeps its date in drive-removed; the newcomer gets its own', () => {
+  it('R37, R68: resolving an occupant keeps its date in drive-replaced; the newcomer gets its own', () => {
     const [slot] = slotIds();
     const a = spare('A');
     const b = spare('B');
@@ -347,7 +347,10 @@ describe('R68: leaving the slot clears the date, the history keeps it', () => {
     });
     expect(getDrive(db(), a.id).installedOn).toBeNull();
     expect(getDrive(db(), b.id).installedOn).toBe('2025-02-02');
-    expect(event(a.id, 'drive-removed').payload).toMatchObject({ installedOn: '2024-01-01' });
+    expect(event(a.id, 'drive-replaced').payload).toMatchObject({
+      installedOn: '2025-02-02',
+      outgoing: { installedOn: '2024-01-01' },
+    });
   });
 });
 
@@ -452,35 +455,6 @@ describe('R41, R43, R68: export and import', () => {
     try {
       importData(fresh.db, JSON.parse(JSON.stringify(first)), { backupDir: tmp });
       expect(exportData(fresh.db).data.drives).toEqual(first.data.drives);
-    } finally {
-      fresh.sqlite.close();
-    }
-  });
-
-  it('R43, R68: an older schema-1 file without installedOn still imports; its installed drives become "not recorded"', () => {
-    const [slot, other] = slotIds();
-    const a = spare('A');
-    const b = spare('B');
-    assignDrive(db(), { driveId: a.id, slotId: slot!, installedOn: '2022-02-02' });
-    assignDrive(db(), { driveId: b.id, slotId: other! });
-    spare('C');
-    const file = JSON.parse(JSON.stringify(exportData(db()))) as ReturnType<typeof exportData>;
-    // Make the file look like an old one: no installedOn key, and a recorded install event of 2026-05-06.
-    for (const drive of file.data.drives) delete (drive as { installedOn?: unknown }).installedOn;
-    for (const e of file.data.events) {
-      if (e.type === 'drive-installed' && e.driveId === a.id) {
-        e.at = '2026-05-06T07:08:09.000Z';
-        delete e.payload.installedOn;
-      }
-    }
-    const fresh = openDatabase(':memory:');
-    try {
-      importData(fresh.db, file, { backupDir: tmp });
-      const byId = new Map(exportData(fresh.db).data.drives.map((d) => [d.id, d]));
-      // The event date is when it was recorded, not an installation date, so nothing is derived.
-      expect(byId.get(a.id)).toMatchObject({ status: 'installed', installedOn: null });
-      expect(byId.get(b.id)).toMatchObject({ status: 'installed', installedOn: null });
-      expect([...byId.values()].filter((d) => d.status === 'spare')[0]!.installedOn).toBeNull();
     } finally {
       fresh.sqlite.close();
     }

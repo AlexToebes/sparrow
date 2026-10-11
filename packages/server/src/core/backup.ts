@@ -13,13 +13,17 @@ import {
   appMeta,
   drives,
   enclosures,
+  eventDrives,
+  eventPools,
   events,
+  eventSlots,
   grids,
   memberships,
   pools,
   slots,
 } from '../db/schema.js';
 import { invalid } from './errors.js';
+import { loadLinks } from './events.js';
 
 // R41, R42, R43, R44: export, import and the automatic backup taken before an import.
 // The provider snapshot cache is not user data and is never exported or replaced (R42).
@@ -47,6 +51,18 @@ export interface ImportOptions {
   now?: Date;
 }
 
+/** R41: every event with its drive, slot and pool links nested under `links`. */
+function exportEvents(db: AppDb): ExportData['events'] {
+  const rows = db.select().from(events).orderBy(asc(events.at), asc(events.id)).all();
+  const links = loadLinks(
+    db,
+    rows.map((r) => r.id),
+  );
+  return rows.map((r) => {
+    return { ...r, links: links.get(r.id)! };
+  });
+}
+
 /** R41, R42: reads every user table in a stable order. */
 export function exportData(db: AppDb, now: Date = new Date()): ExportFile {
   const data: ExportData = {
@@ -64,7 +80,7 @@ export function exportData(db: AppDb, now: Date = new Date()): ExportFile {
       .from(memberships)
       .orderBy(asc(memberships.createdAt), asc(memberships.id))
       .all(),
-    events: db.select().from(events).orderBy(asc(events.at), asc(events.id)).all(),
+    events: exportEvents(db),
     appMeta: db.select().from(appMeta).orderBy(asc(appMeta.key)).all(),
   };
   return {
@@ -97,43 +113,9 @@ function checkVersion(input: unknown): void {
   }
   if (version < EXPORT_SCHEMA_VERSION) {
     throw invalid(
-      `Export schema ${version} is not supported by this version of Sparrow (supports ${EXPORT_SCHEMA_VERSION}).`,
+      "This export was made by a pre-release build with an older event format and can't be imported; start fresh.",
     );
   }
-}
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
-
-/**
- * Upgrades older schema-1 files before validation. R68: files written before installed_on existed have no `installedOn` on their drives.
- * Such a file cannot say when anything was installed, and the date of an event is when it was
- * recorded, not an installation date, so those drives become "not recorded" (null). Drives that
- * carry the key (even as null) are left alone, so the file is otherwise validated as written.
- */
-function backfillInstalledOn(input: unknown): unknown {
-  if (!isRecord(input) || !isRecord(input.data)) return input;
-  const { drives: driveRows } = input.data;
-  if (!Array.isArray(driveRows)) return input;
-  const upgraded = driveRows.map((d) => {
-    if (!isRecord(d)) return d;
-    // R60 (changed 2026-10-11): "replaced by" was removed; an older export may still carry it.
-    const rest = { ...d };
-    delete rest.replacedByDriveId;
-    return 'installedOn' in rest ? rest : { ...rest, installedOn: null };
-  });
-  return { ...input, data: { ...input.data, drives: upgraded } };
-}
-
-/** R41, R42: export files written before expectedMembers existed import with it set to null. */
-function backfillPoolExpectedMembers(input: unknown): unknown {
-  if (!isRecord(input) || !isRecord(input.data)) return input;
-  const { pools: poolRows } = input.data;
-  if (!Array.isArray(poolRows)) return input;
-  const upgraded = poolRows.map((p) =>
-    !isRecord(p) || 'expectedMembers' in p ? p : { ...p, expectedMembers: null },
-  );
-  return { ...input, data: { ...input.data, pools: upgraded } };
 }
 
 /** Every id is unique per table and every foreign key points at an existing row in the file. */
@@ -167,8 +149,10 @@ function checkReferences(data: ExportData): string[] {
     check(`membership ${m.id}`, m.driveId, driveIds, 'drive');
     check(`membership ${m.id}`, m.poolId, poolIds, 'pool');
   }
+  // Drive links must resolve (drives are never deleted); slot and pool links keep their id even
+  // after the slot or pool is gone, so those are not checked against the file.
   for (const e of data.events) {
-    if (e.driveId !== null) check(`event ${e.id}`, e.driveId, driveIds, 'drive');
+    for (const d of e.links.drives) check(`event ${e.id}`, d.driveId, driveIds, 'drive');
   }
   const metaKeys = new Set<string>();
   for (const m of data.appMeta) {
@@ -190,9 +174,7 @@ export function importData(db: AppDb, input: unknown, opts: ImportOptions): Impo
   checkVersion(input);
 
   // 2. Full structural validation, then referential integrity, all before touching the DB.
-  const parsed = exportFileSchema.safeParse(
-    backfillPoolExpectedMembers(backfillInstalledOn(input)),
-  );
+  const parsed = exportFileSchema.safeParse(input);
   if (!parsed.success) {
     throw invalid('Export file failed validation', parsed.error.issues);
   }
@@ -224,7 +206,7 @@ export function importData(db: AppDb, input: unknown, opts: ImportOptions): Impo
   try {
     db.transaction((tx) => {
       tx.delete(appMeta).run();
-      tx.delete(events).run();
+      tx.delete(events).run(); // the link rows go with their event (ON DELETE CASCADE)
       tx.delete(memberships).run();
       tx.delete(drives).run();
       tx.delete(slots).run();
@@ -238,7 +220,24 @@ export function importData(db: AppDb, input: unknown, opts: ImportOptions): Impo
       for (const row of data.pools) tx.insert(pools).values(row).run();
       for (const row of data.drives) tx.insert(drives).values(row).run();
       for (const row of data.memberships) tx.insert(memberships).values(row).run();
-      for (const row of data.events) tx.insert(events).values(row).run();
+      for (const { links, ...row } of data.events) {
+        tx.insert(events).values(row).run();
+        if (links.drives.length > 0) {
+          tx.insert(eventDrives)
+            .values(links.drives.map((l) => ({ eventId: row.id, ...l })))
+            .run();
+        }
+        if (links.slots.length > 0) {
+          tx.insert(eventSlots)
+            .values(links.slots.map((l) => ({ eventId: row.id, ...l })))
+            .run();
+        }
+        if (links.pools.length > 0) {
+          tx.insert(eventPools)
+            .values(links.pools.map((l) => ({ eventId: row.id, ...l })))
+            .run();
+        }
+      }
       for (const row of data.appMeta) tx.insert(appMeta).values(row).run();
     });
   } catch (err) {

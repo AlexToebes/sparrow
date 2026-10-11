@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import userEvent from './user';
 import { App } from '../src/App';
+import { bay, drive, makeEvent } from './events';
 import { makeDrive, makeSlot, mockApi, renderApp } from './utils';
 
 const T = '2026-01-01T00:00:00.000Z';
@@ -112,20 +113,13 @@ function fixtures(over: { providerStale?: boolean } = {}) {
       ],
     },
     '/api/drives/d1/events': [
-      {
-        id: 'e2',
-        driveId: 'd1',
-        type: 'drive-installed',
-        at: '2026-02-01T00:00:00.000Z',
-        payload: { slotLabel: 'Bay 2', gridName: 'Front bays' },
-      },
-      {
-        id: 'e1',
-        driveId: 'd1',
-        type: 'drive-created',
-        at: '2026-01-01T00:00:00.000Z',
-        payload: {},
-      },
+      makeEvent(
+        'drive-installed',
+        '2026-02-01T00:00:00.000Z',
+        {},
+        { drives: [drive('d1', 'BBB1')], slots: [bay('s1', 'to', 'Bay 2', 'Front bays')] },
+      ),
+      makeEvent('drive-created', '2026-01-01T00:00:00.000Z', {}, { drives: [drive('d1', 'BBB1')] }),
     ],
   });
 }

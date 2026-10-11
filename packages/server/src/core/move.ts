@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import type { Drive, MoveDriveInput } from '@sparrow/shared';
+import type { Drive, MoveDriveInput, OccupantResolution } from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
 import { drives } from '../db/schema.js';
 import {
@@ -7,12 +7,15 @@ import {
   freeSlot,
   loadDrive,
   occupiedError,
+  outgoingPayload,
   placeSpare,
   resolveOccupant,
   resolvePoolRole,
   retireInternal,
   rmaInternal,
   slotInfo,
+  type Outgoing,
+  type PoolRef,
 } from './assignment.js';
 import { conflict, invalid } from './errors.js';
 import { recordEvent, type DbTransaction } from './events.js';
@@ -20,9 +23,9 @@ import { parseNotFutureDate, todayUtc } from './installed-on.js';
 import { openMembership } from './memberships.js';
 
 // R73: one Move for an installed drive. It composes the existing slot-freeing, retiring, RMA and
-// install steps in ONE transaction, so a failure anywhere leaves nothing changed (R14). No new
-// event types: a move between bays writes drive-removed and drive-installed with `movedToSlotId`
-// and `movedFromSlotId` in the payloads so the history can read them as one move.
+// install steps in ONE transaction, so a failure anywhere leaves nothing changed (R14). One real
+// action is one event: a move to an empty bay is drive-moved, a swap is drives-swapped, and a drive
+// arriving in an occupied bay (or a spare taking the bay the mover vacated) is drive-replaced.
 
 type Tx = DbTransaction;
 
@@ -75,20 +78,79 @@ export function moveDrive(db: AppDb, driveId: string, input: MoveDriveInput): Mo
     if (dest.kind === 'slot' && dest.occupant?.action === 'swap') {
       return swapDrives(tx, drive, sourceInfo, dest.slotId, date);
     }
+    // What the vacated bay's event will say about the mover, when a spare takes that bay.
+    let mover: Outgoing | undefined;
     let moved: Drive;
     let occupantAfter: Drive | undefined;
+    let toSlotId: string | null = null;
     if (dest.kind === 'slot') {
       if (dest.slotId === sourceSlotId) throw invalid('The drive is already in that bay');
       const targetInfo = slotInfo(tx, dest.slotId);
       const occupant = tx.select().from(drives).where(eq(drives.slotId, dest.slotId)).get();
+      let displaced: Outgoing | undefined;
       if (occupant) {
         if (!dest.occupant) throw occupiedError(targetInfo, occupant);
         // The occupant's own dates are the move date unless the request gave one.
         const resolution = dest.occupant;
         if (resolution.action === 'swap') throw invalid('Unreachable swap'); // handled above
-        occupantAfter = resolveOccupant(tx, occupant, resolution, clock, date);
+        displaced = resolveOccupant(tx, occupant, resolution, clock, date);
+        occupantAfter = displaced.drive;
       }
-      moved = moveBetweenBays(tx, drive, sourceInfo, targetInfo, date);
+      const step = moveBetweenBays(tx, drive, dest.slotId, date);
+      moved = step.drive;
+      toSlotId = dest.slotId;
+      mover = {
+        drive: moved,
+        outcome: 'moved',
+        date,
+        toSlotId: dest.slotId,
+        pool: step.pool,
+        installedOn: step.installedOnBefore,
+      };
+      if (displaced) {
+        // The mover arrives in an occupied bay: one drive-replaced event for that bay. When no spare
+        // fills the vacated bay, the same event links it as `from`, so its history sees the mover leave.
+        recordEvent(tx, {
+          type: 'drive-replaced',
+          drives: [
+            { id: displaced.drive.id, role: 'outgoing' },
+            { id: moved.id, role: 'incoming' },
+          ],
+          slots: [
+            { id: dest.slotId, role: 'at' },
+            ...(spare ? [] : [{ id: sourceSlotId, role: 'from' as const }]),
+          ],
+          payload: {
+            installedOn: date,
+            ...step.pool,
+            outgoing: outgoingPayload(displaced),
+          },
+        });
+      } else if (!spare) {
+        recordEvent(tx, {
+          type: 'drive-moved',
+          drives: [{ id: moved.id }],
+          slots: [
+            { id: sourceSlotId, role: 'from' },
+            { id: dest.slotId, role: 'to' },
+          ],
+          payload: {
+            date,
+            ...step.pool,
+            installedOn: step.installedOnBefore,
+          },
+        });
+      }
+    } else if (spare) {
+      // A spare takes the vacated bay: the departure and the arrival are the one drive-replaced event.
+      const resolution: OccupantResolution =
+        dest.kind === 'spares'
+          ? { action: 'spare', removedOn: date }
+          : dest.kind === 'retire'
+            ? { action: 'retire', reason: dest.reason, date, note: dest.note }
+            : { action: 'rma', date, note: dest.note };
+      mover = resolveOccupant(tx, drive, resolution, clock, date);
+      moved = mover.drive;
     } else if (dest.kind === 'spares') {
       moved = freeSlot(tx, drive, null, { removedOn: date, backdate: true });
     } else if (dest.kind === 'retire') {
@@ -102,17 +164,19 @@ export function moveDrive(db: AppDb, driveId: string, input: MoveDriveInput): Mo
     }
 
     let replacement: Drive | undefined;
-    if (spare && input.replacement) {
+    if (spare && input.replacement && mover) {
       const { poolId, role } = resolvePoolRole(
         tx,
         input.replacement.poolId,
         input.replacement.role,
         defaults,
       );
-      replacement = placeSpare(tx, spare, sourceSlotId, sourceInfo, {
+      replacement = placeSpare(tx, spare, sourceSlotId, {
         poolId,
         role,
         installedOn: date,
+        replaced: mover,
+        extraSlots: toSlotId === null ? [] : [{ id: toSlotId, role: 'to' }],
       });
     }
     return {
@@ -126,15 +190,15 @@ export function moveDrive(db: AppDb, driveId: string, input: MoveDriveInput): Mo
 /**
  * installed in bay A -> installed in (empty) bay B. Moving within the NAS does not change pool
  * membership (R29): the open membership is left alone and no pool-left / pool-joined events are
- * written. The installation date restarts at the move date (null = not recorded).
+ * written. The installation date restarts at the move date (null = not recorded). Changes the drive
+ * only; the caller writes the one event that describes the move.
  */
 function moveBetweenBays(
   tx: Tx,
   drive: Drive,
-  from: ReturnType<typeof slotInfo>,
-  to: ReturnType<typeof slotInfo>,
+  toSlotId: string,
   date: string | null,
-): Drive {
+): { drive: Drive; pool: PoolRef; installedOnBefore: string | null } {
   if (date !== null && drive.installedOn !== null && date < drive.installedOn) {
     throw invalid(
       `A drive can't be moved before it was installed (installed on ${drive.installedOn})`,
@@ -145,32 +209,11 @@ function moveBetweenBays(
   const pool = { poolId: open?.poolId ?? null, role: open?.role ?? null };
   const updated = tx
     .update(drives)
-    .set({ slotId: to.slotId, installedOn: date, updatedAt: at })
+    .set({ slotId: toSlotId, installedOn: date, updatedAt: at })
     .where(eq(drives.id, drive.id))
     .returning()
     .get();
-  recordEvent(tx, {
-    driveId: drive.id,
-    type: 'drive-removed',
-    at,
-    payload: {
-      ...from,
-      ...pool,
-      // R68: the history keeps the installation date, so time in the bay can be computed.
-      installedOn: drive.installedOn,
-      // R69: the day it left that bay (null = not recorded).
-      removedOn: date,
-      note: null,
-      movedToSlotId: to.slotId,
-    },
-  });
-  recordEvent(tx, {
-    driveId: drive.id,
-    type: 'drive-installed',
-    at,
-    payload: { ...to, ...pool, installedOn: date, movedFromSlotId: from.slotId },
-  });
-  return updated;
+  return { drive: updated, pool, installedOnBefore: drive.installedOn };
 }
 
 /**
@@ -222,43 +265,27 @@ function swapDrives(
   const movedA = set(a.id, { status: 'installed', slotId: bInfo.slotId, installedOn: date });
   const movedB = loadDrive(tx, b.id);
 
-  const log = (
-    d: Drive,
-    from: ReturnType<typeof slotInfo>,
-    to: ReturnType<typeof slotInfo>,
-    pool: { poolId: string | null; role: string | null },
-    other: Drive,
-  ) => {
-    recordEvent(tx, {
+  const move = (d: Drive, from: ReturnType<typeof slotInfo>, to: ReturnType<typeof slotInfo>) => {
+    const pool = d.id === a.id ? poolA : poolB;
+    return {
       driveId: d.id,
-      type: 'drive-removed',
-      at,
-      payload: {
-        ...from,
-        ...pool,
-        installedOn: d.installedOn,
-        removedOn: date,
-        note: null,
-        movedToSlotId: to.slotId,
-        swappedWithDriveId: other.id,
-        swappedWithSerial: other.serial,
-      },
-    });
-    recordEvent(tx, {
-      driveId: d.id,
-      type: 'drive-installed',
-      at,
-      payload: {
-        ...to,
-        ...pool,
-        installedOn: date,
-        movedFromSlotId: from.slotId,
-        swappedWithDriveId: other.id,
-        swappedWithSerial: other.serial,
-      },
-    });
+      fromSlotId: from.slotId,
+      toSlotId: to.slotId,
+      ...pool,
+      installedOn: d.installedOn,
+    };
   };
-  log(a, aInfo, bInfo, poolA, b);
-  log(b, bInfo, aInfo, poolB, a);
+  recordEvent(tx, {
+    type: 'drives-swapped',
+    at,
+    drives: [{ id: a.id }, { id: b.id }],
+    slots: [
+      { id: aInfo.slotId, role: 'from' },
+      { id: aInfo.slotId, role: 'to' },
+      { id: bInfo.slotId, role: 'from' },
+      { id: bInfo.slotId, role: 'to' },
+    ],
+    payload: { date, moves: [move(a, aInfo, bInfo), move(b, bInfo, aInfo)] },
+  });
   return { drive: movedA, occupant: movedB };
 }

@@ -67,7 +67,7 @@ describe('R41, R42: export', () => {
     seedRealistic();
     const file = exportData(db(), new Date('2026-10-10T12:00:00.000Z'));
     expect(file.format).toBe('sparrow-export');
-    expect(file.schemaVersion).toBe(1);
+    expect(file.schemaVersion).toBe(2);
     expect(file.exportedAt).toBe('2026-10-10T12:00:00.000Z');
     expect(Object.keys(file.data).sort()).toEqual(
       [
@@ -141,6 +141,33 @@ describe('R43: round trip', () => {
       });
       const second = exportData(fresh.db, new Date('2026-10-10T12:00:00.000Z'));
       expect(withoutTime(second)).toEqual(withoutTime(first));
+    } finally {
+      fresh.sqlite.close();
+    }
+  });
+
+  it('R41, R43, R74: events keep their drive, slot and pool links through export and import', () => {
+    seedRealistic();
+    const first = exportData(db());
+    const withLinks = first.data.events.filter(
+      (e) => e.links.drives.length + e.links.slots.length + e.links.pools.length > 0,
+    );
+    expect(withLinks.length).toBeGreaterThan(5);
+    // Every shape is present: a slot link with its copied label, a pool link with its name.
+    const retired = first.data.events.find((e) => e.type === 'drive-retired')!;
+    expect(retired.links.drives).toEqual([{ driveId: expect.any(String), role: 'subject' }]);
+    expect(retired.links.slots[0]).toMatchObject({
+      role: 'from',
+      slotLabel: '1',
+      gridName: 'Front bays',
+    });
+    const joined = first.data.events.find((e) => e.type === 'pool-joined')!;
+    expect(joined.links.pools).toEqual([{ poolId: expect.any(String), poolName: 'Mirror A' }]);
+
+    const fresh = openDatabase(':memory:');
+    try {
+      importData(fresh.db, JSON.parse(JSON.stringify(first)), { backupDir });
+      expect(exportData(fresh.db).data.events).toEqual(first.data.events);
     } finally {
       fresh.sqlite.close();
     }
@@ -275,12 +302,58 @@ describe('R43: failed imports leave data untouched', () => {
   it('rejects a newer schema version with a clear message', () => {
     seedRealistic();
     const before = exportData(db());
-    const file = { ...exportData(db()), schemaVersion: 2 };
+    const file = { ...exportData(db()), schemaVersion: 3 };
     const err = invalidFrom(() => importData(db(), file, { backupDir }));
     expect(err.code).toBe('invalid');
     expect(err.message).toBe(
-      'This export was made by a newer Sparrow (schema 2); this version supports up to 1.',
+      'This export was made by a newer Sparrow (schema 3); this version supports up to 2.',
     );
+    expectUnchanged(before);
+  });
+
+  it('R41, R43: a v1 export (events with a single driveId, no links) is rejected with a clear message and changes nothing', () => {
+    seedRealistic();
+    const before = exportData(db());
+    const v1 = JSON.parse(JSON.stringify(exportData(db()))) as {
+      schemaVersion: number;
+      data: { events: Record<string, unknown>[] };
+    };
+    v1.schemaVersion = 1;
+    v1.data.events = v1.data.events.map((e) => {
+      const old: Record<string, unknown> = { ...e, driveId: null };
+      delete old.links; // a v1 event has a single driveId and no links
+      return old;
+    });
+    const err = invalidFrom(() => importData(db(), v1, { backupDir }));
+    expect(err.code).toBe('invalid');
+    expect(err.message).toBe(
+      "This export was made by a pre-release build with an older event format and can't be imported; start fresh.",
+    );
+    expectUnchanged(before);
+    expect(() => readdirSync(backupDir)).toThrow();
+  });
+
+  it('R43: an event link to a drive that is not in the file is rejected; links to missing slots and pools are fine', () => {
+    seedRealistic();
+    const before = exportData(db());
+    const file = JSON.parse(JSON.stringify(exportData(db()))) as ExportFile;
+    const ev = file.data.events.find((e) => e.type === 'drive-retired')!;
+    ev.links.slots[0]!.slotId = 'a-deleted-slot';
+    const joined = file.data.events.find((e) => e.type === 'pool-joined')!;
+    joined.links.pools[0]!.poolId = 'a-deleted-pool';
+    const fresh = openDatabase(':memory:');
+    try {
+      importData(fresh.db, file, { backupDir });
+      expect(
+        exportData(fresh.db).data.events.find((e) => e.id === ev.id)!.links.slots[0]!.slotId,
+      ).toBe('a-deleted-slot');
+    } finally {
+      fresh.sqlite.close();
+    }
+    ev.links.drives[0]!.driveId = 'no-such-drive';
+    const err = invalidFrom(() => importData(db(), file, { backupDir }));
+    expect(err.code).toBe('invalid');
+    expect(JSON.stringify(err.details)).toContain('no-such-drive');
     expectUnchanged(before);
   });
 
@@ -363,23 +436,6 @@ describe('R72: pool expectedMembers in export and import', () => {
     try {
       importData(fresh.db, JSON.parse(JSON.stringify(file)), { backupDir });
       expect(exportData(fresh.db).data.pools[0]?.expectedMembers).toBe(6);
-    } finally {
-      fresh.sqlite.close();
-    }
-  });
-
-  it('R42: an export written before expectedMembers existed imports with it set to null', () => {
-    createPool(db(), { name: 'tank', layoutLabel: null });
-    const old = JSON.parse(JSON.stringify(exportData(db()))) as {
-      data: { pools: Record<string, unknown>[] };
-    };
-    for (const p of old.data.pools) delete p.expectedMembers;
-    expect(old.data.pools[0]).not.toHaveProperty('expectedMembers');
-
-    const fresh = openDatabase(':memory:');
-    try {
-      importData(fresh.db, old, { backupDir });
-      expect(exportData(fresh.db).data.pools[0]?.expectedMembers).toBeNull();
     } finally {
       fresh.sqlite.close();
     }

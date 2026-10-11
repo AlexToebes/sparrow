@@ -5,7 +5,13 @@ import {
   occupantResolutionSchema,
   retireDriveInputSchema,
   enclosureSchema,
-  eventSchema,
+  EVENT_TYPES,
+  DRIVE_LINK_ROLES,
+  SLOT_LINK_ROLES,
+  eventLinksSchema,
+  storedEventSchema,
+  exportFileSchema,
+  EXPORT_SCHEMA_VERSION,
   gridSchema,
   membershipSchema,
   normalizeSerial,
@@ -179,24 +185,49 @@ describe('pool, membership, event schemas', () => {
     expect(updatePoolInputSchema.safeParse({ expectedMembers: 101 }).success).toBe(false);
   });
 
-  it('R20: event accepts the event types added for the next feature batch', () => {
-    const e = { id: 'e', driveId: null, type: 'health-changed', at: ts, payload: {} };
-    for (const type of [
-      'health-changed',
-      'suggestion-dismissed',
-      'enclosure-created',
-      'enclosure-renamed',
-      'enclosure-deleted',
-      'grid-created',
-      'grid-updated',
-      'grid-deleted',
-      'slot-relabeled',
-      'pool-created',
-      'pool-updated',
-      'pool-deleted',
-    ]) {
-      expect(eventSchema.safeParse({ ...e, type }).success).toBe(true);
+  const noLinks = { drives: [], slots: [], pools: [] };
+
+  it('R14: every event type of the one-event-per-action model is accepted', () => {
+    const e = { id: 'e', type: 'health-changed', at: ts, payload: {}, links: noLinks };
+    expect([...EVENT_TYPES]).toEqual(
+      expect.arrayContaining([
+        'drive-installed',
+        'drive-removed',
+        'drive-retired',
+        'drive-sent-for-rma',
+        'drive-reinstated',
+        'drive-moved',
+        'drives-swapped',
+        'drive-replaced',
+        'pool-joined',
+        'pool-left',
+        'pool-role-changed',
+        'slot-relabeled',
+        'pool-created',
+      ]),
+    );
+    for (const type of EVENT_TYPES) {
+      expect(storedEventSchema.safeParse({ ...e, type }).success).toBe(true);
     }
+  });
+
+  it('R74: link roles are fixed lists', () => {
+    expect([...DRIVE_LINK_ROLES]).toEqual(['subject', 'outgoing', 'incoming']);
+    expect([...SLOT_LINK_ROLES]).toEqual(['from', 'to', 'at']);
+    const link = { driveId: 'd', role: 'subject' };
+    expect(eventLinksSchema.safeParse({ ...noLinks, drives: [link] }).success).toBe(true);
+    expect(
+      eventLinksSchema.safeParse({ ...noLinks, drives: [{ ...link, role: 'bystander' }] }).success,
+    ).toBe(false);
+    const slot = { slotId: 's', role: 'at', slotLabel: null, gridId: 'g', gridName: 'Front' };
+    expect(eventLinksSchema.safeParse({ ...noLinks, slots: [slot] }).success).toBe(true);
+    expect(
+      eventLinksSchema.safeParse({ ...noLinks, slots: [{ ...slot, role: 'beside' }] }).success,
+    ).toBe(false);
+    expect(
+      eventLinksSchema.safeParse({ ...noLinks, pools: [{ poolId: 'p', poolName: 'tank' }] })
+        .success,
+    ).toBe(true);
   });
 
   it('R29: membership validates role and end not before start', () => {
@@ -217,11 +248,43 @@ describe('pool, membership, event schemas', () => {
     );
   });
 
-  it('R14: event accepts a payload object and rejects unknown type', () => {
-    const e = { id: 'e', driveId: 'd', type: 'drive-created', at: ts, payload: { a: 1 } };
-    expect(eventSchema.safeParse(e).success).toBe(true);
-    expect(eventSchema.safeParse({ ...e, type: 'drive-exploded' }).success).toBe(false);
-    expect(eventSchema.safeParse({ ...e, payload: 'x' }).success).toBe(false);
+  it('R14: a stored event accepts a payload object and rejects an unknown type or missing links', () => {
+    const e = { id: 'e', type: 'drive-created', at: ts, payload: { a: 1 }, links: noLinks };
+    expect(storedEventSchema.safeParse(e).success).toBe(true);
+    expect(storedEventSchema.safeParse({ ...e, type: 'drive-exploded' }).success).toBe(false);
+    expect(storedEventSchema.safeParse({ ...e, payload: 'x' }).success).toBe(false);
+    expect(storedEventSchema.safeParse({ ...e, links: undefined }).success).toBe(false);
+    // The old single-drive shape is gone.
+    expect(storedEventSchema.safeParse({ ...e, driveId: 'd' }).success).toBe(true); // extra keys are ignored
+  });
+
+  it('R41, R42: the export is schema version 2 and carries event links', () => {
+    expect(EXPORT_SCHEMA_VERSION).toBe(2);
+    const file = {
+      format: 'sparrow-export',
+      schemaVersion: 2,
+      exportedAt: ts,
+      data: {
+        enclosures: [],
+        grids: [],
+        slots: [],
+        drives: [],
+        pools: [],
+        memberships: [],
+        events: [
+          {
+            id: 'e',
+            type: 'pool-created',
+            at: ts,
+            payload: {},
+            links: { ...noLinks, pools: [{ poolId: 'p', poolName: 'tank' }] },
+          },
+        ],
+        appMeta: [],
+      },
+    };
+    expect(exportFileSchema.safeParse(file).success).toBe(true);
+    expect(exportFileSchema.safeParse({ ...file, schemaVersion: 1 }).success).toBe(false);
   });
 });
 

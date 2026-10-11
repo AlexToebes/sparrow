@@ -99,23 +99,22 @@ describe('R60: retirement date is optional (not recorded rather than guessed)', 
     ).toBe('invalid');
   });
 
-  it('R60, R69: retiring an installed drive with no date writes drive-removed.removedOn null and the retired event null', () => {
+  it('R60, R69: retiring an installed drive with no date writes a drive-retired event with a null date (and no separate removal)', () => {
     const [slot] = slotIds();
     const pool = makePool();
     const d = spare('A');
     assignDrive(db(), { driveId: d.id, slotId: slot!, poolId: pool });
     retireDrive(db(), d.id, { reason: 'failed', date: null });
-    expect(event(d.id, 'drive-removed').payload).toMatchObject({ removedOn: null });
+    expect(listDriveEvents(db(), d.id).map((e) => e.type)).not.toContain('drive-removed');
     expect(event(d.id, 'drive-retired').payload).toMatchObject({ date: null });
     expect(members(d.id)[0]!.endedAt).not.toBeNull();
   });
 
-  it('R60, R69: a dated retirement is the removedOn of the drive-removed event', () => {
+  it('R60, R69: a dated retirement is the day the drive left its bay', () => {
     const [slot] = slotIds();
     const d = spare('A');
     assignDrive(db(), { driveId: d.id, slotId: slot!, poolId: null });
     retireDrive(db(), d.id, { reason: 'failed', date: daysAgo(3) });
-    expect(event(d.id, 'drive-removed').payload).toMatchObject({ removedOn: daysAgo(3) });
     expect(event(d.id, 'drive-retired').payload).toMatchObject({ date: daysAgo(3) });
   });
 
@@ -127,7 +126,6 @@ describe('R60: retirement date is optional (not recorded rather than guessed)', 
     const nulled = sendForRma(db(), b.id, { date: null });
     expect(nulled.retirementDate).toBeNull();
     expect(event(b.id, 'drive-sent-for-rma').payload).toMatchObject({ date: null });
-    expect(event(b.id, 'drive-retired').payload).toMatchObject({ date: null });
     expect(thrown(() => sendForRma(db(), c.id, { date: tomorrow2() })).code).toBe('invalid');
     expect(getDrive(db(), c.id).status).toBe('spare');
   });
@@ -147,7 +145,9 @@ describe('R60: retirement date is optional (not recorded rather than guessed)', 
       occupant: { action: 'retire', reason: 'replaced', date: null },
     });
     expect(r1.occupant).toMatchObject({ status: 'retired', retirementDate: null });
-    expect(event(o1.id, 'drive-removed').payload).toMatchObject({ removedOn: null });
+    expect(event(o1.id, 'drive-replaced').payload).toMatchObject({
+      outgoing: { outcome: 'retired', date: null },
+    });
 
     assignDrive(db(), { driveId: o2.id, slotId: s2!, poolId: null });
     const r2 = assignDrive(db(), {
@@ -156,7 +156,9 @@ describe('R60: retirement date is optional (not recorded rather than guessed)', 
       occupant: { action: 'rma', date: null },
     });
     expect(r2.occupant).toMatchObject({ status: 'retired', retirementDate: null });
-    expect(event(o2.id, 'drive-sent-for-rma').payload).toMatchObject({ date: null });
+    expect(event(o2.id, 'drive-replaced').payload).toMatchObject({
+      outgoing: { outcome: 'rma', date: null },
+    });
 
     // Omitted date on the occupant retire is today.
     const r3 = assignDrive(db(), {
@@ -203,7 +205,7 @@ describe('R60: retirement date is optional (not recorded rather than guessed)', 
       const again = exportData(fresh.db);
       expect(again.data.drives).toEqual(first.data.drives);
       expect(again.data.drives[0]).toMatchObject({ status: 'retired', retirementDate: null });
-      expect(again.schemaVersion).toBe(1);
+      expect(again.schemaVersion).toBe(2);
     } finally {
       fresh.sqlite.close();
       rmSync(tmp, { recursive: true, force: true });

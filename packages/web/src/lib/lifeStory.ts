@@ -1,5 +1,5 @@
-import type { DriveEvent, Health } from '@sparrow/shared';
-import { formatDate, formatDuration } from './format';
+import type { DriveEvent, EventDriveRef, EventSlotLink, Health } from '@sparrow/shared';
+import { formatBytes, formatDate, formatDuration } from './format';
 import { FIELD_LABEL, formatSuggestionValue } from './suggestions';
 
 export interface StoryItem {
@@ -28,6 +28,8 @@ export interface StoryItem {
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
+const rec = (v: unknown): Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const MIDNIGHT_Z = /^\d{4}-\d{2}-\d{2}T00:00:00\.000Z$/;
@@ -37,50 +39,134 @@ const dateStr = (v: unknown): string | null => {
 };
 const midnight = (date: string) => `${date}T00:00:00.000Z`;
 
-/** R68: a drive-installed event that says the installation date was not recorded (explicit null). */
-const isUnrecordedInstall = (e: DriveEvent): boolean =>
-  e.type === 'drive-installed' && 'installedOn' in e.payload && e.payload.installedOn === null;
+// One event stands for one real action and links every drive, bay and pool it involves. The story
+// of one drive reads the event from that drive's side: its role (subject / outgoing / incoming)
+// decides the wording, and the other drive's serial and size come from the links.
 
-/** R69: a drive-removed event that says the removal date was not recorded (explicit null). */
-const isUnrecordedRemoval = (e: DriveEvent): boolean =>
-  e.type === 'drive-removed' && 'removedOn' in e.payload && e.payload.removedOn === null;
+const slotLink = (e: DriveEvent, role: EventSlotLink['role']): EventSlotLink | undefined =>
+  e.links.slots.find((s) => s.role === role);
+const driveRef = (e: DriveEvent, role: EventDriveRef['role']): EventDriveRef | undefined =>
+  e.links.drives.find((d) => d.role === role);
+const roleOf = (e: DriveEvent, driveId: string): EventDriveRef['role'] | null =>
+  e.links.drives.find((d) => d.driveId === driveId)?.role ?? null;
 
-/** R60: a drive-retired or drive-sent-for-rma event that says the date was not recorded (explicit null). */
-const isUnrecordedRetirement = (e: DriveEvent): boolean =>
-  (e.type === 'drive-retired' || e.type === 'drive-sent-for-rma') &&
-  'date' in e.payload &&
-  e.payload.date === null;
+/** "ZL2SPR01 (8 TB)" for another drive named in an event. */
+function driveText(ref: EventDriveRef | undefined): string {
+  if (!ref) return 'another drive';
+  const size = formatBytes(ref.capacityBytes);
+  return size ? `${ref.serial} (${size})` : ref.serial;
+}
+
+/** What became of a drive that a replacement displaced (drive-replaced, payload.outgoing). */
+function outgoingOf(e: DriveEvent): {
+  outcome: string | null;
+  date: string | null;
+  hasDate: boolean;
+  reason: string | null;
+} {
+  const o = rec(e.payload.outgoing);
+  return {
+    outcome: str(o.outcome),
+    date: str(o.date),
+    hasDate: 'date' in o,
+    reason: str(o.reason),
+  };
+}
+
+/** The payload date this event gives for the drive on the viewed side; `has` is false when the key is absent (older events). */
+function dateOf(e: DriveEvent, driveId: string): { has: boolean; value: string | null } {
+  const key = (k: string, from: Record<string, unknown> = e.payload) => ({
+    has: k in from,
+    value: str(from[k]),
+  });
+  switch (e.type) {
+    case 'drive-installed':
+      return key('installedOn');
+    case 'drive-removed':
+      return key('removedOn');
+    case 'drive-retired':
+    case 'drive-sent-for-rma':
+    case 'drive-moved':
+    case 'drives-swapped':
+      return key('date');
+    case 'drive-replaced':
+      return roleOf(e, driveId) === 'outgoing'
+        ? key('date', rec(e.payload.outgoing))
+        : key('installedOn');
+    default:
+      return { has: false, value: null };
+  }
+}
+
+/** True for events that put this drive into a bay (a move also takes it out of another one). */
+function arrives(e: DriveEvent, driveId: string): boolean {
+  if (e.type === 'drive-installed' || e.type === 'drive-moved' || e.type === 'drives-swapped') {
+    return true;
+  }
+  if (e.type !== 'drive-replaced') return false;
+  return roleOf(e, driveId) === 'incoming' || outgoingOf(e).outcome === 'moved';
+}
+
+/** How the drive left the shelf-or-bay: back to the spares, retired / RMA, or on to another bay. */
+type Exit = 'spares' | 'retired' | 'moved' | null;
+function exitOf(e: DriveEvent, driveId: string): Exit {
+  switch (e.type) {
+    case 'drive-removed':
+      return 'spares';
+    case 'drive-retired':
+    case 'drive-sent-for-rma':
+      return 'retired';
+    case 'drive-moved':
+    case 'drives-swapped':
+      return 'moved';
+    case 'drive-replaced': {
+      if (roleOf(e, driveId) !== 'outgoing') return null;
+      const o = outgoingOf(e).outcome;
+      return o === 'retired' || o === 'rma' ? 'retired' : o === 'moved' ? 'moved' : 'spares';
+    }
+    default:
+      return null;
+  }
+}
+
+/** R68: the installation date was not recorded (explicit null) for a drive arriving in a bay. */
+const isUnrecordedInstall = (e: DriveEvent, driveId: string): boolean => {
+  const d = dateOf(e, driveId);
+  return arrives(e, driveId) && d.has && d.value === null;
+};
+
+/** R69: the removal date was not recorded for a drive going back to the spares. */
+const isUnrecordedRemoval = (e: DriveEvent, driveId: string): boolean => {
+  const d = dateOf(e, driveId);
+  return exitOf(e, driveId) === 'spares' && d.has && d.value === null;
+};
+
+/** R60: the retirement or RMA date was not recorded. */
+const isUnrecordedRetirement = (e: DriveEvent, driveId: string): boolean => {
+  const d = dateOf(e, driveId);
+  return exitOf(e, driveId) === 'retired' && d.has && d.value === null;
+};
 
 /**
- * R68, R69, R60: the event log records WHEN a change was made (`at`); an installation can describe an earlier
- * day. The story orders by the effective instant: for drive-installed the payload's installedOn
- * (unless it is the very day the event was logged, then `at` keeps same-day order exact), for
- * pool-joined the membership start. Midnight-UTC instants stand for calendar dates (how the server
- * stores a backdated start), so they are shown as the date itself, never shifted by the time zone.
- * R69: drive-removed works like drive-installed with `removedOn`; when the key is absent (older
- * events) or null (not recorded) the instant stays the logging time. R60: drive-retired and
- * drive-sent-for-rma work the same way with their `date`.
+ * R68, R69, R60: the event log records WHEN a change was made (`at`); an installation can describe an
+ * earlier day. The story orders by the effective instant: the installation, removal, move or
+ * retirement date in the payload (unless it is the very day the event was logged, then `at` keeps
+ * same-day order exact), for pool-joined the membership start, for health-changed the report time.
+ * Midnight-UTC instants stand for calendar dates (how the server stores a backdated start), so they
+ * are shown as the date itself, never shifted by the time zone. A missing or null date keeps the
+ * logging time.
  */
-function effective(e: DriveEvent): { at: string; date: string; recorded: string | null } {
+function effective(
+  e: DriveEvent,
+  driveId: string,
+): { at: string; date: string; recorded: string | null } {
   const logged = formatDate(e.at);
   let at = e.at;
   let date = logged;
-  if (e.type === 'drive-installed') {
-    const on = dateStr(e.payload.installedOn);
-    if (on !== null) {
-      if (on !== e.at.slice(0, 10)) at = midnight(on);
-      date = on;
-    }
-  } else if (
-    e.type === 'drive-removed' ||
-    e.type === 'drive-retired' ||
-    e.type === 'drive-sent-for-rma'
-  ) {
-    const on = dateStr(e.type === 'drive-removed' ? e.payload.removedOn : e.payload.date);
-    if (on !== null) {
-      if (on !== e.at.slice(0, 10)) at = midnight(on);
-      date = on;
-    }
+  const on = dateStr(dateOf(e, driveId).value);
+  if (on !== null) {
+    if (on !== e.at.slice(0, 10)) at = midnight(on);
+    date = on;
   } else if (e.type === 'health-changed') {
     // R20: the event is logged at poll time; the story places it when the provider reported it.
     const reported = str(e.payload.reportedAt);
@@ -99,11 +185,11 @@ function effective(e: DriveEvent): { at: string; date: string; recorded: string 
 }
 
 /** Oldest first by effective instant. Ties keep the log order, except that joining a pool follows installing. */
-function orderedByEffective(eventsNewestFirst: DriveEvent[]) {
+function orderedByEffective(eventsNewestFirst: DriveEvent[], driveId: string) {
   const rank = (e: DriveEvent) => (e.type === 'pool-joined' ? 1 : 0);
   return [...eventsNewestFirst]
     .reverse()
-    .map((event) => ({ event, ...effective(event) }))
+    .map((event) => ({ event, ...effective(event, driveId) }))
     .sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || rank(a.event) - rank(b.event));
 }
 
@@ -119,21 +205,37 @@ function installedOnChange(e: DriveEvent): { from: string | null; to: string | n
 
 const dateOrNotRecorded = (v: string | null) => v ?? 'not recorded';
 
-/** The bay of a plain drive-installed / drive-removed event; the stable slot id is the link target (R39). */
-function slotOf(e: DriveEvent): StoryItem['slot'] {
-  if (e.type !== 'drive-installed' && e.type !== 'drive-removed') return null;
-  const id = str(e.payload.slotId);
-  return id ? { id, label: str(e.payload.slotLabel) ?? 'this slot' } : null;
-}
-
-function where(p: Record<string, unknown>): string | null {
-  const label = str(p.slotLabel);
-  const grid = str(p.gridName);
+/** "Front bays, Bay 3" from the bay as the event copied it (stable after renames, R39). */
+function where(link: EventSlotLink | undefined): string | null {
+  if (!link) return null;
+  const label = str(link.slotLabel);
+  const grid = str(link.gridName);
   return label && grid ? `${grid}, ${label}` : (label ?? grid);
 }
 
-/** Looks up a pool's name by ID, so the story can say which pool (null when unknown). */
-export type PoolNameLookup = (poolId: string) => string | null;
+/** "Bay 3" when both bays are in the same grid, else "Front bays, Bay 3". */
+function moveWhere(
+  from: EventSlotLink | undefined,
+  to: EventSlotLink | undefined,
+  end: 'from' | 'to',
+): string {
+  const link = end === 'from' ? from : to;
+  const sameGrid = from !== undefined && to !== undefined && from.gridName === to.gridName;
+  return (sameGrid ? str(link?.slotLabel) : where(link)) ?? where(link) ?? 'a slot';
+}
+
+/** The bay a story entry is about, so it can link to the bay's history (R74). */
+function slotOf(e: DriveEvent): StoryItem['slot'] {
+  const link =
+    e.type === 'drive-installed'
+      ? slotLink(e, 'to')
+      : e.type === 'drive-removed' || e.type === 'drive-retired' || e.type === 'drive-sent-for-rma'
+        ? slotLink(e, 'from')
+        : e.type === 'drive-replaced'
+          ? slotLink(e, 'at')
+          : undefined;
+  return link ? { id: link.slotId, label: str(link.slotLabel) ?? 'this slot' } : null;
+}
 
 const HEALTH_SHORT: Record<Health, string> = {
   ok: 'OK',
@@ -155,17 +257,29 @@ function healthChange(e: DriveEvent): { from: Health | null; to: Health } | null
 const roleWord = (role: string | null): string | null =>
   role === 'hot-spare' ? 'hot spare' : role;
 
-function describe(
-  e: DriveEvent,
-  poolName: PoolNameLookup,
-): { title: string; detail: string | null } {
+/** What became of the displaced drive, in words: "back to spares", "retired (failed)", "moved to Bay 7". */
+function outcomeText(e: DriveEvent): string {
+  const o = outgoingOf(e);
+  switch (o.outcome) {
+    case 'retired':
+      return o.reason ? `retired (${o.reason})` : 'retired';
+    case 'rma':
+      return 'sent for RMA';
+    case 'moved': {
+      const to = slotLink(e, 'to');
+      return to ? `moved to ${where(to)}` : 'moved to another bay';
+    }
+    default:
+      return 'back to spares';
+  }
+}
+
+function describe(e: DriveEvent, driveId: string): { title: string; detail: string | null } {
   const p = e.payload;
-  const pool = () => {
-    const id = str(p.poolId);
-    return id ? poolName(id) : null;
-  };
+  const poolName = e.links.pools[0]?.poolName ?? null;
   const note = str(p.note);
   const join = (...parts: (string | null)[]) => parts.filter(Boolean).join(' · ') || null;
+  const unrecInstall = isUnrecordedInstall(e, driveId);
   switch (e.type) {
     case 'drive-created':
       return { title: 'Added to Sparrow', detail: join(str(p.condition), str(p.vendor)) };
@@ -195,40 +309,100 @@ function describe(
     }
     case 'drive-installed':
       return {
-        title: `Installed in ${where(p) ?? 'a slot'}${
-          isUnrecordedInstall(e) ? ' (installation date not recorded)' : ''
+        title: `Installed in ${where(slotLink(e, 'to')) ?? 'a slot'}${
+          unrecInstall ? ' (installation date not recorded)' : ''
         }`,
-        detail: join(str(p.role), note),
+        detail: join(roleWord(str(p.role)), note),
       };
     case 'drive-removed':
       return {
-        title: `Removed from ${where(p) ?? 'a slot'}${
-          isUnrecordedRemoval(e) ? ' (removal date not recorded)' : ''
+        title: `Removed from ${where(slotLink(e, 'from')) ?? 'a slot'}${
+          isUnrecordedRemoval(e, driveId) ? ' (removal date not recorded)' : ''
         }`,
         detail: note,
       };
     case 'drive-retired':
+    case 'drive-sent-for-rma': {
+      // R60, R27: ONE entry; when the drive was installed the bay it left is named.
+      const rma = e.type === 'drive-sent-for-rma';
+      const from = where(slotLink(e, 'from'));
+      const unrec = isUnrecordedRetirement(e, driveId);
       return {
-        title: isUnrecordedRetirement(e) ? 'Retired (retirement date not recorded)' : 'Retired',
-        detail: join(str(p.reason), str(p.date), note),
+        title: `${rma ? 'Sent for RMA' : 'Retired'}${from ? ` from ${from}` : ''}${
+          unrec ? (rma ? ' (date not recorded)' : ' (retirement date not recorded)') : ''
+        }`,
+        detail: rma ? join(str(p.date), note) : join(str(p.reason), str(p.date), note),
       };
+    }
     case 'drive-reinstated':
       return { title: 'Reinstated as a spare', detail: note };
-    case 'drive-sent-for-rma':
+    case 'drive-moved': {
+      const from = slotLink(e, 'from');
+      const to = slotLink(e, 'to');
       return {
-        title: isUnrecordedRetirement(e) ? 'Sent for RMA (date not recorded)' : 'Sent for RMA',
-        detail: join(str(p.date), note),
+        title: `Moved from ${moveWhere(from, to, 'from')} to ${moveWhere(from, to, 'to')}${
+          unrecInstall ? ' (date not recorded)' : ''
+        }`,
+        detail: null,
       };
+    }
+    case 'drives-swapped': {
+      // R73: this drive's own move, and the other drive it traded places with.
+      const mine = (Array.isArray(p.moves) ? p.moves : [])
+        .map(rec)
+        .find((m) => m.driveId === driveId);
+      const from = e.links.slots.find((s) => s.role === 'from' && s.slotId === mine?.fromSlotId);
+      const to = e.links.slots.find((s) => s.role === 'to' && s.slotId === mine?.toSlotId);
+      const other = e.links.drives.find((d) => d.driveId !== driveId);
+      return {
+        title: `Swapped with ${driveText(other)} — moved from ${moveWhere(from, to, 'from')} to ${moveWhere(
+          from,
+          to,
+          'to',
+        )}${unrecInstall ? ' (date not recorded)' : ''}`,
+        detail: null,
+      };
+    }
+    case 'drive-replaced': {
+      const at = slotLink(e, 'at');
+      const out = driveRef(e, 'outgoing');
+      const inc = driveRef(e, 'incoming');
+      if (roleOf(e, driveId) === 'outgoing') {
+        const o = outgoingOf(e);
+        const unrec =
+          o.hasDate && o.date === null
+            ? o.outcome === 'spares'
+              ? ' (removal date not recorded)'
+              : o.outcome === 'moved'
+                ? ' (date not recorded)'
+                : ' (retirement date not recorded)'
+            : '';
+        return {
+          title: `Replaced by ${driveText(inc)} in ${where(at) ?? 'a slot'} — ${outcomeText(e)}${unrec}`,
+          detail: str(rec(p.outgoing).note),
+        };
+      }
+      const from = slotLink(e, 'from');
+      const suffix = unrecInstall ? ' (installation date not recorded)' : '';
+      return {
+        title: from
+          ? `Moved from ${moveWhere(from, at, 'from')} to ${moveWhere(from, at, 'to')}, replacing ${driveText(out)}${
+              unrecInstall ? ' (date not recorded)' : ''
+            }`
+          : `Installed in ${where(at) ?? 'a slot'}, replacing ${driveText(out)}${suffix}`,
+        detail: join(roleWord(str(p.role)), `${out?.serial ?? 'It'} ${outcomeText(e)}`),
+      };
+    }
     case 'drive-linked':
       return { title: 'Linked to a drive in the NAS', detail: str(p.observationSerial) };
     case 'pool-joined':
       return {
-        title: pool() ? `Joined pool ${pool()}` : 'Joined a pool',
+        title: poolName ? `Joined pool ${poolName}` : 'Joined a pool',
         detail: roleWord(str(p.role)),
       };
     case 'pool-left':
       return {
-        title: pool() ? `Left pool ${pool()}` : 'Left a pool',
+        title: poolName ? `Left pool ${poolName}` : 'Left a pool',
         detail: roleWord(str(p.role)),
       };
     case 'pool-role-changed':
@@ -258,100 +432,38 @@ function describe(
       return { title: `Dismissed suggested ${label ?? 'value'} '${value}'`, detail: null };
     }
     default:
-      // Event types added for later batches (layout and pool records) have no story text yet.
+      // Layout and pool record events are not part of a drive's story.
       return { title: e.type.replace(/-/g, ' '), detail: null };
   }
 }
 
 /**
- * R73: a move between bays logs drive-removed (movedToSlotId) right before drive-installed
- * (movedFromSlotId). The story reads that pair as one entry, "Moved from Bay 3 to Bay 7".
+ * Events newest first (as the API returns) in, oldest-first story out. `driveId` is the drive whose
+ * story this is: it decides whether a replacement reads "Replaced by ..." or "Installed ..., replacing ...".
  */
-function isMovePair(first: DriveEvent, second: DriveEvent | undefined): boolean {
-  return (
-    second !== undefined &&
-    first.type === 'drive-removed' &&
-    second.type === 'drive-installed' &&
-    str(first.payload.movedToSlotId) !== null &&
-    str(first.payload.movedToSlotId) === str(second.payload.slotId) &&
-    str(second.payload.movedFromSlotId) === str(first.payload.slotId)
-  );
-}
-
-/** "Bay 3" when both bays are in the same grid, else "Front bays, Bay 3". */
-function moveWhere(
-  from: Record<string, unknown>,
-  to: Record<string, unknown>,
-  end: 'from' | 'to',
-): string {
-  const p = end === 'from' ? from : to;
-  const sameGrid = str(from.gridName) === str(to.gridName);
-  return (sameGrid ? str(p.slotLabel) : where(p)) ?? where(p) ?? 'a slot';
-}
-
-/** Events newest first (as the API returns) in, oldest-first story out. */
-export function buildStory(
-  eventsNewestFirst: DriveEvent[],
-  poolName: PoolNameLookup = () => null,
-): StoryItem[] {
-  const ordered = orderedByEffective(eventsNewestFirst);
-  const items: StoryItem[] = [];
-  for (let i = 0; i < ordered.length; i++) {
-    const o = ordered[i]!;
+export function buildStory(eventsNewestFirst: DriveEvent[], driveId: string): StoryItem[] {
+  const ordered = orderedByEffective(eventsNewestFirst, driveId);
+  return ordered.map((o, i) => {
     const prev = ordered[i - 1];
     const ms = prev ? Date.parse(o.at) - Date.parse(prev.at) : 0;
     const gap = prev ? (ms < 24 * 3600_000 ? 'same day' : `after ${formatDuration(ms)}`) : null;
-    const pair = ordered[i + 1];
-    if (pair && isMovePair(o.event, pair.event)) {
-      // One entry for the move; it takes the later (installed) event's date and flags.
-      const unrecorded = isUnrecordedInstall(pair.event);
-      // R73: a swap names the other drive.
-      const swapWith =
-        str(pair.event.payload.swappedWithDriveId) === null
-          ? null
-          : (str(pair.event.payload.swappedWithSerial) ?? 'another drive');
-      items.push({
-        id: pair.event.id,
-        at: pair.at,
-        date: pair.date,
-        recorded: pair.recorded,
-        unrecorded,
-        removalUnrecorded: false,
-        retirementUnrecorded: false,
-        kind: 'drive-installed',
-        slot: null,
-        health: null,
-        title: `${swapWith === null ? 'Moved' : 'Swapped'} from ${moveWhere(
-          o.event.payload,
-          pair.event.payload,
-          'from',
-        )} to ${moveWhere(o.event.payload, pair.event.payload, 'to')}${
-          swapWith === null ? '' : ` (with ${swapWith})`
-        }${unrecorded ? ' (date not recorded)' : ''}`,
-        detail: null,
-        gap,
-      });
-      i++;
-      continue;
-    }
-    const { title, detail } = describe(o.event, poolName);
-    items.push({
+    const { title, detail } = describe(o.event, driveId);
+    return {
       id: o.event.id,
       at: o.at,
       date: o.date,
       recorded: o.recorded,
-      unrecorded: isUnrecordedInstall(o.event),
-      removalUnrecorded: isUnrecordedRemoval(o.event),
-      retirementUnrecorded: isUnrecordedRetirement(o.event),
+      unrecorded: isUnrecordedInstall(o.event, driveId),
+      removalUnrecorded: isUnrecordedRemoval(o.event, driveId),
+      retirementUnrecorded: isUnrecordedRetirement(o.event, driveId),
       kind: o.event.type,
       slot: slotOf(o.event),
       health: healthChange(o.event),
       title,
       detail,
       gap,
-    });
-  }
-  return items;
+    };
+  });
 }
 
 export interface StorySummary {
@@ -378,6 +490,7 @@ export interface StorySummary {
 /** Time installed and time on the shelf, from the event sequence up to `end` (now, or retirement). */
 export function summarizeStory(
   eventsNewestFirst: DriveEvent[],
+  driveId: string,
   now: number = Date.now(),
 ): StorySummary {
   const out: StorySummary = {
@@ -397,29 +510,37 @@ export function summarizeStory(
     if (state === 'installed' && !known) out.installUnrecorded = true;
     if (state === 'installed' && !endKnown) out.removalUnrecorded = true;
   };
-  for (const o of orderedByEffective(eventsNewestFirst)) {
+  for (const o of orderedByEffective(eventsNewestFirst, driveId)) {
     const at = Date.parse(o.at);
     const e = o.event;
-    if (e.type === 'drive-retired' && isUnrecordedRetirement(e)) out.retirementUnrecorded = true;
-    // R68: a drive can be logged here long after it went in, so "added to Sparrow" only starts the
-    // shelf phase when nothing earlier is known.
+    const d = dateOf(e, driveId);
+    const unknownDate = d.has && d.value === null;
+    if (isUnrecordedRetirement(e, driveId)) out.retirementUnrecorded = true;
+    const exit = exitOf(e, driveId);
+    // The phase this event starts for the drive. A drive that moves between bays stays installed,
+    // but the stay restarts on the move date (R73), so a move still closes and reopens the phase.
     const next: Phase =
       e.type === 'drive-created'
         ? state === null
           ? 'shelf'
           : state
-        : e.type === 'drive-removed' || e.type === 'drive-reinstated'
+        : e.type === 'drive-reinstated'
           ? 'shelf'
-          : e.type === 'drive-installed'
+          : arrives(e, driveId) && exit !== 'spares' && exit !== 'retired'
             ? 'installed'
-            : e.type === 'drive-retired'
-              ? 'retired'
-              : state;
-    if (next !== state) {
-      close(at, !isUnrecordedRemoval(e) && !isUnrecordedRetirement(e));
+            : exit === 'spares'
+              ? 'shelf'
+              : exit === 'retired'
+                ? 'retired'
+                : state;
+    const restarts = arrives(e, driveId) && next === 'installed' && state === 'installed';
+    if (next !== state || restarts) {
+      // Leaving a bay, or moving between bays, needs a real date for the time before it to count.
+      const leaving = exit !== null || (arrives(e, driveId) && state === 'installed');
+      close(at, !(leaving && unknownDate));
       state = next;
       since = at;
-      known = !isUnrecordedInstall(e) && !isUnrecordedRemoval(e);
+      known = !unknownDate;
     }
     // Editing the installation date moves the start of the phase that is running.
     const edit = installedOnChange(e);

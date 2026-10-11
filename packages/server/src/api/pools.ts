@@ -6,6 +6,7 @@ import {
   leavePoolInputSchema,
   updatePoolInputSchema,
 } from '@sparrow/shared';
+import { listPoolEvents } from '../core/events.js';
 import { changeMembership, joinPool, leavePool, listMemberships } from '../core/memberships.js';
 import { createPool, deletePool, getPool, listPools, updatePool } from '../core/pools.js';
 import type { AppDb } from '../db/client.js';
@@ -26,6 +27,12 @@ export const poolRoutes: FastifyPluginAsync<{ db: AppDb }> = async (app, opts) =
   });
 
   app.get<{ Params: IdParams }>('/api/pools/:id', async (req) => getPool(db, req.params.id));
+
+  // The pool's history: its record changes and its members joining, leaving or changing role (newest first).
+  app.get<{ Params: IdParams }>('/api/pools/:id/history', async (req) => {
+    getPool(db, req.params.id); // 404 for an unknown pool
+    return listPoolEvents(db, req.params.id);
+  });
 
   app.patch<{ Params: IdParams }>('/api/pools/:id', async (req) =>
     updatePool(db, req.params.id, updatePoolInputSchema.parse(req.body)),

@@ -3,12 +3,14 @@ import {
   driveSchema,
   enclosureSchema,
   eventSchema,
+  storedEventSchema,
   gridSchema,
   membershipSchema,
   poolSchema,
   slotSchema,
 } from '@sparrow/shared';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
+import { listDriveEvents, recordEvent, type DbTransaction } from '../src/core/events.js';
 import { createRepositories, type Repositories } from '../src/db/repositories.js';
 
 // Proves that rows produced by the repositories satisfy the shared zod schemas
@@ -22,6 +24,8 @@ beforeEach(() => {
   repo = createRepositories(opened.db);
 });
 afterEach(() => opened.sqlite.close());
+
+const recordIn = <T>(fn: (tx: DbTransaction) => T): T => opened.db.transaction(fn);
 
 describe('repository records match shared schemas', () => {
   it('enclosure, grid and slot', () => {
@@ -116,19 +120,26 @@ describe('repository records match shared schemas', () => {
     expect(membershipSchema.parse(closed)).toEqual(closed);
   });
 
-  it('event: JSON payload round-trips as an object, with and without a drive', () => {
+  it('event: JSON payload and drive / slot / pool links round-trip, with and without links', () => {
     const drive = repo.drives.create({ serial: 'E1', status: 'spare' });
-    const withDrive = repo.events.create({
-      driveId: drive.id,
-      type: 'drive-updated',
-      payload: { changed: ['model'], before: { model: null }, after: { model: 'X' }, n: 2 },
-    });
+    const withDrive = recordIn((tx) =>
+      recordEvent(tx, {
+        type: 'drive-updated',
+        drives: [{ id: drive.id }],
+        payload: { changed: ['model'], before: { model: null }, after: { model: 'X' }, n: 2 },
+      }),
+    );
     expect(typeof withDrive.payload).toBe('object');
-    expect(eventSchema.parse(withDrive)).toEqual(withDrive);
+    expect(storedEventSchema.parse(withDrive)).toEqual(withDrive);
+    expect(withDrive.links.drives).toEqual([{ driveId: drive.id, role: 'subject' }]);
+    // The API view resolves the drive for display and satisfies its own schema.
+    const [shown] = listDriveEvents(opened.db, drive.id);
+    expect(eventSchema.parse(shown)).toEqual(shown);
 
-    const noDrive = repo.events.create({ driveId: null, type: 'pool-joined', payload: {} });
-    expect(eventSchema.parse(noDrive)).toEqual(noDrive);
-    expect(noDrive.payload).toEqual({});
+    const noLinks = recordIn((tx) => recordEvent(tx, { type: 'pool-joined', payload: {} }));
+    expect(storedEventSchema.parse(noLinks)).toEqual(noLinks);
+    expect(noLinks.payload).toEqual({});
+    expect(noLinks.links).toEqual({ drives: [], slots: [], pools: [] });
   });
 });
 
