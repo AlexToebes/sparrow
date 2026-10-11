@@ -9,6 +9,7 @@ import {
   RetireFields,
   driveLabel,
   retireValuesError,
+  installedOnError,
   todayLocal,
   type RetireValues,
 } from './RetireFields';
@@ -19,6 +20,8 @@ export interface PlacementInput {
   poolId: string | null;
   role?: MembershipRole;
   occupant?: OccupantResolution;
+  /** R68: YYYY-MM-DD the drive actually went in (today unless backdated). */
+  installedOn?: string;
 }
 
 /**
@@ -70,6 +73,7 @@ export function AssignDialog({
   const [driveId, setDriveId] = useState<string | null>(fixedDrive);
   const [poolPick, setPoolPick] = useState<string | undefined>(undefined);
   const [rolePick, setRolePick] = useState<MembershipRole | undefined>(undefined);
+  const [installedOn, setInstalledOn] = useState(todayLocal);
   const [step, setStep] = useState<'form' | 'occupant'>('form');
   const [error, setError] = useState<string | null>(null);
   const [apiOccupantId, setApiOccupantId] = useState<string | null>(null);
@@ -128,6 +132,7 @@ export function AssignDialog({
       slotId,
       poolId: poolValue,
       ...(poolValue !== null ? { role: roleValue } : {}),
+      installedOn,
       ...(resolution ? { occupant: resolution } : {}),
     };
     const callbacks = {
@@ -151,6 +156,11 @@ export function AssignDialog({
   const onAssignClick = () => {
     if (!slotId || (!driveId && !placement)) {
       setError(placement ? 'Choose a slot.' : 'Choose both a slot and a drive.');
+      return;
+    }
+    const dateProblem = installedOnError(installedOn);
+    if (dateProblem) {
+      setError(dateProblem);
       return;
     }
     if (occupantId) {
@@ -277,6 +287,15 @@ export function AssignDialog({
               ) : null}
             </>
           ) : null}
+          <TextInput
+            label="Installed on"
+            description="Set an earlier date if the drive was installed before you recorded it."
+            type="date"
+            mt="sm"
+            max={todayLocal()}
+            value={installedOn}
+            onChange={(e) => setInstalledOn(e.currentTarget.value)}
+          />
           {occupantId && slotId ? (
             <Alert color="yellow" mt="sm">
               This slot is occupied{occupant ? ` by ${occupant.serial}` : ''}. You will choose what

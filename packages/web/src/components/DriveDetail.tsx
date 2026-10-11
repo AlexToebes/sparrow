@@ -8,6 +8,7 @@ import { HEALTH_WORD, type SlotView } from '../lib/health';
 import { AssignDialog } from './AssignDialog';
 import { ConfirmDialog } from './ConfirmDialog';
 import { DriveFormDialog } from './DriveFormDialog';
+import { InstalledOnDialog } from './InstalledOnDialog';
 import { LifeStory } from './LifeStory';
 import { MembershipSection } from './MembershipSection';
 import { MissingDrivePanel } from './MissingDrivePanel';
@@ -47,7 +48,7 @@ interface DriveDetailProps {
   where?: string | null;
 }
 
-type Dialog = 'assign' | 'edit' | 'retire' | 'remove' | 'reinstate' | null;
+type Dialog = 'assign' | 'edit' | 'installed-on' | 'retire' | 'remove' | 'reinstate' | null;
 
 /** One drive: facts, health (when in a slot), actions and life story. Used by the slot panel and the Drives page. */
 export function DriveDetail({ drive, view = null, where = null }: DriveDetailProps) {
@@ -135,6 +136,24 @@ export function DriveDetail({ drive, view = null, where = null }: DriveDetailPro
                 : 'Retired'
           }
         />
+        {drive.status === 'installed' && drive.installedOn ? (
+          <>
+            <dt>Installed on</dt>
+            <dd>
+              <span className="inline-edit">
+                <span className="mono">{drive.installedOn}</span>
+                <Button
+                  size="compact-xs"
+                  variant="subtle"
+                  aria-label="Edit installation date"
+                  onClick={() => setDialog('installed-on')}
+                >
+                  Edit
+                </Button>
+              </span>
+            </dd>
+          </>
+        ) : null}
         {drive.status === 'retired' ? (
           <>
             <Row
@@ -190,6 +209,7 @@ export function DriveDetail({ drive, view = null, where = null }: DriveDetailPro
 
       {dialog === 'assign' ? <AssignDialog driveId={drive.id} onClose={close} /> : null}
       {dialog === 'edit' ? <DriveFormDialog drive={drive} onClose={close} /> : null}
+      {dialog === 'installed-on' ? <InstalledOnDialog drive={drive} onClose={close} /> : null}
       {dialog === 'retire' ? <RetireDialog drive={drive} opened onClose={close} /> : null}
       {dialog === 'remove' ? (
         <ConfirmDialog

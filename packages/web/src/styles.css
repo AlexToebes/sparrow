@@ -520,8 +520,20 @@ body {
   font-size: 12px;
   color: var(--sp-dim);
 }
+.story-head {
+  gap: 8px;
+}
+.story-recorded {
+  font-style: italic;
+}
 .story-title {
   font-weight: 600;
+}
+.facts dd .inline-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .story-detail {
   font-size: 13px;

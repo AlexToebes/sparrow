@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../src/App';
 import { makeDrive, makeSlot, renderApp } from './utils';
@@ -157,6 +157,7 @@ describe('Inbox (R22, R23, R25, R58)', () => {
       slotId: 's1',
       poolId: 'p1',
       role: 'data',
+      installedOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     });
   });
 
@@ -202,7 +203,31 @@ describe('Inbox (R22, R23, R25, R58)', () => {
       slotId: 's0',
       poolId: 'p1',
       role: 'data',
+      installedOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       occupant: { action: 'spare' },
+    });
+  });
+
+  it('R68: the inbox create flow can backdate the installation (drive in the NAS before Sparrow)', async () => {
+    const calls = setup(
+      { 'POST /api/inbox/X2/create': { drive: spare } },
+      {
+        entries: [{ observationKey: 'X2', observation: obs('NEW-2'), suggestion: null }],
+        count: 1,
+      },
+    );
+    renderApp(<App />, '/inbox');
+    await userEvent.click(await screen.findByRole('button', { name: 'Create new record' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
+    await pick(within(dlg), /^Slot/, 'Bay 2');
+    fireEvent.change(within(dlg).getByLabelText('Installed on'), {
+      target: { value: '2022-03-04' },
+    });
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Assign' }));
+    await waitFor(() => expect(posts(calls, '/api/inbox/X2/create')).toHaveLength(1));
+    expect(posts(calls, '/api/inbox/X2/create')[0]!.body).toMatchObject({
+      slotId: 's1',
+      installedOn: '2022-03-04',
     });
   });
 

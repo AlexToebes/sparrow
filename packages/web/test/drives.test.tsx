@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../src/App';
 import { makeDrive, makeSlot, renderApp } from './utils';
@@ -226,7 +226,51 @@ describe('Assignment (R8, R35, R37, R62)', () => {
       driveId: 'd9',
       poolId: 'p1',
       role: 'hot-spare',
+      installedOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     });
+  });
+
+  it('R68: the assign dialog defaults "Installed on" to today and sends a chosen past date', async () => {
+    const calls = setup();
+    renderApp(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Assign SPARE9' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
+    const date = within(dlg).getByLabelText('Installed on');
+    expect(date).toHaveAttribute('type', 'date');
+    expect((date as HTMLInputElement).value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(date).toHaveAttribute('max', (date as HTMLInputElement).value);
+    expect(
+      within(dlg).getByText(
+        'Set an earlier date if the drive was installed before you recorded it.',
+      ),
+    ).toBeInTheDocument();
+    await pick(/^Slot/, /Bay 2/);
+    fireEvent.change(date, { target: { value: '2023-05-06' } });
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Assign' }));
+    await waitFor(() => expect(posts(calls, '/api/slots/s1/assign')).toHaveLength(1));
+    expect(posts(calls, '/api/slots/s1/assign')[0]!.body).toMatchObject({
+      driveId: 'd9',
+      installedOn: '2023-05-06',
+    });
+  });
+
+  it('R68: a cleared or future installation date is refused before anything is sent', async () => {
+    const calls = setup();
+    renderApp(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Assign SPARE9' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
+    await pick(/^Slot/, /Bay 2/);
+    fireEvent.change(within(dlg).getByLabelText('Installed on'), { target: { value: '' } });
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Assign' }));
+    expect(
+      await within(dlg).findByText(/Enter the date the drive was installed/),
+    ).toBeInTheDocument();
+    fireEvent.change(within(dlg).getByLabelText('Installed on'), {
+      target: { value: '2999-01-01' },
+    });
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Assign' }));
+    expect(await within(dlg).findByText(/cannot be in the future/)).toBeInTheDocument();
+    expect(posts(calls, '/api/slots/s1/assign')).toHaveLength(0);
   });
 
   it('D8: dropdowns open outside the dialog body so it cannot clip them', async () => {
@@ -403,5 +447,64 @@ describe('Retire and reinstate (R60, R61)', () => {
     await userEvent.click(await screen.findByText('OLD7'));
     expect(await screen.findByText('Joined pool tank')).toBeInTheDocument();
     expect(screen.getByText('hot spare')).toBeInTheDocument();
+  });
+});
+
+describe('Installation date on the drive detail (R68)', () => {
+  it('shows the date for an installed drive and saves an edit through PATCH', async () => {
+    const calls = setup({
+      'PATCH /api/drives/d0': makeDrive({
+        id: 'd0',
+        serial: 'AAA0',
+        slotId: 's0',
+        installedOn: '2021-02-03',
+      }),
+    });
+    renderApp(<App />, '/drives');
+    await userEvent.click(await screen.findByText('AAA0'));
+    const row = (await screen.findByText('Installed on')).closest('dt')!;
+    expect(row.nextElementSibling).toHaveTextContent('2026-01-01');
+    await userEvent.click(screen.getByRole('button', { name: 'Edit installation date' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Installation date' });
+    fireEvent.change(within(dlg).getByLabelText('Installed on'), {
+      target: { value: '2021-02-03' },
+    });
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(posts(calls, '/api/drives/d0')).toHaveLength(1));
+    expect(posts(calls, '/api/drives/d0')[0]!.body).toEqual({ installedOn: '2021-02-03' });
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Installation date' })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('shows the API error inline and keeps the dialog open', async () => {
+    setup({
+      'PATCH /api/drives/d0': () =>
+        new Response(
+          JSON.stringify({
+            error: { code: 'invalid', message: 'installedOn must not be in the future' },
+          }),
+          { status: 400 },
+        ),
+    });
+    renderApp(<App />, '/drives');
+    await userEvent.click(await screen.findByText('AAA0'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit installation date' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Installation date' });
+    fireEvent.change(within(dlg).getByLabelText('Installed on'), {
+      target: { value: '2020-01-01' },
+    });
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Save' }));
+    expect(
+      await within(dlg).findByText('installedOn must not be in the future'),
+    ).toBeInTheDocument();
+  });
+
+  it('offers no installation date for spares or retired drives', async () => {
+    setup();
+    renderApp(<App />, '/drives');
+    await userEvent.click(await screen.findByText('OLD7'));
+    await screen.findByText('Retirement note');
+    expect(screen.queryByText('Installed on')).not.toBeInTheDocument();
   });
 });

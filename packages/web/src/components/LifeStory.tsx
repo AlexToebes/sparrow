@@ -1,6 +1,6 @@
 import { Skeleton, Text } from '@mantine/core';
 import { useDriveEvents, usePools } from '../api/hooks';
-import { formatDate, formatDuration } from '../lib/format';
+import { formatDuration } from '../lib/format';
 import { buildStory, summarizeStory } from '../lib/lifeStory';
 
 /** The drive's history as a vertical timeline, oldest first (UI_DESIGN, from E). */
@@ -29,7 +29,12 @@ export function LifeStory({ driveId }: { driveId: string }) {
           <li key={item.id} className="story-item" data-kind={item.kind}>
             <span className="story-dot" aria-hidden="true" />
             <div className="story-head">
-              <span className="mono story-date">{formatDate(item.at)}</span>
+              <span>
+                <span className="mono story-date">{item.date}</span>
+                {item.recorded ? (
+                  <span className="story-recorded"> · recorded {item.recorded}</span>
+                ) : null}
+              </span>
               {item.gap ? <span className="story-gap">{item.gap}</span> : null}
             </div>
             <div className="story-title">{item.title}</div>
