@@ -12,6 +12,8 @@ interface ConfirmDialogProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   mutation: UseMutationResult<unknown, Error, any>;
   body: unknown;
+  /** Blocks the confirm button while the dialog's own fields are invalid. */
+  confirmDisabled?: boolean;
   onClose: () => void;
 }
 
@@ -23,6 +25,7 @@ export function ConfirmDialog({
   children,
   mutation,
   body,
+  confirmDisabled = false,
   onClose,
 }: ConfirmDialogProps) {
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +44,7 @@ export function ConfirmDialog({
         <Button
           color={color}
           loading={mutation.isPending}
+          disabled={confirmDisabled}
           onClick={() =>
             mutation.mutate(body, {
               onSuccess: onClose,

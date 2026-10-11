@@ -3,6 +3,7 @@ import { Button, Text, Textarea, TextInput } from '@mantine/core';
 import type { Drive, SlotFlag } from '@sparrow/shared';
 import { useDriveAction } from '../api/driveMutations';
 import { ConfirmDialog } from './ConfirmDialog';
+import { RemoveToSparesDialog } from './RemoveToSparesDialog';
 import { RetireDialog } from './RetireDialog';
 import { todayLocal } from './RetireFields';
 
@@ -28,7 +29,6 @@ export function MissingDrivePanel({
   where: string | null;
 }) {
   const [outcome, setOutcome] = useState<Outcome>(null);
-  const remove = useDriveAction(drive.id, 'remove');
   const rma = useDriveAction(drive.id, 'rma');
   const [rmaDate, setRmaDate] = useState(todayLocal);
   const [rmaNote, setRmaNote] = useState('');
@@ -54,19 +54,17 @@ export function MissingDrivePanel({
       </div>
 
       {outcome === 'spares' ? (
-        <ConfirmDialog
+        <RemoveToSparesDialog
+          drive={drive}
+          where={where}
           title="Back to spares"
           confirmLabel="Move to spares"
-          mutation={remove}
-          body={{}}
+          defaultRemovedOn=""
           onClose={close}
         >
-          <Text>
-            Move <strong className="mono">{drive.serial}</strong> out of {where ?? 'its slot'} back
-            to the spares shelf? Check that it is really out of the NAS. Its pool membership ends;
-            its history is kept.
-          </Text>
-        </ConfirmDialog>
+          Check that it is really out of the NAS. The drive went missing at an unknown time, so the
+          removal date starts empty.
+        </RemoveToSparesDialog>
       ) : null}
       {outcome === 'retire' ? <RetireDialog drive={drive} opened onClose={close} /> : null}
       {outcome === 'rma' ? (

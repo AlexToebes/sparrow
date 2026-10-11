@@ -1,12 +1,26 @@
 import { useState } from 'react';
-import { Button, Table, Text } from '@mantine/core';
+import { Button, Drawer, Table, Text } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
+import { Link } from 'react-router';
 import type { Drive } from '@sparrow/shared';
 import { formatBytes } from '../lib/format';
 import { AssignDialog } from './AssignDialog';
+import { DriveDetail } from './DriveDetail';
 
 /** Spares on the shelf (from C). Each row has an Assign action. */
-export function SparesShelf({ spares }: { spares: Drive[] }) {
+export function SparesShelf({
+  spares,
+  retiredCount = 0,
+}: {
+  spares: Drive[];
+  /** Shown as a link to the Drives page filtered to retired drives. */
+  retiredCount?: number;
+}) {
+  const phone = useMediaQuery('(max-width: 48em)') ?? false;
   const [assigning, setAssigning] = useState<string | null>(null);
+  // A row opens the drive's detail drawer, with its history; Assign stays its own button.
+  const [viewing, setViewing] = useState<string | null>(null);
+  const viewed = spares.find((d) => d.id === viewing) ?? null;
   return (
     <section className="card" aria-label="Spares shelf">
       <div className="card-head">
@@ -34,8 +48,20 @@ export function SparesShelf({ spares }: { spares: Drive[] }) {
             </Table.Thead>
             <Table.Tbody>
               {spares.map((d) => (
-                <Table.Tr key={d.id}>
-                  <Table.Td className="mono">{d.serial}</Table.Td>
+                <Table.Tr key={d.id} className="drive-row" onClick={() => setViewing(d.id)}>
+                  <Table.Td className="mono">
+                    <button
+                      type="button"
+                      className="link-button mono"
+                      aria-label={`Details of ${d.serial}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setViewing(d.id);
+                      }}
+                    >
+                      {d.serial}
+                    </button>
+                  </Table.Td>
                   <Table.Td>{d.model ?? '—'}</Table.Td>
                   <Table.Td className="mono">{formatBytes(d.capacityBytes) || '—'}</Table.Td>
                   <Table.Td>{d.condition ?? '—'}</Table.Td>
@@ -45,7 +71,10 @@ export function SparesShelf({ spares }: { spares: Drive[] }) {
                       size="compact-sm"
                       variant="light"
                       aria-label={`Assign ${d.serial}`}
-                      onClick={() => setAssigning(d.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAssigning(d.id);
+                      }}
                     >
                       Assign
                     </Button>
@@ -56,6 +85,19 @@ export function SparesShelf({ spares }: { spares: Drive[] }) {
           </Table>
         </Table.ScrollContainer>
       )}
+      <Text size="sm" mt="sm">
+        <Link to="/drives?status=retired">Retired drives ({retiredCount}) →</Link>
+      </Text>
+      <Drawer
+        opened={viewed !== null}
+        onClose={() => setViewing(null)}
+        position={phone ? 'bottom' : 'right'}
+        size={phone ? '85%' : 460}
+        title="Spare drive"
+        closeButtonProps={{ 'aria-label': 'Close' }}
+      >
+        {viewed ? <DriveDetail drive={viewed} /> : null}
+      </Drawer>
       {assigning ? <AssignDialog driveId={assigning} onClose={() => setAssigning(null)} /> : null}
     </section>
   );

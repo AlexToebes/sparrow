@@ -12,6 +12,8 @@ import { InstalledOnDialog } from './InstalledOnDialog';
 import { LifeStory } from './LifeStory';
 import { MembershipSection } from './MembershipSection';
 import { MissingDrivePanel } from './MissingDrivePanel';
+import { RemoveToSparesDialog } from './RemoveToSparesDialog';
+import { ReplaceDialog } from './ReplaceDialog';
 import { RetireDialog } from './RetireDialog';
 import { StateIcon, poolColor } from './SlotTile';
 
@@ -48,14 +50,14 @@ interface DriveDetailProps {
   where?: string | null;
 }
 
-type Dialog = 'assign' | 'edit' | 'installed-on' | 'retire' | 'remove' | 'reinstate' | null;
+type Dialog =
+  'assign' | 'replace' | 'edit' | 'installed-on' | 'retire' | 'remove' | 'reinstate' | null;
 
 /** One drive: facts, health (when in a slot), actions and life story. Used by the slot panel and the Drives page. */
 export function DriveDetail({ drive, view = null, where = null }: DriveDetailProps) {
   const [dialog, setDialog] = useState<Dialog>(null);
   const pool = useDrivePools().get(drive.id);
   const drives = useDrives();
-  const remove = useDriveAction(drive.id, 'remove');
   const reinstate = useDriveAction(drive.id, 'reinstate');
   const status = view?.status ?? null;
   const replacedBy = drive.replacedByDriveId
@@ -99,6 +101,11 @@ export function DriveDetail({ drive, view = null, where = null }: DriveDetailPro
         {drive.status === 'spare' ? (
           <Button size="compact-md" onClick={() => setDialog('assign')}>
             Assign to slot
+          </Button>
+        ) : null}
+        {drive.status === 'installed' && drive.slotId ? (
+          <Button size="compact-md" onClick={() => setDialog('replace')}>
+            Replace
           </Button>
         ) : null}
         {drive.status === 'installed' ? (
@@ -218,23 +225,13 @@ export function DriveDetail({ drive, view = null, where = null }: DriveDetailPro
       {dialog === 'installed-on' ? <InstalledOnDialog drive={drive} onClose={close} /> : null}
       {dialog === 'retire' ? <RetireDialog drive={drive} opened onClose={close} /> : null}
       {dialog === 'remove' ? (
-        <ConfirmDialog
-          title="Remove to spares"
-          confirmLabel="Remove to spares"
-          mutation={remove}
-          body={{}}
-          onClose={close}
-        >
-          <Text>
-            Move <strong className="mono">{drive.serial}</strong>
-            {where ? ` out of ${where}` : ''} back to the spares shelf?
-            {view?.state === 'missing'
-              ? ' Sparrow could not see this drive lately, so check that it is really out of the NAS.'
-              : ''}{' '}
-            Its pool membership ends; its history is kept.
-          </Text>
-        </ConfirmDialog>
+        <RemoveToSparesDialog drive={drive} where={where} onClose={close}>
+          {view?.state === 'missing'
+            ? 'Sparrow could not see this drive lately, so check that it is really out of the NAS.'
+            : null}
+        </RemoveToSparesDialog>
       ) : null}
+      {dialog === 'replace' ? <ReplaceDialog drive={drive} where={where} onClose={close} /> : null}
       {dialog === 'reinstate' ? (
         <ConfirmDialog
           title="Reinstate drive"

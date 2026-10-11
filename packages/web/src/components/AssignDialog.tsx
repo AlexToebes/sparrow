@@ -1,35 +1,29 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import {
-  Alert,
-  Button,
-  Group,
-  Modal,
-  Radio,
-  Select,
-  Text,
-  Textarea,
-  TextInput,
-} from '@mantine/core';
-import type { Drive, MembershipRole, OccupantResolution } from '@sparrow/shared';
+import { Alert, Button, Modal, Text } from '@mantine/core';
+import type { Drive, MembershipRole } from '@sparrow/shared';
 import { ApiError } from '../api/client';
-import { occupantFromError, useAssignDrive, useAssignmentDefaults } from '../api/driveMutations';
-import { useDrives, useLayout, usePools } from '../api/hooks';
+import { occupantFromError, useAssignDrive, type OccupantInput } from '../api/driveMutations';
+import { useDrives, useLayout } from '../api/hooks';
 import { slotLabel } from '../lib/health';
 import {
-  RetireFields,
-  driveLabel,
-  retireValuesError,
-  installedOnError,
-  todayLocal,
-  type RetireValues,
-} from './RetireFields';
+  NOT_RECORDED_HINT,
+  OptionalDateField,
+  OutcomeFields,
+  PoolRoleFields,
+  initialOutcome,
+  outcomeToResolution,
+  usePoolRole,
+} from './AssignFields';
+import { driveLabel, installedOnError, todayLocal } from './RetireFields';
+import { SlotPicker } from './SlotPicker';
+import { SparePicker } from './SparePicker';
 
 /** Slot, pool, role and occupant resolution: the part of an assignment every flow shares. */
 export interface PlacementInput {
   slotId: string;
   poolId: string | null;
   role?: MembershipRole;
-  occupant?: OccupantResolution;
+  occupant?: OccupantInput;
   /**
    * R68: YYYY-MM-DD the drive went in; null = "not recorded" (explicit, so the server does not
    * default it to today); absent = leave it to the server (inbox: not recorded).
@@ -62,11 +56,9 @@ interface AssignDialogProps {
   driveId?: string | null;
 }
 
-type Choice = 'spare' | 'retire' | 'rma';
-const NO_POOL = '__none__';
-
 /**
- * Assign a spare to a slot (R8, R35). Retired drives are never offered. When the slot is occupied the
+ * Assign a spare to a slot (R8, R35). The slot is chosen on the bay grids (R70) and the spare from
+ * cards. Retired drives are never offered. When the slot is occupied the
  * dialog moves to a resolution step for the occupant (R37, R62) and submits it with the assignment.
  * Mount it only while open: its state starts fresh each time.
  */
@@ -79,38 +71,33 @@ export function AssignDialog({
   const layout = useLayout();
   const spares = useDrives('spare');
   const allDrives = useDrives();
-  const pools = usePools();
   const assign = useAssignDrive();
 
+  // The slot starts as the one the dialog was opened from (an empty slot's "+ Assign") and can be changed on the grid.
   const [slotId, setSlotId] = useState<string | null>(fixedSlot);
   const [driveId, setDriveId] = useState<string | null>(fixedDrive);
-  const [poolPick, setPoolPick] = useState<string | undefined>(undefined);
-  const [rolePick, setRolePick] = useState<MembershipRole | undefined>(undefined);
+  const poolRole = usePoolRole(slotId);
+  const { poolValue, roleValue } = poolRole;
   // R68: drives found in the NAS (the inbox flow) start with no date; moving a spare in starts at today.
   const [installedOn, setInstalledOn] = useState(() => (placement ? '' : todayLocal()));
   const [step, setStep] = useState<'form' | 'occupant'>('form');
   const [error, setError] = useState<string | null>(null);
   const [apiOccupantId, setApiOccupantId] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState(() => initialOutcome(fixedDrive));
 
-  const defaults = useAssignmentDefaults(slotId);
-
-  const slots = useMemo(() => {
-    const multi = (layout.data?.enclosures.length ?? 0) > 1;
-    return (layout.data?.enclosures ?? []).flatMap((enc) =>
-      enc.grids.map((g) => ({
-        group: multi ? `${enc.name} / ${g.name}` : g.name,
-        gridName: g.name,
-        slots: [...g.slots].sort((a, b) => a.position - b.position),
-      })),
-    );
-  }, [layout.data]);
   const slotById = useMemo(() => {
+    const multi = (layout.data?.enclosures.length ?? 0) > 1;
     const m = new Map<string, { gridName: string; label: string; driveId: string | null }>();
-    for (const g of slots)
-      for (const s of g.slots)
-        m.set(s.id, { gridName: g.gridName, label: slotLabel(s), driveId: s.driveId });
+    for (const enc of layout.data?.enclosures ?? [])
+      for (const g of enc.grids)
+        for (const s of g.slots)
+          m.set(s.id, {
+            gridName: multi ? `${enc.name} / ${g.name}` : g.name,
+            label: slotLabel(s),
+            driveId: s.driveId,
+          });
     return m;
-  }, [slots]);
+  }, [layout.data]);
   const driveById = useMemo(
     () => new Map((allDrives.data ?? []).map((d) => [d.id, d])),
     [allDrives.data],
@@ -124,28 +111,13 @@ export function AssignDialog({
   const occupantId = targetSlot?.driveId ?? apiOccupantId;
   const occupant = occupantId ? (driveById.get(occupantId) ?? null) : null;
 
-  // Pool and role: the user's pick, else the slot's defaults (R35).
-  const defaultPool = defaults.data?.poolId ?? null;
-  const poolValue = poolPick === undefined ? defaultPool : poolPick === NO_POOL ? null : poolPick;
-  const roleValue: MembershipRole = rolePick ?? defaults.data?.role ?? 'data';
-
-  const [choice, setChoice] = useState<Choice>('spare');
-  const [retireValues, setRetireValues] = useState<RetireValues>(() => ({
-    reason: 'replaced',
-    date: todayLocal(),
-    replacedByDriveId: fixedDrive,
-    note: '',
-  }));
-  const [rmaDate, setRmaDate] = useState(todayLocal);
-  const [rmaNote, setRmaNote] = useState('');
-
-  const submit = (resolution?: OccupantResolution) => {
+  const submit = (resolution?: OccupantInput) => {
     if (!slotId || (!driveId && !placement)) return;
     setError(null);
     const input: PlacementInput = {
       slotId,
       poolId: poolValue,
-      ...(poolValue !== null ? { role: roleValue } : {}),
+      ...(poolValue !== null ? { role: roleValue as MembershipRole } : {}),
       // Non-inbox: an emptied field is an explicit null (not recorded); inbox: omitted = not recorded.
       ...(installedOn !== '' ? { installedOn } : placement ? {} : { installedOn: null }),
       ...(resolution ? { occupant: resolution } : {}),
@@ -180,7 +152,8 @@ export function AssignDialog({
     }
     if (occupantId) {
       // Without a driveId (a record not created yet) the server defaults replaced-by to the incoming drive (R62).
-      setRetireValues((v) => ({ ...v, replacedByDriveId: driveId }));
+      setOutcome((o) => ({ ...o, retire: { ...o.retire, replacedByDriveId: driveId } }));
+      setError(null);
       setStep('occupant');
       return;
     }
@@ -188,149 +161,60 @@ export function AssignDialog({
   };
 
   const submitResolution = () => {
-    const note = (s: string) => (s.trim() === '' ? null : s.trim());
-    if (choice === 'spare') return submit({ action: 'spare' });
-    if (choice === 'rma') return submit({ action: 'rma', date: rmaDate, note: note(rmaNote) });
-    const problem = retireValuesError(retireValues);
-    if (problem) {
-      setError(problem);
+    const r = outcomeToResolution(outcome);
+    if (r.error !== undefined) {
+      setError(r.error);
       return;
     }
-    submit({
-      action: 'retire',
-      reason: retireValues.reason!,
-      date: retireValues.date,
-      note: note(retireValues.note),
-      replacedByDriveId: retireValues.replacedByDriveId,
-    });
+    submit(r.resolution);
   };
-
-  const slotData = slots.map((g) => ({
-    group: g.group,
-    items: g.slots.map((s) => {
-      const occ = s.driveId ? driveById.get(s.driveId) : null;
-      return {
-        value: s.id,
-        label: s.driveId
-          ? `${slotLabel(s)} (occupied${occ ? ` by ${occ.serial}` : ''})`
-          : slotLabel(s),
-      };
-    }),
-  }));
 
   const title =
     step === 'occupant' ? `${targetSlot?.label ?? 'Slot'} is occupied` : 'Assign to a slot';
+  const pending = placement ? placement.pending : assign.isPending;
 
   return (
-    <Modal opened onClose={onClose} title={title} centered>
+    <Modal opened onClose={onClose} title={title} centered size="lg">
       {step === 'form' ? (
         <>
           {placement ? (
             <Text>{placement.summary}</Text>
           ) : fixedDrive === null ? (
-            <Select
-              label="Drive"
-              description="Spares only"
-              placeholder="Choose a spare"
-              required
-              searchable
-              data={(spares.data ?? []).map((d) => ({ value: d.id, label: driveLabel(d) }))}
-              value={driveId}
-              onChange={setDriveId}
-              nothingFoundMessage="No spares"
-            />
+            <>
+              <Text fw={500} size="sm" mb={6}>
+                Which spare goes in?
+              </Text>
+              <SparePicker
+                spares={spares.data ?? []}
+                value={driveId}
+                onChange={setDriveId}
+                loading={spares.isPending}
+              />
+            </>
           ) : (
             <Text>
               Assign <strong className="mono">{incoming?.serial ?? '…'}</strong>
               {incoming ? ` (${driveLabel(incoming).split(' · ').slice(1).join(' · ')})` : ''}
             </Text>
           )}
-          {fixedSlot === null ? (
-            <Select
-              label="Slot"
-              placeholder="Choose a slot"
-              required
-              mt="sm"
-              data={slotData}
-              value={slotId}
-              onChange={(v) => {
-                setSlotId(v);
-                setPoolPick(undefined);
-                setRolePick(undefined);
-              }}
-            />
-          ) : (
-            <Text mt="xs">
-              Into{' '}
-              <strong>{targetSlot ? `${targetSlot.gridName}, ${targetSlot.label}` : '…'}</strong>
-            </Text>
-          )}
-          {slotId ? (
-            <>
-              <Select
-                label="Pool"
-                description={
-                  defaults.data?.previousDriveId
-                    ? 'Prefilled from the slot’s previous drive'
-                    : undefined
-                }
-                mt="sm"
-                data={[
-                  { value: NO_POOL, label: 'No pool' },
-                  ...(pools.data ?? []).map((p) => ({
-                    value: p.id,
-                    label: p.layoutLabel ? `${p.name} · ${p.layoutLabel}` : p.name,
-                  })),
-                ]}
-                value={poolValue ?? NO_POOL}
-                onChange={(v) => setPoolPick(v ?? NO_POOL)}
-                allowDeselect={false}
-                disabled={defaults.isPending}
-              />
-              {poolValue !== null ? (
-                <Select
-                  label="Role"
-                  mt="sm"
-                  data={[
-                    { value: 'data', label: 'Data' },
-                    { value: 'hot-spare', label: 'Hot spare' },
-                  ]}
-                  value={roleValue}
-                  onChange={(v) => setRolePick((v as MembershipRole | null) ?? undefined)}
-                  allowDeselect={false}
-                />
-              ) : null}
-            </>
-          ) : null}
-          <TextInput
+          <Text fw={500} size="sm" mt="md" mb={6}>
+            Which slot? Tap a bay.
+          </Text>
+          <SlotPicker
+            value={slotId}
+            label="Slot"
+            onChange={(id) => {
+              setSlotId(id);
+              setApiOccupantId(null);
+              poolRole.reset();
+            }}
+          />
+          {slotId ? <PoolRoleFields state={poolRole} /> : null}
+          <OptionalDateField
             label="Installed on (optional)"
-            description="Leave empty if you don’t know — it’s better to show ‘not recorded’ than a guess."
-            type="date"
-            mt="sm"
-            max={todayLocal()}
+            description={NOT_RECORDED_HINT}
             value={installedOn}
-            onChange={(e) => setInstalledOn(e.currentTarget.value)}
-            rightSectionWidth={150}
-            rightSection={
-              <Group gap={4} wrap="nowrap">
-                <Button
-                  size="compact-xs"
-                  variant="subtle"
-                  onClick={() => setInstalledOn(todayLocal())}
-                >
-                  Today
-                </Button>
-                <Button
-                  size="compact-xs"
-                  variant="subtle"
-                  color="gray"
-                  disabled={installedOn === ''}
-                  onClick={() => setInstalledOn('')}
-                >
-                  Clear
-                </Button>
-              </Group>
-            }
+            onChange={setInstalledOn}
           />
           {occupantId && slotId ? (
             <Alert color="yellow" mt="sm">
@@ -349,9 +233,9 @@ export function AssignDialog({
             </Button>
             <Button
               onClick={onAssignClick}
-              loading={placement ? placement.pending : assign.isPending}
+              loading={pending}
               disabled={
-                !slotId || (!driveId && !placement) || (slotId !== null && defaults.isPending)
+                !slotId || (!driveId && !placement) || (slotId !== null && poolRole.pending)
               }
             >
               {occupantId ? 'Next' : 'Assign'}
@@ -370,38 +254,14 @@ export function AssignDialog({
             </strong>{' '}
             goes in?
           </Text>
-          <Radio.Group value={choice} onChange={(v) => setChoice(v as Choice)} mt="sm">
-            <Radio value="spare" label="Back to spares" mb="xs" />
-            <Radio value="retire" label="Retire it (replaced)" mb="xs" />
-            <Radio value="rma" label="Send for RMA" mb="xs" />
-          </Radio.Group>
-          {choice === 'retire' && occupant ? (
-            <RetireFields
+          {occupant ? (
+            <OutcomeFields
+              state={outcome}
+              onChange={setOutcome}
+              outgoing={occupant}
+              drives={allDrives.data ?? []}
               idPrefix="occ-retire"
-              drive={occupant}
-              candidates={(allDrives.data ?? []).filter((d) => d.id !== occupant.id)}
-              values={retireValues}
-              onChange={setRetireValues}
             />
-          ) : null}
-          {choice === 'rma' ? (
-            <>
-              <TextInput
-                label="Date"
-                type="date"
-                value={rmaDate}
-                onChange={(e) => setRmaDate(e.currentTarget.value)}
-                mt="sm"
-              />
-              <Textarea
-                label="Note"
-                autosize
-                minRows={2}
-                value={rmaNote}
-                onChange={(e) => setRmaNote(e.currentTarget.value)}
-                mt="sm"
-              />
-            </>
           ) : null}
           {error ? (
             <Alert color="red" mt="sm">
@@ -409,17 +269,23 @@ export function AssignDialog({
             </Alert>
           ) : null}
           <div className="dialog-actions">
-            <Button variant="default" onClick={() => setStep('form')}>
+            <Button
+              variant="default"
+              onClick={() => {
+                setError(null);
+                setStep('form');
+              }}
+            >
               Back
             </Button>
             <Button
-              color={choice === 'spare' ? 'indigo' : 'red'}
-              loading={placement ? placement.pending : assign.isPending}
+              color={outcome.choice === 'spare' ? 'indigo' : 'red'}
+              loading={pending}
               onClick={submitResolution}
             >
-              {choice === 'spare'
+              {outcome.choice === 'spare'
                 ? 'Move to spares and assign'
-                : choice === 'retire'
+                : outcome.choice === 'retire'
                   ? 'Retire it and assign'
                   : 'Send for RMA and assign'}
             </Button>

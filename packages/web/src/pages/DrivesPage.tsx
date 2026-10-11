@@ -11,6 +11,7 @@ import {
 } from '@mantine/core';
 import { Drawer } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
+import { useSearchParams } from 'react-router';
 import type { Drive, DriveStatus } from '@sparrow/shared';
 import { useDrives, useLayout } from '../api/hooks';
 import { DriveDetail } from '../components/DriveDetail';
@@ -48,7 +49,23 @@ export function DrivesPage() {
   const phone = useMediaQuery('(max-width: 48em)') ?? false;
   const drives = useDrives();
   const layout = useLayout();
-  const [filter, setFilter] = useState<Filter>('all');
+  // The status filter lives in the URL (/drives?status=retired) so it can be linked to.
+  const [params, setParams] = useSearchParams();
+  const statusParam = params.get('status');
+  const filter: Filter =
+    statusParam === 'spare' || statusParam === 'installed' || statusParam === 'retired'
+      ? statusParam
+      : 'all';
+  const setFilter = (f: Filter) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (f === 'all') next.delete('status');
+        else next.set('status', f);
+        return next;
+      },
+      { replace: true },
+    );
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../src/App';
-import { makeDrive, makeSlot, renderApp } from './utils';
+import { makeDrive, makeSlot, pickSlot, renderApp } from './utils';
 
 const T = '2026-01-01T00:00:00.000Z';
 const recent = new Date(Date.now() - 2 * 60_000).toISOString();
@@ -217,7 +217,7 @@ describe('Assignment (R8, R35, R37, R62)', () => {
     renderApp(<App />);
     await userEvent.click(await screen.findByRole('button', { name: 'Assign SPARE9' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
-    await pick(/^Slot/, /Bay 2/);
+    await pickSlot(within(dlg), /Bay 2, empty/);
     await waitFor(() => expect(field(within(dlg), 'Pool')).toHaveValue('tank · raidz2'));
     expect(field(within(dlg), 'Role')).toHaveValue('Hot spare');
     await userEvent.click(within(dlg).getByRole('button', { name: 'Assign' }));
@@ -244,7 +244,7 @@ describe('Assignment (R8, R35, R37, R62)', () => {
         'Leave empty if you don’t know — it’s better to show ‘not recorded’ than a guess.',
       ),
     ).toBeInTheDocument();
-    await pick(/^Slot/, /Bay 2/);
+    await pickSlot(within(dlg), /Bay 2, empty/);
     fireEvent.change(date, { target: { value: '2023-05-06' } });
     await userEvent.click(within(dlg).getByRole('button', { name: 'Assign' }));
     await waitFor(() => expect(posts(calls, '/api/slots/s1/assign')).toHaveLength(1));
@@ -259,7 +259,7 @@ describe('Assignment (R8, R35, R37, R62)', () => {
     renderApp(<App />);
     await userEvent.click(await screen.findByRole('button', { name: 'Assign SPARE9' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
-    await pick(/^Slot/, /Bay 2/);
+    await pickSlot(within(dlg), /Bay 2, empty/);
     const date = within(dlg).getByLabelText('Installed on (optional)');
     await userEvent.click(within(dlg).getByRole('button', { name: 'Clear' }));
     expect(date).toHaveValue('');
@@ -279,7 +279,7 @@ describe('Assignment (R8, R35, R37, R62)', () => {
     renderApp(<App />);
     await userEvent.click(await screen.findByRole('button', { name: 'Assign SPARE9' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
-    await pick(/^Slot/, /Bay 2/);
+    await pickSlot(within(dlg), /Bay 2, empty/);
     fireEvent.change(within(dlg).getByLabelText('Installed on (optional)'), {
       target: { value: '2999-01-01' },
     });
@@ -293,8 +293,9 @@ describe('Assignment (R8, R35, R37, R62)', () => {
     renderApp(<App />);
     await userEvent.click(await screen.findByRole('button', { name: 'Assign SPARE9' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
-    await userEvent.click(field(within(dlg), /^Slot/));
-    const option = await screen.findByRole('option', { name: /Bay 2/, hidden: true });
+    await pickSlot(within(dlg), /Bay 2, empty/);
+    await userEvent.click(field(within(dlg), 'Pool'));
+    const option = await screen.findByRole('option', { name: /tank/, hidden: true });
     // Layout is not testable in jsdom; the structural guarantee is that the list lives in a
     // portal on document.body, not inside the (scrolling, clipping) modal content.
     expect(dlg.contains(option)).toBe(false);
@@ -319,7 +320,7 @@ describe('Assignment (R8, R35, R37, R62)', () => {
     renderApp(<App />);
     await userEvent.click(await screen.findByRole('button', { name: 'Assign SPARE9' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
-    await pick(/^Slot/, /Bay 1 \(occupied by AAA0\)/);
+    await pickSlot(within(dlg), /Bay 1, occupied by AAA0/);
     await waitFor(() => expect(field(within(dlg), 'Pool')).toHaveValue('tank · raidz2'));
     await userEvent.click(within(dlg).getByRole('button', { name: 'Next' }));
     const occ = await screen.findByRole('dialog', { name: 'Bay 1 is occupied' });
@@ -352,7 +353,7 @@ describe('Assignment (R8, R35, R37, R62)', () => {
     renderApp(<App />);
     await userEvent.click(await screen.findByRole('button', { name: 'Assign SPARE9' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
-    await pick(/^Slot/, /Bay 1/);
+    await pickSlot(within(dlg), /Bay 1, occupied/);
     await waitFor(() => expect(field(within(dlg), 'Pool')).toHaveValue('tank · raidz2'));
     await userEvent.click(within(dlg).getByRole('button', { name: 'Next' }));
     const occ = await screen.findByRole('dialog', { name: 'Bay 1 is occupied' });
@@ -386,7 +387,7 @@ describe('Assignment (R8, R35, R37, R62)', () => {
     renderApp(<App />);
     await userEvent.click(await screen.findByRole('button', { name: 'Assign SPARE9' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
-    await pick(/^Slot/, /Bay 2/);
+    await pickSlot(within(dlg), /Bay 2, empty/);
     await waitFor(() => expect(field(within(dlg), 'Pool')).toHaveValue('tank · raidz2'));
     await userEvent.click(within(dlg).getByRole('button', { name: 'Assign' }));
     const occ = await screen.findByRole('dialog', { name: 'Bay 2 is occupied' });

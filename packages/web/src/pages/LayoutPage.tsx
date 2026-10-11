@@ -244,7 +244,10 @@ export function LayoutPage() {
         <AssignDialog slotId={assignSlotId} onClose={() => setAssignSlotId(null)} />
       ) : null}
 
-      <SparesShelf spares={spares.data ?? []} />
+      <SparesShelf
+        spares={spares.data ?? []}
+        retiredCount={(drives.data ?? []).filter((d) => d.status === 'retired').length}
+      />
 
       <SlotDetail
         view={selected}

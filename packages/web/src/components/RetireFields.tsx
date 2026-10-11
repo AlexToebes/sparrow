@@ -131,3 +131,12 @@ export function retireValuesError(v: RetireValues): string | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v.date)) return 'Enter a valid date.';
   return null;
 }
+
+/** R69: a removal date is optional (empty = not recorded); if given it must be a real date, not later than today (local). */
+export function removedOnError(value: string): string | null {
+  if (value === '') return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value))) {
+    return 'Enter the date the drive was taken out.';
+  }
+  return value > todayLocal() ? 'The removal date cannot be in the future.' : null;
+}

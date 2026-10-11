@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
-import { render } from '@testing-library/react';
+import { render, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
@@ -76,4 +77,9 @@ export function mockApi(routes: Record<string, unknown>) {
     );
   };
   globalThis.fetch = fn as typeof fetch;
+}
+
+/** R70: choose a slot on the visual picker by its radio name, e.g. /Front bays, Bay 2, empty/. */
+export async function pickSlot(root: ReturnType<typeof within>, name: string | RegExp) {
+  await userEvent.click(await root.findByRole('radio', { name }));
 }

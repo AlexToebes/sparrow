@@ -102,3 +102,9 @@ export const FlipIcon = (p: IconProps) => (
     <path d="M4 9h13l-3-3M20 15H7l3 3" />
   </Svg>
 );
+
+export const CheckIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m5 12.5 4.5 4.5L19 7.5" />
+  </Svg>
+);
