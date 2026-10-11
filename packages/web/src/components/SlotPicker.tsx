@@ -185,7 +185,9 @@ export function SlotPicker({
                       {view.drive ? (
                         <>
                           <span className="pick-serial">{view.drive.serial}</span>
-                          {view.drive.capacityBytes != null ? (
+                          {isCurrent ? (
+                            <span className="pick-current">Current</span>
+                          ) : view.drive.capacityBytes != null ? (
                             <span className="pick-cap">
                               {formatBytes(view.drive.capacityBytes)}
                             </span>
@@ -195,7 +197,6 @@ export function SlotPicker({
                         <span className="pick-empty">Empty</span>
                       )}
                     </span>
-                    {isCurrent ? <span className="pick-current">Current</span> : null}
                     {selected ? (
                       <span className="pick-check">
                         <CheckIcon size={12} />

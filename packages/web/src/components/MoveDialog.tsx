@@ -444,7 +444,7 @@ export function MoveDialog({
 
       {current === 'occupant' ? (
         <>
-          <Text>
+          <Text mb="xs">
             <strong className="mono">{occupant?.serial ?? 'Another drive'}</strong>
             {occupant ? ` (${capacityOf(occupant)})` : ''} is in {target?.label ?? 'that bay'}. What
             should happen to it before <strong className="mono">{drive.serial}</strong> moves in?
@@ -586,7 +586,13 @@ export function MoveDialog({
             ) : (
               <>{here} is left empty.</>
             )}{' '}
-            {date === '' ? 'No date is recorded.' : `Date: ${date}.`}
+            {date === '' ? (
+              'No date is recorded.'
+            ) : (
+              <>
+                Date: <span style={{ whiteSpace: 'nowrap' }}>{date}</span>.
+              </>
+            )}
           </Text>
           {errorAlert}
         </>

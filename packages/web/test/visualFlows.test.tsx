@@ -311,7 +311,7 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     expect((date as HTMLInputElement).value).toMatch(DATE);
     fireEvent.change(date, { target: { value: '2026-09-30' } });
     await nextStep(dlg);
-    expect(within(dlg).getByText(/Date: 2026-09-30\./)).toBeInTheDocument();
+    expect(dlg.querySelector('.step-content')).toHaveTextContent(/Date: 2026-09-30\./);
     await confirmMove(dlg);
     await waitFor(() => expect(moves(calls)).toHaveLength(1));
     expect(moves(calls)[0]!.body).toEqual({ destination: { kind: 'spares' }, date: '2026-09-30' });

@@ -917,9 +917,7 @@ body {
   background: var(--sp-card);
 }
 .pick-current {
-  position: absolute;
-  right: 6px;
-  bottom: 4px;
+  align-self: flex-start;
   padding: 0 6px;
   border-radius: 999px;
   border: 1px solid var(--sp-line);
