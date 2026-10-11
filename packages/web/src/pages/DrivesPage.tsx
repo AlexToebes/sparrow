@@ -128,7 +128,7 @@ export function DrivesPage() {
           {/* R71: the inbox lives here; loud when something waits, quiet otherwise. */}
           <Button
             component={Link}
-            to="/drives/inbox"
+            to="/drives/discovered"
             variant={inboxCount > 0 ? 'filled' : 'default'}
             leftSection={<InboxIcon size={16} />}
             rightSection={
@@ -138,14 +138,14 @@ export function DrivesPage() {
                   circle
                   variant="white"
                   color="indigo"
-                  aria-label={`${inboxCount} in inbox`}
+                  aria-label={`${inboxCount} discovered`}
                 >
                   {inboxCount}
                 </Badge>
               ) : null
             }
           >
-            Inbox
+            Discovered
           </Button>
           <Button
             variant={inboxCount > 0 ? 'default' : 'filled'}
@@ -189,7 +189,7 @@ export function DrivesPage() {
       {drives.isSuccess && shown.length === 0 ? (
         <Text c="dimmed">
           {all.length === 0
-            ? 'No drives yet. Add one, or resolve the Inbox once a provider reports drives.'
+            ? 'No drives yet. Add one, or resolve the discovered drives once a provider reports drives.'
             : 'No drives match.'}
         </Text>
       ) : null}

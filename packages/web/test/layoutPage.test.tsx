@@ -126,7 +126,7 @@ describe('Layout page (R4, R15, R18, R47)', () => {
     const chips = screen.getByLabelText('Problems and counts');
     expect(within(chips).getByText('Bay 2 failed')).toBeInTheDocument();
     expect(within(chips).getByText('Bay 3 missing')).toBeInTheDocument();
-    expect(within(chips).getByText('2 in Inbox')).toBeInTheDocument();
+    expect(within(chips).getByText('2 discovered')).toBeInTheDocument();
     expect(within(chips).getByText(/spare on hand/)).toBeInTheDocument();
     expect(screen.getByText('2 × 2 · 3 of 4 occupied')).toBeInTheDocument();
     expect(
@@ -137,18 +137,19 @@ describe('Layout page (R4, R15, R18, R47)', () => {
     expect(screen.getAllByTestId('bay-cell')).toHaveLength(4);
   });
 
-  it('R71: the navigation has three tabs and no Inbox; the chip links to /drives/inbox', async () => {
+  it('R71: the navigation has three tabs and no Discovered tab; the chip links to /drives/discovered', async () => {
     fixtures();
     renderApp(<App />);
-    const chip = await screen.findByRole('link', { name: /2 in Inbox/ });
-    expect(chip).toHaveAttribute('href', '/drives/inbox');
+    const chip = await screen.findByRole('link', { name: /2 discovered/ });
+    expect(chip).toHaveAttribute('href', '/drives/discovered');
+    expect(screen.getByText('2 newly discovered drives are waiting.')).toBeInTheDocument();
     const nav = screen.getAllByRole('navigation', { name: 'Main' })[0]!;
     expect(
       within(nav)
         .getAllByRole('link')
         .map((l) => l.textContent),
     ).toEqual(['Layout', 'Drives', 'Settings']);
-    expect(screen.queryByLabelText('2 in inbox')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('2 discovered')).not.toBeInTheDocument();
   });
 
   it('clicking a problem chip opens the detail panel with the drive and its life story', async () => {

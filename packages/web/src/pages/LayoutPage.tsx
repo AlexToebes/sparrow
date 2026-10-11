@@ -131,7 +131,7 @@ export function LayoutPage() {
       <h2 className="summary">{summarySentence(problems.length, hasHealthData)}</h2>
       {inboxCount > 0 ? (
         <Text c="dimmed" className="summary-sub">
-          {inboxCount} new {inboxCount === 1 ? 'drive is' : 'drives are'} waiting in Inbox.
+          {inboxCount} newly discovered {inboxCount === 1 ? 'drive is' : 'drives are'} waiting.
         </Text>
       ) : null}
       <div className="chips" aria-label="Problems and counts">
@@ -153,9 +153,9 @@ export function LayoutPage() {
           </button>
         ))}
         {inboxCount > 0 ? (
-          <Link to="/drives/inbox" className="chip chip-button" data-kind="info">
+          <Link to="/drives/discovered" className="chip chip-button" data-kind="info">
             <InboxIcon size={14} />
-            {inboxCount} in Inbox
+            {inboxCount} discovered
           </Link>
         ) : null}
         <span className="chip" data-kind="info">

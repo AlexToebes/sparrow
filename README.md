@@ -61,7 +61,7 @@ Notes:
 ## First run
 
 1. Create your enclosure and grids in the UI (name, rows, columns, slot labels).
-2. Open the **New drives discovered** inbox (the Inbox button on the Drives page). Every drive the provider reports appears there. Link each one to an existing spare, or create a new record, and assign it to a slot (with its pool and role).
+2. Open **Discovered** (the Discovered button on the Drives page). Every drive the provider reports appears there. Link each one to an existing spare, or create a new record, and assign it to a slot (with its pool and role).
 3. Optional: use **Import retired drives** to create "retired" records from drives the provider has decommissioned (for example archived in Scrutiny). Pick a reason for each: failed, replaced or other.
 
 ## Configuration

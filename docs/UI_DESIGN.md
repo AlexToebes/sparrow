@@ -8,13 +8,13 @@ material, not code to copy: build with Mantine components, the shared zod types 
 - Mantine look: soft cards, generous spacing, one accent color (indigo), system font stack.
 - Light and dark follow `prefers-color-scheme` (Mantine `defaultColorScheme="auto"`).
 - App shell: sidebar on desktop (Layout, Drives, Settings, plus provider status and
-  "last updated" at the bottom); bottom tab bar on phone (<= 768px) with the same three tabs. The Inbox is not a
-  tab (R71): the Drives page header has an "Inbox" button beside "Add drive", filled with a count badge when
-  something waits, plain when empty. The inbox page is `/drives/inbox` with a "Drives" back link and keeps the
+  "last updated" at the bottom); bottom tab bar on phone (<= 768px) with the same three tabs. The Discovered page (formerly
+  Inbox, R71) is not a tab: the Drives page header has a "Discovered" button beside "Add drive", filled with a count badge when
+  something waits, plain when empty. The page is `/drives/discovered` (`/drives/inbox` and `/inbox` redirect) with a "Drives" back link and keeps the
   Drives tab highlighted.
 - Suggested updates (R72): drive detail has a "reports details this record doesn't have" block (ticked rows,
   "Apply selected") and a collapsed "reports different values" toggle; Drives rows with fillable details show an
-  "Updates" flag (icon plus text); the inbox page lists them in a "Suggested updates" card.
+  "Updates" flag (icon plus text); the Discovered page lists them in a "Suggested updates" card.
 - Layout page opens with a one-line summary sentence ("Four things need a look" / "Everything is healthy"),
   then the grids as cards (one `BayGrid` per grid; title, "4 x 2 · 7 of 8 occupied").
 - Slot tile: label top-left, health icon top-right, health word, capacity (decimal, "8 TB"), serial (monospace).
@@ -27,7 +27,7 @@ material, not code to copy: build with Mantine components, the shared zod types 
 
 ## From E (`e-lifecycle`)
 - **Problem chips** under the summary sentence: one chip per issue ("Bay 6 failed", "Bay 4 warning",
-  "Bay 8 missing", "Boot stale 3 d", "2 in Inbox"); clicking a chip selects that slot / opens the inbox.
+  "Bay 8 missing", "Boot stale 3 d", "2 discovered"); clicking a chip selects that slot / opens the Discovered page.
   Also a "N spares on hand" chip.
 - **Life story** in the drive detail panel: a vertical timeline built from the drive's events (newest last
   or first — pick one and be consistent; E used oldest first with relative gaps like "after 1 mo"), with an

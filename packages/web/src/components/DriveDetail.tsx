@@ -203,8 +203,6 @@ export function DriveDetail({ drive, view = null, where = null }: DriveDetailPro
         <Row label="Last tested" value={drive.lastTestDate} />
         <Row label="Notes" value={drive.notes} />
       </dl>
-      <SuggestedUpdates drive={drive} />
-
       {view ? (
         <div className="health-box" data-state={view.state}>
           <strong>
@@ -225,6 +223,8 @@ export function DriveDetail({ drive, view = null, where = null }: DriveDetailPro
           ) : null}
         </div>
       ) : null}
+      <SuggestedUpdates drive={drive} />
+
       {drive.status === 'installed' ? <MembershipSection drive={drive} /> : null}
       <LifeStory driveId={drive.id} />
 

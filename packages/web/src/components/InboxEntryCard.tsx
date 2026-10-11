@@ -25,7 +25,7 @@ export function InboxEntryCard({ entry }: { entry: InboxEntry }) {
   const facts = [o.model, o.driveType, formatBytes(o.capacityBytes)].filter(Boolean).join(' · ');
 
   return (
-    <article className="card inbox-card" aria-label={`Inbox entry ${serial}`}>
+    <article className="card inbox-card" aria-label={`Discovered drive ${serial}`}>
       <div className="card-head">
         <h2 className="card-title mono">{serial}</h2>
         <Badge variant="light" color={stateColor(o.health)}>

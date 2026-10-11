@@ -41,38 +41,41 @@ const driveSetup = (extra: Parameters<typeof setupServer>[0] = {}) =>
     ...extra,
   });
 
-describe('Inbox button on the Drives page (R71)', () => {
-  it('R71: shows an Inbox button with the count next to Add drive; it opens /drives/inbox', async () => {
+describe('Discovered button on the Drives page (R71)', () => {
+  it('R71: shows a Discovered button with the count next to Add drive; it opens /drives/discovered', async () => {
     setupServer({ 'GET /api/inbox': inboxOf(3), 'GET /api/provider/status': provider });
     renderApp(<App />, '/drives');
-    const link = await screen.findByRole('link', { name: /Inbox/ });
-    expect(link).toHaveAttribute('href', '/drives/inbox');
-    expect(await within(link).findByLabelText('3 in inbox')).toHaveTextContent('3');
+    const link = await screen.findByRole('link', { name: /Discovered/ });
+    expect(link).toHaveAttribute('href', '/drives/discovered');
+    expect(await within(link).findByLabelText('3 discovered')).toHaveTextContent('3');
     expect(screen.getByRole('button', { name: 'Add drive' })).toBeInTheDocument();
 
     await userEvent.click(link);
-    expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Discovered drives' })).toBeInTheDocument();
     expect(document.querySelector('a.back-link')).toHaveAttribute('href', '/drives');
-    // The Drives nav item stays highlighted on the inbox page
+    // The Drives nav item stays highlighted on the Discovered page
     const nav = screen.getAllByRole('navigation', { name: 'Main' })[0]!;
     expect(within(nav).getByRole('link', { name: 'Drives' })).toHaveClass('active');
   });
 
-  it('R71: the button is quiet (no badge) when the inbox is empty', async () => {
+  it('R71: the button is quiet (no badge) when nothing is discovered', async () => {
     setupServer({ 'GET /api/provider/status': provider });
     renderApp(<App />, '/drives');
-    const link = await screen.findByRole('link', { name: /Inbox/ });
-    expect(within(link).queryByLabelText(/in inbox/)).not.toBeInTheDocument();
+    const link = await screen.findByRole('link', { name: /Discovered/ });
+    expect(within(link).queryByLabelText(/discovered/)).not.toBeInTheDocument();
   });
 
-  it('R71: the old /inbox address redirects to /drives/inbox and the back link returns to Drives', async () => {
-    setupServer({ 'GET /api/provider/status': provider });
-    renderApp(<App />, '/inbox');
-    expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
-    const back = document.querySelector('a.back-link')!;
-    await userEvent.click(back);
-    expect(await screen.findByRole('button', { name: 'Add drive' })).toBeInTheDocument();
-  });
+  it.each(['/inbox', '/drives/inbox'])(
+    'R71: the old %s address redirects to /drives/discovered and the back link returns to Drives',
+    async (old) => {
+      setupServer({ 'GET /api/provider/status': provider });
+      renderApp(<App />, old);
+      expect(await screen.findByRole('heading', { name: 'Discovered drives' })).toBeInTheDocument();
+      const back = document.querySelector('a.back-link')!;
+      await userEvent.click(back);
+      expect(await screen.findByRole('button', { name: 'Add drive' })).toBeInTheDocument();
+    },
+  );
 });
 
 describe('Suggested updates (R72)', () => {
@@ -94,9 +97,9 @@ describe('Suggested updates (R72)', () => {
     expect(screen.queryByText('Updates')).not.toBeInTheDocument();
   });
 
-  it('R72: the Inbox lists drives with fill suggestions, naming the fields, linking to the drive', async () => {
+  it('R72: the Discovered page lists drives with fill suggestions, naming the fields, linking to the drive', async () => {
     driveSetup();
-    renderApp(<App />, '/drives/inbox');
+    renderApp(<App />, '/drives/discovered');
     const section = await screen.findByRole('region', { name: 'Suggested updates' });
     expect(within(section).getByText(/can add model, capacity/)).toBeInTheDocument();
     const link = within(section).getByRole('link', { name: 'AAA0' });
@@ -105,10 +108,10 @@ describe('Suggested updates (R72)', () => {
     expect(await screen.findByRole('region', { name: 'Suggested updates' })).toBeInTheDocument();
   });
 
-  it('R72: no Suggested updates section on the Inbox when nothing can be filled', async () => {
+  it('R72: no Suggested updates section on the Discovered page when nothing can be filled', async () => {
     setupServer({ 'GET /api/provider/status': provider });
-    renderApp(<App />, '/drives/inbox');
-    await screen.findByRole('heading', { name: 'Inbox' });
+    renderApp(<App />, '/drives/discovered');
+    await screen.findByRole('heading', { name: 'Discovered drives' });
     expect(screen.queryByRole('region', { name: 'Suggested updates' })).not.toBeInTheDocument();
   });
 
