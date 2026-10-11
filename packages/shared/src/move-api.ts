@@ -8,6 +8,16 @@ import { occupantResolutionSchema } from './assignment-api.js';
 
 const note = z.string().trim().min(1).max(5000).nullish();
 
+/**
+ * What happens to the drive in the target bay: any plain occupant resolution (R37), or `swap` (R73),
+ * which puts that drive into the bay the moving drive leaves. Only Move accepts `swap`.
+ */
+export const moveOccupantSchema = z.discriminatedUnion('action', [
+  ...occupantResolutionSchema.options,
+  z.strictObject({ action: z.literal('swap') }),
+]);
+export type MoveOccupant = z.infer<typeof moveOccupantSchema>;
+
 /** Where the moving drive goes. `retire` takes a reason (R60), no default. */
 export const moveDestinationSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('spares') }),
@@ -15,7 +25,7 @@ export const moveDestinationSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('slot'),
     slotId: idSchema,
-    occupant: occupantResolutionSchema.optional(),
+    occupant: moveOccupantSchema.optional(),
   }),
   z.strictObject({ kind: z.literal('retire'), reason: retirementReasonSchema, note }),
   z.strictObject({ kind: z.literal('rma'), note }),

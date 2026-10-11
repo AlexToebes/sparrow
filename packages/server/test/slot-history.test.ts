@@ -107,6 +107,34 @@ describe('slot history (R74)', () => {
     });
   });
 
+  it('R73, R74: a swap shows in both bays as a move out and the other drive in; layout events do not disturb it', () => {
+    const { layout, grid, slots } = setup();
+    const [a, b] = [spare('A'), spare('B')] as const;
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]!, installedOn: '2022-01-01' });
+    assignDrive(db(), { driveId: b.id, slotId: slots[1]!, installedOn: '2022-02-02' });
+    layout.updateGrid(grid.id, { name: 'Drawer' }); // writes a driveId-less grid-updated event
+    moveDrive(db(), a.id, {
+      destination: { kind: 'slot', slotId: slots[1]!, occupant: { action: 'swap' } },
+      date: '2024-06-06',
+    });
+    const first = getSlotHistory(db(), slots[0]!).entries;
+    expect(first).toHaveLength(2);
+    expect(first[0]).toMatchObject({ serial: 'B', installedOn: '2024-06-06', outcome: null });
+    expect(first[1]).toMatchObject({
+      serial: 'A',
+      removedOn: '2024-06-06',
+      outcome: { kind: 'moved', toSlotId: slots[1] },
+    });
+    const second = getSlotHistory(db(), slots[1]!).entries;
+    expect(second).toHaveLength(2);
+    expect(second[0]).toMatchObject({ serial: 'A', installedOn: '2024-06-06', outcome: null });
+    expect(second[1]).toMatchObject({
+      serial: 'B',
+      removedOn: '2024-06-06',
+      outcome: { kind: 'moved', toSlotId: slots[0] },
+    });
+  });
+
   it('R39, R74: renaming the bay and grid keeps the history; labels are the current names', () => {
     const { layout, grid, slots } = setup();
     const a = spare('A');

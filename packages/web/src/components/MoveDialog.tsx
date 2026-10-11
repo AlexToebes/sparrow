@@ -20,7 +20,7 @@ import { StepFlow, type StepDef } from './StepFlow';
 
 export type MoveDestinationChoice = 'spares' | 'slot' | 'retire' | 'rma';
 type Fill = 'empty' | 'spare';
-type OccupantChoice = 'spare' | 'retire' | 'rma';
+type OccupantChoice = 'swap' | 'spare' | 'retire' | 'rma';
 type Step = 'where' | 'bay' | 'occupant' | 'fill' | 'details' | 'confirm';
 
 const STEP_TITLE: Record<Step, string> = {
@@ -179,7 +179,10 @@ export function MoveDialog({
   const targetWhere = target ? `${target.gridName}, ${target.label}` : 'the bay';
   const occupantId = dest === 'slot' ? (target?.driveId ?? apiOccupantId) : null;
   const occupant = occupantId ? (driveById.get(occupantId) ?? null) : null;
-  const spare = fill === 'spare' ? (spares.data?.find((d) => d.id === spareId) ?? null) : null;
+  // R73: swapping puts the bay's drive into this drive's bay, so nothing else fills it.
+  const swapping = dest === 'slot' && occupantId !== null && occupantChoice === 'swap';
+  const spare =
+    fill === 'spare' && !swapping ? (spares.data?.find((d) => d.id === spareId) ?? null) : null;
   const here = where ?? 'its bay';
   const poolName = poolRole.poolValue
     ? (pools.data?.find((p) => p.id === poolRole.poolValue)?.name ?? 'a pool')
@@ -193,8 +196,8 @@ export function MoveDialog({
       'where',
       ...(dest === 'slot' ? ['bay' as const] : []),
       ...(dest === 'slot' && occupantId ? ['occupant' as const] : []),
-      'fill',
-      ...(fill === 'spare' ? ['details' as const] : []),
+      ...(swapping ? [] : ['fill' as const]),
+      ...(fill === 'spare' && !swapping ? ['details' as const] : []),
       'confirm',
     ] satisfies Step[]
   ).map((key) => ({ key, title: STEP_TITLE[key] }));
@@ -241,15 +244,17 @@ export function MoveDialog({
         ...(withOccupant && occupantId
           ? {
               occupant:
-                occupantChoice === 'spare'
-                  ? { action: 'spare' as const }
-                  : occupantChoice === 'rma'
-                    ? { action: 'rma' as const, note: trimmed(occupantNote) }
-                    : {
-                        action: 'retire' as const,
-                        reason: occupantReason!,
-                        note: trimmed(occupantNote),
-                      },
+                occupantChoice === 'swap'
+                  ? { action: 'swap' as const }
+                  : occupantChoice === 'spare'
+                    ? { action: 'spare' as const }
+                    : occupantChoice === 'rma'
+                      ? { action: 'rma' as const, note: trimmed(occupantNote) }
+                      : {
+                          action: 'retire' as const,
+                          reason: occupantReason!,
+                          note: trimmed(occupantNote),
+                        },
             }
           : {}),
       };
@@ -299,7 +304,9 @@ export function MoveDialog({
   };
 
   const destructive =
-    dest === 'retire' || dest === 'rma' || (occupantId !== null && occupantChoice !== 'spare');
+    dest === 'retire' ||
+    dest === 'rma' ||
+    (occupantId !== null && occupantChoice !== 'spare' && occupantChoice !== 'swap');
   const last = current === 'confirm';
   const footer = (
     <>
@@ -343,27 +350,32 @@ export function MoveDialog({
       : occupantChoice === 'rma'
         ? 'sent for RMA'
         : `retired (${occupantReason ? REASON_LABEL[occupantReason].toLowerCase() : '…'})`;
-  const what: ReactNode =
-    dest === 'slot' ? (
-      <>
-        {driveWord} moves from {here} to <strong>{targetWhere}</strong> and keeps its pool
-        membership.
-      </>
-    ) : dest === 'retire' ? (
-      <>
-        {driveWord} leaves {here} and is retired (
-        {reason ? REASON_LABEL[reason].toLowerCase() : '…'}
-        ); its pool membership ends.
-      </>
-    ) : dest === 'rma' ? (
-      <>
-        {driveWord} leaves {here} and is sent for RMA; its pool membership ends.
-      </>
-    ) : (
-      <>
-        {driveWord} leaves {here} and goes back to the spares shelf; its pool membership ends.
-      </>
-    );
+  const what: ReactNode = swapping ? (
+    <>
+      <strong>
+        {here} ⇄ {targetWhere}
+      </strong>
+      : {driveWord} and <strong className="mono">{occupant?.serial ?? 'the other drive'}</strong>{' '}
+      {occupant ? `(${capacityOf(occupant)}) ` : ''}swap places. Both keep their pool membership.
+    </>
+  ) : dest === 'slot' ? (
+    <>
+      {driveWord} moves from {here} to <strong>{targetWhere}</strong> and keeps its pool membership.
+    </>
+  ) : dest === 'retire' ? (
+    <>
+      {driveWord} leaves {here} and is retired ({reason ? REASON_LABEL[reason].toLowerCase() : '…'}
+      ); its pool membership ends.
+    </>
+  ) : dest === 'rma' ? (
+    <>
+      {driveWord} leaves {here} and is sent for RMA; its pool membership ends.
+    </>
+  ) : (
+    <>
+      {driveWord} leaves {here} and goes back to the spares shelf; its pool membership ends.
+    </>
+  );
 
   return (
     <StepFlow
@@ -460,6 +472,11 @@ export function MoveDialog({
               setError(null);
             }}
             options={[
+              {
+                value: 'swap',
+                title: `Swap — put ${occupant?.serial ?? 'it'} into ${here}`,
+                description: 'Both drives keep their pool membership',
+              },
               { value: 'spare', title: 'Back to spares', description: 'Still works' },
               { value: 'retire', title: 'Retire', description: 'Broken or done' },
               { value: 'rma', title: 'Send for RMA' },
@@ -477,7 +494,7 @@ export function MoveDialog({
               allowDeselect={false}
             />
           ) : null}
-          {occupantChoice !== 'spare' ? (
+          {occupantChoice === 'retire' || occupantChoice === 'rma' ? (
             <>
               <Textarea
                 label="Note (optional)"
@@ -547,14 +564,14 @@ export function MoveDialog({
         <>
           <Text>
             {what}
-            {occupantId ? (
+            {occupantId && !swapping ? (
               <>
                 {' '}
                 <strong className="mono">{occupant?.serial ?? 'The drive in it'}</strong> is{' '}
                 {occupantWord} first.
               </>
             ) : null}{' '}
-            {spare ? (
+            {swapping ? null : spare ? (
               <>
                 <strong className="mono">{spare.serial}</strong> ({capacityOf(spare)}) goes into{' '}
                 {here}
