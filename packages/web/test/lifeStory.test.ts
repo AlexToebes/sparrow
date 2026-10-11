@@ -310,6 +310,19 @@ describe('life story of a move between bays (R73)', () => {
     ]);
   });
 
+  it('R73: a swap reads as one entry naming the other drive', () => {
+    const swapped = { swappedWithDriveId: 'x', swappedWithSerial: 'ZL123' };
+    const story = buildStory(
+      newestFirst(
+        created,
+        installed,
+        { ...removed, payload: { ...removed.payload, ...swapped } },
+        { ...arrived, payload: { ...arrived.payload, ...swapped } },
+      ),
+    );
+    expect(story.at(-1)!.title).toBe('Swapped from Bay 3 to Bay 7 (with ZL123)');
+  });
+
   it('R73: names the grid when the bays are in different grids; flags an unrecorded date', () => {
     const toOther = ev('drive-installed', '2026-10-11T09:00:00.000Z', {
       slotId: 's7',

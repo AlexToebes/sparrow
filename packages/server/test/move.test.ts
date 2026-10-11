@@ -447,3 +447,123 @@ describe('R73: POST /api/drives/:id/move', () => {
     expect((await post('nope', { destination: { kind: 'spares' } })).statusCode).toBe(404);
   });
 });
+
+describe('R73: swap two installed drives', () => {
+  const swapTo = (slotId: string) => ({
+    kind: 'slot' as const,
+    slotId,
+    occupant: { action: 'swap' as const },
+  });
+
+  it('R73: the drives trade bays, memberships untouched, four events, one date for both', () => {
+    const { a, b, s1, s2, pool } = setup();
+    const before = [log(a.id).length, log(b.id).length];
+    const memberRows = db().select().from(memberships).all();
+    const result = moveDrive(db(), a.id, { destination: swapTo(s2), date: daysAgo(4) });
+    expect(result.drive).toMatchObject({ id: a.id, slotId: s2, status: 'installed' });
+    expect(result.occupant).toMatchObject({ id: b.id, slotId: s1, status: 'installed' });
+    expect(getDrive(db(), a.id).installedOn).toBe(daysAgo(4));
+    expect(getDrive(db(), b.id).installedOn).toBe(daysAgo(4));
+    expect(db().select().from(memberships).all()).toEqual(memberRows);
+    expect(members(a.id)[0]).toMatchObject({ poolId: pool, role: 'data', endedAt: null });
+    expect(members(b.id)[0]).toMatchObject({ poolId: pool, role: 'hot-spare', endedAt: null });
+    expect(log(a.id)).toHaveLength(before[0]! + 2);
+    expect(log(b.id)).toHaveLength(before[1]! + 2);
+    expect(ofType(a.id, 'drive-removed')[0]!.payload).toMatchObject({
+      slotId: s1,
+      removedOn: daysAgo(4),
+      installedOn: daysAgo(60),
+      movedToSlotId: s2,
+      swappedWithDriveId: b.id,
+    });
+    expect(ofType(a.id, 'drive-installed')[0]!.payload).toMatchObject({
+      slotId: s2,
+      installedOn: daysAgo(4),
+      movedFromSlotId: s1,
+      swappedWithDriveId: b.id,
+    });
+    expect(ofType(b.id, 'drive-removed')[0]!.payload).toMatchObject({
+      slotId: s2,
+      movedToSlotId: s1,
+      swappedWithDriveId: a.id,
+    });
+    expect(ofType(b.id, 'drive-installed')[0]!.payload).toMatchObject({
+      slotId: s1,
+      movedFromSlotId: s2,
+      swappedWithDriveId: a.id,
+    });
+  });
+
+  it('R73: omitted date is today, null is not recorded', () => {
+    const { a, b, s2, s1 } = setup();
+    moveDrive(db(), a.id, { destination: swapTo(s2) });
+    expect(getDrive(db(), a.id).installedOn).toBe(TODAY());
+    expect(getDrive(db(), b.id).installedOn).toBe(TODAY());
+    moveDrive(db(), a.id, { destination: swapTo(s1), date: null });
+    expect(getDrive(db(), a.id)).toMatchObject({ slotId: s1, installedOn: null });
+    expect(getDrive(db(), b.id)).toMatchObject({ slotId: s2, installedOn: null });
+    expect(ofType(b.id, 'drive-removed')[0]!.payload).toMatchObject({ removedOn: null });
+  });
+
+  it('R73: a date before either drive was installed, or in the future, is rejected', () => {
+    const { a, b, s2 } = setup();
+    const n = eventCount();
+    const attempt = (date: string) => () =>
+      moveDrive(db(), a.id, { destination: swapTo(s2), date });
+    expect(thrown(attempt(daysAgo(90))).code).toBe('invalid');
+    expect(thrown(attempt(daysAgo(-2))).code).toBe('invalid');
+    expect(getDrive(db(), b.id).slotId).toBe(s2);
+    expect(eventCount()).toBe(n);
+  });
+
+  it('R73: a replacement, the same bay or an empty bay is rejected', () => {
+    const { a, s1, s2, s3 } = setup();
+    const c = spare('C');
+    const replaced = () =>
+      moveDrive(db(), a.id, { destination: swapTo(s2), replacement: { driveId: c.id } });
+    expect(thrown(replaced).code).toBe('invalid');
+    expect(thrown(() => moveDrive(db(), a.id, { destination: swapTo(s1) })).code).toBe('invalid');
+    expect(thrown(() => moveDrive(db(), a.id, { destination: swapTo(s3) })).code).toBe('invalid');
+  });
+
+  it('R73, R14: a swap that fails part way leaves nothing changed', () => {
+    const { a, b, s1, s2 } = setup();
+    const n = eventCount();
+    const memberRows = db().select().from(memberships).all();
+    opened.sqlite.exec(
+      `CREATE TRIGGER fail_b BEFORE INSERT ON events WHEN NEW.drive_id = '${b.id}' AND NEW.type = 'drive-installed' BEGIN SELECT RAISE(ABORT, 'boom'); END`,
+    );
+    expect(() => moveDrive(db(), a.id, { destination: swapTo(s2) })).toThrow();
+    expect(getDrive(db(), a.id)).toMatchObject({
+      status: 'installed',
+      slotId: s1,
+      installedOn: daysAgo(60),
+    });
+    expect(getDrive(db(), b.id)).toMatchObject({
+      status: 'installed',
+      slotId: s2,
+      installedOn: daysAgo(60),
+    });
+    expect(eventCount()).toBe(n);
+    expect(db().select().from(memberships).all()).toEqual(memberRows);
+  });
+
+  it('R73: POST swaps (200); a replacement or the swap action on assign is a 400', async () => {
+    const { a, b, s2 } = setup();
+    const c = spare('C');
+    const post = (url: string, payload: object) => app.inject({ method: 'POST', url, payload });
+    const bad = await post(`/api/drives/${a.id}/move`, {
+      destination: swapTo(s2),
+      replacement: { driveId: c.id },
+    });
+    expect(bad.statusCode).toBe(400);
+    const plain = await post(`/api/slots/${s2}/assign`, {
+      driveId: c.id,
+      occupant: { action: 'swap' },
+    });
+    expect(plain.statusCode).toBe(400);
+    const ok = await post(`/api/drives/${a.id}/move`, { destination: swapTo(s2) });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json()).toMatchObject({ drive: { id: a.id, slotId: s2 }, occupant: { id: b.id } });
+  });
+});

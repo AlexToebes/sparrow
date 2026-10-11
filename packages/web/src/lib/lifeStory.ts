@@ -246,6 +246,11 @@ export function buildStory(
     if (pair && isMovePair(o.event, pair.event)) {
       // One entry for the move; it takes the later (installed) event's date and flags.
       const unrecorded = isUnrecordedInstall(pair.event);
+      // R73: a swap names the other drive.
+      const swapWith =
+        str(pair.event.payload.swappedWithDriveId) === null
+          ? null
+          : (str(pair.event.payload.swappedWithSerial) ?? 'another drive');
       items.push({
         id: pair.event.id,
         at: pair.at,
@@ -255,11 +260,13 @@ export function buildStory(
         removalUnrecorded: false,
         retirementUnrecorded: false,
         kind: 'drive-installed',
-        title: `Moved from ${moveWhere(o.event.payload, pair.event.payload, 'from')} to ${moveWhere(
+        title: `${swapWith === null ? 'Moved' : 'Swapped'} from ${moveWhere(
           o.event.payload,
           pair.event.payload,
-          'to',
-        )}${unrecorded ? ' (date not recorded)' : ''}`,
+          'from',
+        )} to ${moveWhere(o.event.payload, pair.event.payload, 'to')}${
+          swapWith === null ? '' : ` (with ${swapWith})`
+        }${unrecorded ? ' (date not recorded)' : ''}`,
         detail: null,
         gap,
       });

@@ -178,6 +178,10 @@ Backend steps 2 to 10 expose their behavior through API routes as they go, so th
   - What changed: `moveDrive` (`core/move.ts`) and `POST /api/drives/:id/move` (shared `move-api.ts`): destination spares | slot (+ optional occupant resolution) | retire | rma, optional `replacement` spare (pool/role default from the vacated bay, R35), one `date` (omitted = today, null = not recorded, future = 400) used as every step's date. One transaction. Web: `MoveDialog` on `StepFlow` replaces `ReplaceDialog` and the Remove to spares button; the Retire button on an installed drive opens Move with Retire chosen; `SlotPicker` can disable a slot ("Current"); the life story reads a bay-to-bay move as one entry.
   - Done when: server tests cover each destination with and without a replacement, bay-to-bay membership and events, occupant resolutions, dates, replacement rules and atomicity; web tests cover each step, the single POST and the date semantics.
 
+- [x] **Post-MVP (Swap two installed drives)**
+  - Requirement: R73 (swap option).
+  - What changed: Move into an occupied bay offers Swap first; `occupant: { action: 'swap' }` is accepted only by Move (shared `moveOccupantSchema`), 400 with a replacement, same or empty bay, 409 if the occupant is not installed. One transaction; both keep pool membership; each drive logs drive-removed + drive-installed with `swappedWithDriveId`/`swappedWithSerial`. The web skips the fill step and the life story reads "Swapped from Bay 3 to Bay 7 (with ZL...)".
+
 ---
 
 ## Parking lot (not in the MVP)
@@ -190,7 +194,6 @@ Copy from `REQUIREMENTS.md` section 6 and add new ideas here. Do not build these
 - Richer slot display (model, capacity, serial, temperature, pool badge).
 - Reject a retirement or removal date earlier than the installation date (only the removal to spares is checked today, R69).
 - Dismiss provider suggestions (R72): remember that a "differs" suggestion was seen and rejected, without storing provider data.
-- Swap two installed drives (Move into an occupied bay currently sends the occupant to the spares, retirement or RMA, not into the vacated bay).
 - Several providers at once.
 - Automatic pool membership.
 - Scheduled exports.
@@ -199,6 +202,7 @@ Copy from `REQUIREMENTS.md` section 6 and add new ideas here. Do not build these
 
 ## Notes log
 
+- 2026-10-11, Post-MVP (swap): the unique slot index (D7) is checked per row and the CHECKs tie `slot_id` to status, so a swap cannot be one UPDATE. It parks drive A as a spare without a bay (legal under the CHECKs), moves B into A's bay, then installs A in B's old bay, all in the move transaction; no schema change. Tested incl. rollback via a failing trigger.
 - 2026-10-11, R71 label: the inbox is labelled "Discovered" in the UI (`/drives/discovered`, old `/inbox` and `/drives/inbox` redirect); API paths, hooks, file names and schema names keep "inbox". The health box now sits directly under the facts, above the suggested updates. No backend change.
 - 2026-10-11, Post-MVP 5 (R71, R72): suggestions are never stored, so there is no schema change and no migration; "differs" suggestions do not count toward any indicator because the owner may know better and there is no dismissal yet. Applying a WWN that another record holds fails with the usual `updateDrive` 409 (the suggestion is still listed). The inbox badge counts only unresolved observations (R9), not suggested updates, which have their own section. The open drive on the Drives page is now in the URL (`/drives?drive=ID`) so the inbox can link to it. This entry shares the "Post-MVP 5" label with the R70 note below (written before the entry existed).
 - 2026-10-11, Post-MVP 6 (R73, Move): no new event types and no schema change. A bay-to-bay move writes `drive-removed` (`movedToSlotId`, `removedOn`, `installedOn` of the old bay) and `drive-installed` (`movedFromSlotId`, `installedOn` = the move date) and leaves the open membership untouched (no pool-left/pool-joined). The moving drive's installation date restarts at the move date (null if not recorded); a move date before its installation date is rejected. Occupant resolution dates default to the move date unless the request gives one. Whenever a replacement is given and the moving drive is retired or sent for RMA, `replacedByDriveId` is the replacement (RMA included, via an optional parameter on the internal RMA helper). `assignment.ts` only gained exports (`resolveOccupant`, `resolvePoolRole`, `placeSpare`, `occupiedError` and the existing internals); `assignDrive`, `/remove`, `/retire` and `/rma` behave as before and `MissingDrivePanel` still uses them. The web dialog adds a "Which bay?" step (the slot picker is always its own step, R70) that the design list folds into step 1. Retire for a spare still uses `RetireDialog`.

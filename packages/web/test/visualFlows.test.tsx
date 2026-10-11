@@ -529,7 +529,7 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     expect(
       within(dlg).getByText(/Step 3 of 6 · What happens to the drive in that bay\?/),
     ).toBeInTheDocument();
-    expect(within(dlg).getByText(/AAA0/)).toBeInTheDocument();
+    expect(within(dlg).getAllByText(/AAA0/).length).toBeGreaterThan(0);
     await userEvent.click(await card(dlg, /^Retire/));
     expect(within(dlg).getByRole('button', { name: 'Next' })).toBeDisabled();
     await userEvent.click(field(within(dlg), /^Reason/));
@@ -623,6 +623,29 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     await waitFor(() => expect(moves(calls)).toHaveLength(2));
     expect(moves(calls)[1]!.body).toMatchObject({
       destination: { kind: 'slot', slotId: 's3', occupant: { action: 'spare' } },
+    });
+  });
+
+  it('R73, R37: swapping is the first occupant option, skips the fill step and sends one swap POST', async () => {
+    const calls = setupServer();
+    const dlg = await openMove();
+    await userEvent.click(await card(dlg, /Another bay/));
+    await nextStep(dlg);
+    await pickSlot(within(dlg), /Bay 1, occupied by AAA0/);
+    await nextStep(dlg);
+    const options = within(dlg).getAllByRole('radio');
+    expect(options[0]).toHaveTextContent(/^Swap — put AAA0 into /);
+    await userEvent.click(options[0]!);
+    await nextStep(dlg);
+    expect(within(dlg).queryByText(/What goes into this bay\?/)).not.toBeInTheDocument();
+    expect(within(dlg).getByText(/Step 4 of 5 · When\?/)).toBeInTheDocument();
+    await nextStep(dlg);
+    expect(dlg.querySelector('.step-content')).toHaveTextContent(/⇄.*CCC2.*and AAA0.*swap places/);
+    await confirmMove(dlg);
+    await waitFor(() => expect(moves(calls)).toHaveLength(1));
+    expect(moves(calls)[0]!.body).toEqual({
+      destination: { kind: 'slot', slotId: 's0', occupant: { action: 'swap' } },
+      date: expect.stringMatching(DATE),
     });
   });
 
