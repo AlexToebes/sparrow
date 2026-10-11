@@ -7,8 +7,11 @@ import { listDriveEvents } from '../src/core/events.js';
 import type { DriveDataProvider } from '../src/core/provider-port.js';
 import {
   applySuggestions,
+  dismissSuggestions,
+  getDriveSuggestionLists,
   getDriveSuggestions,
   getSuggestionSummary,
+  undismissSuggestions,
 } from '../src/core/suggestions.js';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
 import { createRepositories } from '../src/db/repositories.js';
@@ -207,6 +210,119 @@ describe('suggested updates (R72, R54)', () => {
     expect(err.code).toBe('conflict');
     expect(getDrive(db(), d.id).model).toBeNull();
     expect(listDriveEvents(db(), d.id)).toHaveLength(1);
+  });
+});
+
+describe('dismissing suggestions (R72)', () => {
+  const setup = () => {
+    const d = createDrive(db(), { serial: 'AAA1', driveType: 'HDD' });
+    snapshot([obs('AAA1', { model: 'WDC WD80EFZX', capacityBytes: 8e12, driveType: 'SSD' })]);
+    return d;
+  };
+
+  it('R72, R14: dismiss hides the suggestion and writes one event per field with the suggested value', () => {
+    const d = setup();
+    dismissSuggestions(db(), P, d.id, ['model', 'driveType']);
+    expect(getDriveSuggestions(db(), P, d.id).map((s) => s.field)).toEqual(['capacityBytes']);
+    expect(getDriveSuggestionLists(db(), P, d.id).dismissed.map((s) => s.field)).toEqual([
+      'model',
+      'driveType',
+    ]);
+    const dismissals = listDriveEvents(db(), d.id).filter((e) => e.type === 'suggestion-dismissed');
+    expect(
+      dismissals
+        .map((e) => e.payload)
+        .sort((a, b) => String(a.field).localeCompare(String(b.field))),
+    ).toEqual([
+      { field: 'driveType', value: 'SSD' },
+      { field: 'model', value: 'WDC WD80EFZX' },
+    ]);
+  });
+
+  it('R72: a dismissed suggestion reappears when the provider reports a different value', () => {
+    const d = setup();
+    dismissSuggestions(db(), P, d.id, ['model']);
+    snapshot([obs('AAA1', { model: ' wdc wd80efzx ' })]); // same value, normalized: still hidden
+    expect(getDriveSuggestions(db(), P, d.id).map((s) => s.field)).not.toContain('model');
+    snapshot([obs('AAA1', { model: 'WDC WD80EFAX' })]);
+    expect(getDriveSuggestions(db(), P, d.id).map((s) => s.field)).toContain('model');
+    expect(getDriveSuggestionLists(db(), P, d.id).dismissed).toEqual([]);
+  });
+
+  it('R72: undismiss restores the suggestion (latest event wins) and can be dismissed again', () => {
+    const d = setup();
+    dismissSuggestions(db(), P, d.id, ['model']);
+    undismissSuggestions(db(), P, d.id, ['model']);
+    expect(getDriveSuggestions(db(), P, d.id).map((s) => s.field)).toContain('model');
+    const latest = listDriveEvents(db(), d.id)[0];
+    expect(latest).toMatchObject({
+      type: 'suggestion-dismissed',
+      payload: { field: 'model', value: null },
+    });
+    dismissSuggestions(db(), P, d.id, ['model']);
+    expect(getDriveSuggestions(db(), P, d.id).map((s) => s.field)).not.toContain('model');
+  });
+
+  it('R72: the summary counts leave out dismissed suggestions', () => {
+    const d = setup();
+    expect(getSuggestionSummary(db(), P).byDriveId[d.id]).toEqual({
+      fill: 2,
+      differs: 1,
+      fillFields: ['model', 'capacityBytes'],
+    });
+    dismissSuggestions(db(), P, d.id, ['model', 'driveType']);
+    expect(getSuggestionSummary(db(), P).byDriveId[d.id]).toEqual({
+      fill: 1,
+      differs: 0,
+      fillFields: ['capacityBytes'],
+    });
+    dismissSuggestions(db(), P, d.id, ['capacityBytes']);
+    expect(getSuggestionSummary(db(), P)).toEqual({ byDriveId: {} });
+  });
+
+  it('R72: dismissing a field that is not suggested (or already dismissed) is a conflict and writes nothing', () => {
+    const d = setup();
+    const before = listDriveEvents(db(), d.id).length;
+    expect(thrown(() => dismissSuggestions(db(), P, d.id, ['model', 'wwn'])).code).toBe('conflict');
+    dismissSuggestions(db(), P, d.id, ['model']);
+    expect(thrown(() => dismissSuggestions(db(), P, d.id, ['model'])).code).toBe('conflict');
+    expect(thrown(() => undismissSuggestions(db(), P, d.id, ['capacityBytes'])).code).toBe(
+      'conflict',
+    );
+    expect(listDriveEvents(db(), d.id)).toHaveLength(before + 1);
+    expect(thrown(() => dismissSuggestions(db(), P, 'nope', ['model'])).code).toBe('not-found');
+  });
+
+  it('R72, R53: events hold only our field name and the value, and applying still works', () => {
+    const d = setup();
+    dismissSuggestions(db(), P, d.id, ['model']);
+    const e = listDriveEvents(db(), d.id)[0]!;
+    expect(Object.keys(e.payload).sort()).toEqual(['field', 'value']);
+    expect(thrown(() => applySuggestions(db(), P, d.id, ['model'])).code).toBe('conflict');
+    undismissSuggestions(db(), P, d.id, ['model']);
+    expect(applySuggestions(db(), P, d.id, ['model']).model).toBe('WDC WD80EFZX');
+  });
+
+  it('R72: the API dismisses and undismisses with 204 and lists dismissed ones', async () => {
+    const app = await buildApp({ db: db(), provider: fakeProvider });
+    const d = setup();
+    const post = (action: string, fields: string[]) =>
+      app.inject({
+        method: 'POST',
+        url: `/api/drives/${d.id}/suggestions/${action}`,
+        payload: { fields },
+      });
+    expect((await post('dismiss', [])).statusCode).toBe(400);
+    expect((await post('dismiss', ['model'])).statusCode).toBe(204);
+    expect((await post('dismiss', ['model'])).statusCode).toBe(409);
+    const got = (
+      await app.inject({ method: 'GET', url: `/api/drives/${d.id}/suggestions` })
+    ).json();
+    expect(got.dismissed.map((s: { field: string }) => s.field)).toEqual(['model']);
+    expect(got.suggestions.map((s: { field: string }) => s.field)).not.toContain('model');
+    expect((await post('undismiss', ['model'])).statusCode).toBe(204);
+    expect((await post('undismiss', ['model'])).statusCode).toBe(409);
+    await app.close();
   });
 });
 

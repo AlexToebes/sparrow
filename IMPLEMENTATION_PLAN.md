@@ -179,6 +179,10 @@ Backend steps 2 to 10 expose their behavior through API routes as they go, so th
   - Done when: server tests cover each destination with and without a replacement, bay-to-bay membership and events, occupant resolutions, dates, replacement rules and atomicity; web tests cover each step, the single POST and the date semantics.
 
 ---
+- [x] **Post-MVP (Dismiss suggestions)**
+  - Requirements: R72 (extended at the owner's request), R14, R53.
+  - What changed: `suggestion-dismissed` events `{ field, value }` (value null = restored); `core/suggestions.ts` hides a suggestion while the latest event for that field has the same (normalized) value, so a different later value reappears; `POST /api/drives/:id/suggestions/dismiss` and `/undismiss` (204; a field not currently suggested / dismissed is 409, nothing written); `GET /api/drives/:id/suggestions` also returns `dismissed`; `GET /api/suggestions` counts exclude dismissed ones. Web: per-row "Dismiss", "Dismiss selected", "N dismissed - show" with "Undo"; life story lines.
+  - Done when: server tests cover hide, reappear on a new value, undo, counts, 409 and events; web tests cover dismiss, dismiss selected, undo and the story.
 
 ## Parking lot (not in the MVP)
 
@@ -189,7 +193,6 @@ Copy from `REQUIREMENTS.md` section 6 and add new ideas here. Do not build these
 - R34 pool leaf-count sanity check.
 - Richer slot display (model, capacity, serial, temperature, pool badge).
 - Reject a retirement or removal date earlier than the installation date (only the removal to spares is checked today, R69).
-- Dismiss provider suggestions (R72): remember that a "differs" suggestion was seen and rejected, without storing provider data.
 - Swap two installed drives (Move into an occupied bay currently sends the occupant to the spares, retirement or RMA, not into the vacated bay).
 - Several providers at once.
 - Automatic pool membership.
@@ -198,6 +201,8 @@ Copy from `REQUIREMENTS.md` section 6 and add new ideas here. Do not build these
 - Investigate why the boot NVMe is stale in Scrutiny (collector likely lacks `--cap-add SYS_ADMIN` or the NVMe device mapping). This is a Scrutiny setup issue, not a Sparrow bug.
 
 ## Notes log
+
+- 2026-10-11, Post-MVP (Dismiss suggestions, R72): no schema change (uses the foundation's `suggestion-dismissed` event type). Dismissal is per drive and field and keyed by the suggested value, so it follows the provider's current value rather than blocking the field forever. Undo is a second event with `value: null` rather than a delete (events are append-only). Dismiss and undismiss answer 204 and are confirm-free in the UI because they are reversible.
 
 - 2026-10-11, R71 label: the inbox is labelled "Discovered" in the UI (`/drives/discovered`, old `/inbox` and `/drives/inbox` redirect); API paths, hooks, file names and schema names keep "inbox". The health box now sits directly under the facts, above the suggested updates. No backend change.
 - 2026-10-11, Post-MVP 5 (R71, R72): suggestions are never stored, so there is no schema change and no migration; "differs" suggestions do not count toward any indicator because the owner may know better and there is no dismissal yet. Applying a WWN that another record holds fails with the usual `updateDrive` 409 (the suggestion is still listed). The inbox badge counts only unresolved observations (R9), not suggested updates, which have their own section. The open drive on the Drives page is now in the URL (`/drives?drive=ID`) so the inbox can link to it. This entry shares the "Post-MVP 5" label with the R70 note below (written before the entry existed).

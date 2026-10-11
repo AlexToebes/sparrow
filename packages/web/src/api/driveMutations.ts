@@ -7,6 +7,7 @@ import {
   driveSchema,
   occupantResolutionSchema,
   type ApplySuggestionsInput,
+  type DismissSuggestionsInput,
   type AssignDriveInput,
   type CreateDriveInput,
   type MoveDriveInput,
@@ -139,6 +140,16 @@ export function useApplySuggestions(driveId: string) {
   return useMutation({
     mutationFn: (input: ApplySuggestionsInput) =>
       apiSend('POST', `/api/drives/${driveId}/suggestions/apply`, input, driveSchema),
+    onSuccess: invalidate,
+  });
+}
+
+/** R72: dismiss or restore suggestions (one suggestion-dismissed event per field; 204). */
+export function useDismissSuggestions(driveId: string, action: 'dismiss' | 'undismiss') {
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: (input: DismissSuggestionsInput) =>
+      apiSend('POST', `/api/drives/${driveId}/suggestions/${action}`, input, z.undefined()),
     onSuccess: invalidate,
   });
 }

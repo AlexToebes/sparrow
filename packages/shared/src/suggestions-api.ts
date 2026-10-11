@@ -26,7 +26,11 @@ export const suggestionSchema = z.object({
 export type Suggestion = z.infer<typeof suggestionSchema>;
 
 /** GET /api/drives/:id/suggestions. */
-export const driveSuggestionsResponseSchema = z.object({ suggestions: z.array(suggestionSchema) });
+export const driveSuggestionsResponseSchema = z.object({
+  suggestions: z.array(suggestionSchema),
+  /** Suggestions the owner dismissed that are still being reported with the same value. */
+  dismissed: z.array(suggestionSchema).default([]),
+});
 export type DriveSuggestionsResponse = z.infer<typeof driveSuggestionsResponseSchema>;
 
 /** GET /api/suggestions: only drives with at least one suggestion appear. */
@@ -48,3 +52,13 @@ export const applySuggestionsInputSchema = z.strictObject({
   fields: z.array(suggestionFieldSchema).min(1),
 });
 export type ApplySuggestionsInput = z.infer<typeof applySuggestionsInputSchema>;
+
+/** POST /api/drives/:id/suggestions/dismiss: hides the suggestions as they are NOW (R72). */
+export const dismissSuggestionsInputSchema = z.strictObject({
+  fields: z.array(suggestionFieldSchema).min(1),
+});
+export type DismissSuggestionsInput = z.infer<typeof dismissSuggestionsInputSchema>;
+
+/** POST /api/drives/:id/suggestions/undismiss: shows dismissed suggestions again (R72). */
+export const undismissSuggestionsInputSchema = dismissSuggestionsInputSchema;
+export type UndismissSuggestionsInput = DismissSuggestionsInput;

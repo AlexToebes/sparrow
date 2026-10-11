@@ -13,7 +13,8 @@ material, not code to copy: build with Mantine components, the shared zod types 
   something waits, plain when empty. The page is `/drives/discovered` (`/drives/inbox` and `/inbox` redirect) with a "Drives" back link and keeps the
   Drives tab highlighted.
 - Suggested updates (R72): drive detail has a "reports details this record doesn't have" block (ticked rows,
-  "Apply selected") and a collapsed "reports different values" toggle; Drives rows with fillable details show an
+  "Apply selected", "Dismiss selected", a text "Dismiss" per row, and a quiet "N dismissed — show" toggle listing
+  dismissed suggestions with "Undo"; no confirmation, it is reversible) and a collapsed "reports different values" toggle; Drives rows with fillable details show an
   "Updates" flag (icon plus text); the Discovered page lists them in a "Suggested updates" card.
 - Layout page opens with a one-line summary sentence ("Four things need a look" / "Everything is healthy"),
   then the grids as cards (one `BayGrid` per grid; title, "4 x 2 · 7 of 8 occupied").

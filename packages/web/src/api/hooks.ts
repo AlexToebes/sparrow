@@ -107,10 +107,7 @@ export function useDrivePools(): Map<string, PoolBadgeInfo> {
 export const useDriveSuggestions = (driveId: string) =>
   useQuery({
     queryKey: ['drives', driveId, 'suggestions'] as const,
-    queryFn: () =>
-      apiGet(`/api/drives/${driveId}/suggestions`, driveSuggestionsResponseSchema).then(
-        (r) => r.suggestions,
-      ),
+    queryFn: () => apiGet(`/api/drives/${driveId}/suggestions`, driveSuggestionsResponseSchema),
   });
 
 /** R72: per-drive suggestion counts, for the Drives list and the Inbox page. */

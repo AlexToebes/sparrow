@@ -1,6 +1,6 @@
 import type { DriveEvent } from '@sparrow/shared';
 import { formatDate, formatDuration } from './format';
-import { FIELD_LABEL } from './suggestions';
+import { FIELD_LABEL, formatSuggestionValue } from './suggestions';
 
 export interface StoryItem {
   id: string;
@@ -198,6 +198,20 @@ function describe(
       };
     case 'pool-role-changed':
       return { title: 'Pool role changed', detail: join(str(p.from), str(p.to)) };
+    case 'suggestion-dismissed': {
+      // R72: value null means the owner restored the suggestion.
+      const field = str(p.field);
+      const label = field
+        ? (FIELD_LABEL[field as keyof typeof FIELD_LABEL]?.toLowerCase() ?? field)
+        : null;
+      if (p.value === null || p.value === undefined) {
+        return { title: `Restored suggestion for ${label ?? 'a field'}`, detail: null };
+      }
+      const value = field
+        ? formatSuggestionValue(field as keyof typeof FIELD_LABEL, p.value as string | number)
+        : String(p.value);
+      return { title: `Dismissed suggested ${label ?? 'value'} '${value}'`, detail: null };
+    }
     default:
       // Event types added for later batches (health, layout and pool records) have no story text yet.
       return { title: e.type.replace(/-/g, ' '), detail: null };

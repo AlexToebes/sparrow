@@ -1,9 +1,15 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { applySuggestionsInputSchema } from '@sparrow/shared';
+import {
+  applySuggestionsInputSchema,
+  dismissSuggestionsInputSchema,
+  undismissSuggestionsInputSchema,
+} from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
 import {
   applySuggestions,
-  getDriveSuggestions,
+  dismissSuggestions,
+  getDriveSuggestionLists,
+  undismissSuggestions,
   getSuggestionSummary,
 } from '../core/suggestions.js';
 
@@ -13,9 +19,10 @@ export const suggestionRoutes: FastifyPluginAsync<{ db: AppDb }> = async (app, o
 
   app.get('/api/suggestions', async () => getSuggestionSummary(db, app.provider.id));
 
-  app.get<{ Params: { id: string } }>('/api/drives/:id/suggestions', async (req) => ({
-    suggestions: getDriveSuggestions(db, app.provider.id, req.params.id),
-  }));
+  app.get<{ Params: { id: string } }>('/api/drives/:id/suggestions', async (req) => {
+    const { active, dismissed } = getDriveSuggestionLists(db, app.provider.id, req.params.id);
+    return { suggestions: active, dismissed };
+  });
 
   app.post<{ Params: { id: string } }>('/api/drives/:id/suggestions/apply', async (req) =>
     applySuggestions(
@@ -24,5 +31,32 @@ export const suggestionRoutes: FastifyPluginAsync<{ db: AppDb }> = async (app, o
       req.params.id,
       applySuggestionsInputSchema.parse(req.body).fields,
     ),
+  );
+
+  // Dismissals are reversible, so they need no confirmation; both answer 204.
+  app.post<{ Params: { id: string } }>(
+    '/api/drives/:id/suggestions/dismiss',
+    async (req, reply) => {
+      dismissSuggestions(
+        db,
+        app.provider.id,
+        req.params.id,
+        dismissSuggestionsInputSchema.parse(req.body).fields,
+      );
+      return reply.status(204).send();
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/api/drives/:id/suggestions/undismiss',
+    async (req, reply) => {
+      undismissSuggestions(
+        db,
+        app.provider.id,
+        req.params.id,
+        undismissSuggestionsInputSchema.parse(req.body).fields,
+      );
+      return reply.status(204).send();
+    },
   );
 };

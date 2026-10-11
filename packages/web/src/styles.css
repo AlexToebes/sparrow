@@ -1140,6 +1140,19 @@ body {
   gap: 2px 10px;
   align-items: baseline;
 }
+.suggestion-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  align-items: baseline;
+  justify-content: space-between;
+  width: 100%;
+}
+.suggestion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .suggestion-toggle {
   min-height: 32px;
   color: var(--sp-dim);
@@ -1176,4 +1189,7 @@ body {
 }
 .update-list li {
   padding: 4px 0;
+}
+.suggestion-item > :first-child {
+  flex: 1;
 }
