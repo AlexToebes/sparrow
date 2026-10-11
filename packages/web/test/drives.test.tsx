@@ -324,7 +324,7 @@ describe('Assignment (R8, R35, R37, R62)', () => {
     expect(await screen.findByRole('button', { name: 'Reinstate' })).toBeInTheDocument();
   });
 
-  it('R37, R62: an occupied slot asks what to do with the occupant, retire prefills replaced-by', async () => {
+  it('R37, R62: an occupied slot asks what to do with the occupant; retire has no preset reason', async () => {
     const calls = setup();
     renderApp(<App />);
     await userEvent.click(await screen.findByRole('button', { name: 'Assign SPARE9' }));
@@ -338,12 +338,17 @@ describe('Assignment (R8, R35, R37, R62)', () => {
     expect(within(occ).getByText('AAA0')).toBeInTheDocument();
     expect(within(occ).getByRole('radio', { name: 'Back to spares' })).toBeInTheDocument();
     expect(within(occ).getByRole('radio', { name: 'Send for RMA' })).toBeInTheDocument();
+    expect(within(occ).getByText('Broken or done')).toBeInTheDocument();
+    expect(within(occ).queryByText(/\(replaced\)/)).not.toBeInTheDocument();
     await userEvent.click(within(occ).getByRole('radio', { name: /Retire it/ }));
-    expect(field(within(occ), /^Reason/)).toHaveValue('Replaced');
-    expect(field(within(occ), 'Replaced by')).toHaveValue('SPARE9 · Big · 8 TB (spare)');
-    const compare = within(occ).getByLabelText('Capacity comparison');
-    expect(within(compare).getByText('4 TB')).toBeInTheDocument();
-    expect(within(compare).getByText('8 TB')).toBeInTheDocument();
+    expect(field(within(occ), /^Reason/)).toHaveValue('');
+    expect(within(occ).queryByLabelText('Replaced by')).not.toBeInTheDocument();
+    expect(within(occ).queryByLabelText('Capacity comparison')).not.toBeInTheDocument();
+    // No reason yet: blocked.
+    await next(within(occ));
+    expect(await within(occ).findByText('Choose a reason.')).toBeInTheDocument();
+    expect(posts(calls, '/api/slots/s0/assign')).toHaveLength(0);
+    await pick(/^Reason/, 'Replaced');
     await next(within(occ));
     await next(within(occ));
     await userEvent.click(within(occ).getByRole('button', { name: 'Retire it and assign' }));
@@ -355,10 +360,12 @@ describe('Assignment (R8, R35, R37, R62)', () => {
       occupant: {
         action: 'retire',
         reason: 'replaced',
-        replacedByDriveId: 'd9',
         date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       },
     });
+    expect(posts(calls, '/api/slots/s0/assign')[0]!.body).not.toHaveProperty(
+      'occupant.replacedByDriveId',
+    );
   });
 
   it('R37: back to spares sends occupant action spare', async () => {
@@ -448,6 +455,7 @@ describe('Retire and reinstate (R60, R61)', () => {
       await within(occ).findByText('What happens to the drive in this bay?', { exact: false }),
     ).toBeInTheDocument();
     await userEvent.click(within(occ).getByRole('radio', { name: /Retire it/ }));
+    await pick(/^Reason/, 'Replaced');
     await userEvent.click(within(occ).getByRole('button', { name: 'Clear' }));
     await next(within(occ));
     await next(within(occ));
@@ -458,7 +466,7 @@ describe('Retire and reinstate (R60, R61)', () => {
     });
   });
 
-  it('R60, R61: retiring a spare with a replacement shows both capacities and confirms before sending', async () => {
+  it('R60, R61: retiring a spare confirms before sending; there is no replaced-by', async () => {
     const calls = setup();
     renderApp(<App />, '/drives');
     await userEvent.click(await screen.findByText('SPARE9'));
@@ -467,10 +475,7 @@ describe('Retire and reinstate (R60, R61)', () => {
     await userEvent.click(within(dlg).getByRole('button', { name: 'Review' }));
     expect(await within(dlg).findByText('Choose a reason.')).toBeInTheDocument();
     await pick(/Reason/, 'Failed');
-    await pick(/Replaced by/, /AAA0/);
-    const compare = within(dlg).getByLabelText('Capacity comparison');
-    expect(within(compare).getByText('8 TB')).toBeInTheDocument();
-    expect(within(compare).getByText('4 TB')).toBeInTheDocument();
+    expect(within(dlg).queryByLabelText('Replaced by')).not.toBeInTheDocument();
     await userEvent.type(within(dlg).getByLabelText('Note'), 'clicking noises');
     await userEvent.click(within(dlg).getByRole('button', { name: 'Review' }));
     expect(posts(calls, '/api/drives/d9/retire')).toHaveLength(0);
@@ -479,7 +484,6 @@ describe('Retire and reinstate (R60, R61)', () => {
     expect(posts(calls, '/api/drives/d9/retire')[0]!.body).toEqual({
       reason: 'failed',
       date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-      replacedByDriveId: 'd0',
       note: 'clicking noises',
     });
   });
@@ -514,7 +518,7 @@ describe('Retire and reinstate (R60, R61)', () => {
       'POST /api/drives/d9/retire': () =>
         new Response(
           JSON.stringify({
-            error: { code: 'invalid', message: 'Replacement chain would loop back' },
+            error: { code: 'invalid', message: 'Could not retire' },
           }),
           {
             status: 400,
@@ -528,7 +532,7 @@ describe('Retire and reinstate (R60, R61)', () => {
     await pick(/Reason/, 'Other');
     await userEvent.click(within(dlg).getByRole('button', { name: 'Review' }));
     await userEvent.click(await within(dlg).findByRole('button', { name: 'Confirm retire' }));
-    expect(await within(dlg).findByText('Replacement chain would loop back')).toBeInTheDocument();
+    expect(await within(dlg).findByText('Could not retire')).toBeInTheDocument();
   });
 
   it('R13: reinstating a retired drive confirms, then posts', async () => {

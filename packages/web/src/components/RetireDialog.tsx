@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Alert, Button, Modal, Text } from '@mantine/core';
 import type { Drive } from '@sparrow/shared';
 import { useDriveAction } from '../api/driveMutations';
-import { useDrives } from '../api/hooks';
 import { ApiError } from '../api/client';
 import {
   RetireFields,
@@ -19,9 +18,8 @@ interface RetireDialogProps {
   onClose: () => void;
 }
 
-/** Retire a drive (R60, R61): reason, date, replaced-by with both capacities, note, then a confirm step. */
+/** Retire a drive (R60, R61): reason, date, note, then a confirm step. */
 export function RetireDialog({ drive, opened, defaultDate, onClose }: RetireDialogProps) {
-  const drives = useDrives();
   const retire = useDriveAction(drive.id, 'retire');
   const [values, setValues] = useState<RetireValues>(() => emptyRetireValues(defaultDate));
   const [confirming, setConfirming] = useState(false);
@@ -46,7 +44,6 @@ export function RetireDialog({ drive, opened, defaultDate, onClose }: RetireDial
       {
         reason: values.reason!,
         date: values.date === '' ? null : values.date,
-        replacedByDriveId: values.replacedByDriveId,
         note: values.note.trim() === '' ? null : values.note.trim(),
       },
       {
@@ -58,17 +55,13 @@ export function RetireDialog({ drive, opened, defaultDate, onClose }: RetireDial
       },
     );
 
-  const candidates = (drives.data ?? []).filter((d) => d.id !== drive.id);
-  const replacement = candidates.find((c) => c.id === values.replacedByDriveId);
-
   return (
     <Modal opened={opened} onClose={close} title={`Retire ${drive.serial}`} centered>
       {confirming ? (
         <>
           <Text>
             Retire <strong className="mono">{drive.serial}</strong> as {values.reason}
-            {values.date === '' ? ' (retirement date not recorded)' : ` on ${values.date}`}
-            {replacement ? `, replaced by ${replacement.serial}` : ''}?
+            {values.date === '' ? ' (retirement date not recorded)' : ` on ${values.date}`}?
           </Text>
           {drive.status === 'installed' ? (
             <Text size="sm" c="dimmed" mt="xs">
@@ -91,12 +84,7 @@ export function RetireDialog({ drive, opened, defaultDate, onClose }: RetireDial
         </>
       ) : (
         <>
-          <RetireFields
-            drive={drive}
-            candidates={candidates}
-            values={values}
-            onChange={setValues}
-          />
+          <RetireFields values={values} onChange={setValues} />
           {error ? (
             <Alert color="red" mt="sm">
               {error}

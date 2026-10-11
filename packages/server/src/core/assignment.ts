@@ -153,7 +153,6 @@ export interface RetireOptions {
   reason: RetirementReason;
   /** Already validated YYYY-MM-DD, or null = not recorded (R60). */
   date: string | null;
-  replacedByDriveId: string | null;
   note: string | null;
 }
 
@@ -161,26 +160,6 @@ export interface RetireOptions {
 export function retireInternal(tx: Tx, driveId: string, opts: RetireOptions): Drive {
   let drive = loadDrive(tx, driveId);
   if (drive.status === 'retired') throw conflict(`Drive ${drive.id} is already retired`);
-  if (opts.replacedByDriveId !== null) {
-    if (opts.replacedByDriveId === drive.id) {
-      throw invalid('A drive cannot be replaced by itself');
-    }
-    if (!tx.select().from(drives).where(eq(drives.id, opts.replacedByDriveId)).get()) {
-      throw notFound(`Replacement drive ${opts.replacedByDriveId} not found`);
-    }
-    // Walk the replacement chain: it must never lead back to the drive being retired.
-    const seen = new Set<string>();
-    for (
-      let next: string | null = opts.replacedByDriveId;
-      next !== null && !seen.has(next);
-      next = tx.select().from(drives).where(eq(drives.id, next)).get()?.replacedByDriveId ?? null
-    ) {
-      if (next === drive.id) {
-        throw invalid('Replacement chain would loop back to this drive');
-      }
-      seen.add(next);
-    }
-  }
   const slotId = drive.slotId;
   // R69: the retirement date is the day the drive left the slot.
   if (drive.status === 'installed') {
@@ -195,7 +174,6 @@ export function retireInternal(tx: Tx, driveId: string, opts: RetireOptions): Dr
       installedOn: null,
       retirementReason: opts.reason,
       retirementDate: opts.date,
-      replacedByDriveId: opts.replacedByDriveId,
       retirementNote: opts.note,
       updatedAt: at,
     })
@@ -209,7 +187,6 @@ export function retireInternal(tx: Tx, driveId: string, opts: RetireOptions): Dr
     payload: {
       reason: opts.reason,
       date: opts.date,
-      replacedByDriveId: opts.replacedByDriveId,
       note: opts.note,
       slotId,
     },
@@ -222,13 +199,11 @@ export function rmaInternal(
   driveId: string,
   date: string | null,
   note: string | null,
-  replacedByDriveId: string | null = null,
 ): Drive {
   const slotId = loadDrive(tx, driveId).slotId;
   const updated = retireInternal(tx, driveId, {
     reason: 'failed',
     date,
-    replacedByDriveId,
     note,
   });
   recordEvent(tx, {
@@ -299,15 +274,13 @@ export function occupiedError(info: SlotInfo, occupant: Drive) {
 }
 
 /**
- * R37, R62: resolve the drive in a slot before another one goes in. `incomingId` is the drive that
- * takes the slot (the default "replaced by" for reason 'replaced'). A date the action leaves out
+ * R37, R62: resolve the drive in a slot before another one goes in. A date the action leaves out
  * (undefined) falls back to `defaultDate` when that is given (R73: the one move date), else today.
  */
 export function resolveOccupant(
   tx: Tx,
   occupant: Drive,
   action: OccupantResolution,
-  incomingId: string,
   clock: Date,
   defaultDate: string | null | undefined,
 ): Drive {
@@ -323,17 +296,9 @@ export function resolveOccupant(
   const date = (value: string | null | undefined): string | null =>
     value === undefined && defaultDate !== undefined ? defaultDate : retirementDateOf(value, clock);
   if (action.action === 'retire') {
-    // R62: undefined = prefill the incoming drive for 'replaced'; an explicit null = no replacement.
-    const replacedBy =
-      action.replacedByDriveId === undefined
-        ? action.reason === 'replaced'
-          ? incomingId
-          : null
-        : action.replacedByDriveId;
     return retireInternal(tx, occupant.id, {
       reason: action.reason,
       date: date(action.date),
-      replacedByDriveId: replacedBy,
       note: action.note ?? null,
     });
   }
@@ -444,7 +409,7 @@ export function assignDrive(db: AppDb, input: AssignDriveInput): AssignDriveResu
     let resolved: Drive | undefined;
     if (occupant) {
       if (!input.occupant) throw occupiedError(info, occupant);
-      resolved = resolveOccupant(tx, occupant, input.occupant, drive.id, clock, undefined);
+      resolved = resolveOccupant(tx, occupant, input.occupant, clock, undefined);
     }
 
     const { poolId, role } = resolvePoolRole(tx, input.poolId, input.role, defaults);
@@ -475,7 +440,6 @@ export interface RetireDriveOptions {
   reason: RetirementReason;
   /** R60: YYYY-MM-DD, never in the future. Omitted = today (UTC); null = not recorded. */
   date?: string | null | undefined;
-  replacedByDriveId?: string | null | undefined;
   note?: string | null | undefined;
 }
 
@@ -486,7 +450,6 @@ export function retireDrive(db: AppDb, driveId: string, opts: RetireDriveOptions
     retireInternal(tx, driveId, {
       reason: opts.reason,
       date,
-      replacedByDriveId: opts.replacedByDriveId ?? null,
       note: opts.note ?? null,
     }),
   );
@@ -520,7 +483,6 @@ export function reinstateDrive(
         status: 'spare',
         retirementReason: null,
         retirementDate: null,
-        replacedByDriveId: null,
         retirementNote: null,
         updatedAt: at,
       })
@@ -534,7 +496,6 @@ export function reinstateDrive(
       payload: {
         previousReason: drive.retirementReason,
         previousDate: drive.retirementDate,
-        previousReplacedByDriveId: drive.replacedByDriveId,
         previousNote: drive.retirementNote,
         note: opts.note ?? null,
       },

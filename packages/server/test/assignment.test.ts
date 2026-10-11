@@ -160,7 +160,7 @@ describe('occupied slot (R37, R62)', () => {
     expect(types(a.id)).toEqual(['drive-removed', 'drive-installed', 'drive-created']);
   });
 
-  it("R62: occupant 'retire' as replaced defaults replacedBy to the incoming drive", () => {
+  it("R62: occupant 'retire' keeps the user's reason and date", () => {
     const { slots } = setup();
     const a = spare('A');
     const b = spare('B');
@@ -175,7 +175,6 @@ describe('occupied slot (R37, R62)', () => {
       slotId: null,
       retirementReason: 'replaced',
       retirementDate: '2026-01-02',
-      replacedByDriveId: b.id,
       retirementNote: 'old',
     });
     expect(types(a.id)).toEqual([
@@ -187,17 +186,21 @@ describe('occupied slot (R37, R62)', () => {
     expect(getDrive(db(), b.id).status).toBe('installed');
   });
 
-  it('retire with reason failed leaves replacedBy empty unless given', () => {
+  it('R62: retiring the occupant requires a reason (no preset)', async () => {
     const { slots } = setup();
     const a = spare('A');
     const b = spare('B');
     assignDrive(db(), { driveId: a.id, slotId: slots[0]! });
-    const res = assignDrive(db(), {
-      driveId: b.id,
-      slotId: slots[0]!,
-      occupant: { action: 'retire', reason: 'failed', date: '2026-01-02' },
+    const app = buildApp({ db: db() });
+    await app.ready();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/slots/${slots[0]}/assign`,
+      payload: { driveId: b.id, occupant: { action: 'retire' } },
     });
-    expect(res.occupant!.replacedByDriveId).toBeNull();
+    expect(res.statusCode).toBe(400);
+    await app.close();
+    expect(getDrive(db(), a.id).status).toBe('installed');
   });
 
   it('occupant rma: retired as failed plus drive-sent-for-rma', () => {
@@ -327,65 +330,6 @@ describe('previous occupant ordering (R35)', () => {
   });
 });
 
-describe('replacement chains and explicit null (R60, R62)', () => {
-  it('R60: rejects a replacement chain that loops back to the retired drive', () => {
-    const a = spare('A');
-    const b = spare('B');
-    const c = spare('C');
-    retireDrive(db(), a.id, { reason: 'replaced', replacedByDriveId: b.id });
-    expect(
-      thrown(() => retireDrive(db(), b.id, { reason: 'replaced', replacedByDriveId: a.id })).code,
-    ).toBe('invalid');
-    retireDrive(db(), c.id, { reason: 'replaced', replacedByDriveId: a.id }); // a -> b, c -> a: fine
-    expect(getDrive(db(), b.id).status).toBe('spare');
-    expect(
-      thrown(() => retireDrive(db(), b.id, { reason: 'replaced', replacedByDriveId: c.id })).code,
-    ).toBe('invalid');
-  });
-
-  it('R60: the assign-with-retire flow rejects a loop and changes nothing', () => {
-    const { slots } = setup();
-    const a = spare('A');
-    const b = spare('B');
-    const x = spare('X');
-    assignDrive(db(), { driveId: a.id, slotId: slots[0]! });
-    retireDrive(db(), x.id, { reason: 'replaced', replacedByDriveId: a.id });
-    const err = thrown(() =>
-      assignDrive(db(), {
-        driveId: b.id,
-        slotId: slots[0]!,
-        occupant: {
-          action: 'retire',
-          reason: 'replaced',
-          date: '2026-01-02',
-          replacedByDriveId: x.id,
-        },
-      }),
-    );
-    expect(err.code).toBe('invalid');
-    expect(getDrive(db(), a.id).status).toBe('installed');
-    expect(getDrive(db(), b.id).status).toBe('spare');
-  });
-
-  it('R62: an explicit null replacedByDriveId means no replacement; undefined prefills the incoming drive', () => {
-    const { slots } = setup();
-    const a = spare('A');
-    const b = spare('B');
-    assignDrive(db(), { driveId: a.id, slotId: slots[0]! });
-    const res = assignDrive(db(), {
-      driveId: b.id,
-      slotId: slots[0]!,
-      occupant: {
-        action: 'retire',
-        reason: 'replaced',
-        date: '2026-01-02',
-        replacedByDriveId: null,
-      },
-    });
-    expect(res.occupant!.replacedByDriveId).toBeNull();
-  });
-});
-
 describe('remove, retire, RMA, reinstate (R60, R61, R27)', () => {
   it('installed -> spare: clears slot, ends membership, logs pool-left and drive-removed', () => {
     const { slots } = setup();
@@ -416,23 +360,20 @@ describe('remove, retire, RMA, reinstate (R60, R61, R27)', () => {
     expect(thrown(() => removeToSpares(db(), a.id)).code).toBe('conflict');
   });
 
-  it('R60: spare -> retired with default date today, reason, note and replacedBy', () => {
+  it('R60: spare -> retired with default date today, reason and note', () => {
     setup();
     const a = spare('A');
-    const b = spare('B');
-    const r = retireDrive(db(), a.id, { reason: 'replaced', replacedByDriveId: b.id, note: 'n' });
+    const r = retireDrive(db(), a.id, { reason: 'replaced', note: 'n' });
     expect(r).toMatchObject({
       status: 'retired',
       slotId: null,
       retirementReason: 'replaced',
       retirementDate: TODAY(),
-      replacedByDriveId: b.id,
       retirementNote: 'n',
     });
     expect(eventOf(a.id, 'drive-retired').payload).toEqual({
       reason: 'replaced',
       date: TODAY(),
-      replacedByDriveId: b.id,
       note: 'n',
       slotId: null,
     });
@@ -460,16 +401,9 @@ describe('remove, retire, RMA, reinstate (R60, R61, R27)', () => {
     expect(assignDrive(db(), { driveId: b.id, slotId: slots[0]! }).drive.slotId).toBe(slots[0]);
   });
 
-  it('R60: already retired, self-replacement and unknown replacement are rejected', () => {
+  it('R60: an already retired drive cannot be retired again', () => {
     setup();
     const a = spare('A');
-    expect(
-      thrown(() => retireDrive(db(), a.id, { reason: 'other', replacedByDriveId: a.id })).code,
-    ).toBe('invalid');
-    expect(
-      thrown(() => retireDrive(db(), a.id, { reason: 'other', replacedByDriveId: 'zz' })).code,
-    ).toBe('not-found');
-    expect(getDrive(db(), a.id).status).toBe('spare');
     retireDrive(db(), a.id, { reason: 'other' });
     expect(thrown(() => retireDrive(db(), a.id, { reason: 'other' })).code).toBe('conflict');
   });
@@ -507,11 +441,9 @@ describe('remove, retire, RMA, reinstate (R60, R61, R27)', () => {
   it('R61: retired -> spare clears retirement fields and keeps them in the event', () => {
     const slot = setup().slots[0]!;
     const a = spare('A');
-    const b = spare('B');
     retireDrive(db(), a.id, {
       reason: 'replaced',
       date: '2026-01-02',
-      replacedByDriveId: b.id,
       note: 'x',
     });
     const r = reinstateDrive(db(), a.id, { note: 'false alarm' });
@@ -520,13 +452,11 @@ describe('remove, retire, RMA, reinstate (R60, R61, R27)', () => {
       slotId: null,
       retirementReason: null,
       retirementDate: null,
-      replacedByDriveId: null,
       retirementNote: null,
     });
     expect(eventOf(a.id, 'drive-reinstated').payload).toEqual({
       previousReason: 'replaced',
       previousDate: '2026-01-02',
-      previousReplacedByDriveId: b.id,
       previousNote: 'x',
       note: 'false alarm',
     });
@@ -655,7 +585,7 @@ describe('assignment API', () => {
     expect(swap.statusCode).toBe(200);
     expect(swap.json()).toMatchObject({
       drive: { id: b.id },
-      occupant: { id: a.id, status: 'retired', replacedByDriveId: b.id },
+      occupant: { id: a.id, status: 'retired' },
     });
   });
 

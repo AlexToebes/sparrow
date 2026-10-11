@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { asc, eq } from 'drizzle-orm';
+import { asc } from 'drizzle-orm';
 import {
   EXPORT_FORMAT,
   EXPORT_SCHEMA_VERSION,
@@ -106,7 +106,7 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /**
- * R68: schema-1 files written before installed_on existed have no `installedOn` on their drives.
+ * Upgrades older schema-1 files before validation. R68: files written before installed_on existed have no `installedOn` on their drives.
  * Such a file cannot say when anything was installed, and the date of an event is when it was
  * recorded, not an installation date, so those drives become "not recorded" (null). Drives that
  * carry the key (even as null) are left alone, so the file is otherwise validated as written.
@@ -115,9 +115,13 @@ function backfillInstalledOn(input: unknown): unknown {
   if (!isRecord(input) || !isRecord(input.data)) return input;
   const { drives: driveRows } = input.data;
   if (!Array.isArray(driveRows)) return input;
-  const upgraded = driveRows.map((d) =>
-    !isRecord(d) || 'installedOn' in d ? d : { ...d, installedOn: null },
-  );
+  const upgraded = driveRows.map((d) => {
+    if (!isRecord(d)) return d;
+    // R60 (changed 2026-10-11): "replaced by" was removed; an older export may still carry it.
+    const rest = { ...d };
+    delete rest.replacedByDriveId;
+    return 'installedOn' in rest ? rest : { ...rest, installedOn: null };
+  });
   return { ...input, data: { ...input.data, drives: upgraded } };
 }
 
@@ -147,9 +151,6 @@ function checkReferences(data: ExportData): string[] {
   for (const s of data.slots) check(`slot ${s.id}`, s.gridId, gridIds, 'grid');
   for (const d of data.drives) {
     if (d.slotId !== null) check(`drive ${d.id}`, d.slotId, slotIds, 'slot');
-    if (d.replacedByDriveId !== null) {
-      check(`drive ${d.id}`, d.replacedByDriveId, driveIds, 'drive (replacedBy)');
-    }
   }
   for (const m of data.memberships) {
     check(`membership ${m.id}`, m.driveId, driveIds, 'drive');
@@ -206,14 +207,12 @@ export function importData(db: AppDb, input: unknown, opts: ImportOptions): Impo
     );
   }
 
-  // 4. Replace everything in one transaction. Children are deleted first. The drive self-reference
-  //    is cleared before drives are deleted, and inserted drives get it set in a second pass.
+  // 4. Replace everything in one transaction. Children are deleted first.
   try {
     db.transaction((tx) => {
       tx.delete(appMeta).run();
       tx.delete(events).run();
       tx.delete(memberships).run();
-      tx.update(drives).set({ replacedByDriveId: null }).run();
       tx.delete(drives).run();
       tx.delete(slots).run();
       tx.delete(grids).run();
@@ -224,19 +223,7 @@ export function importData(db: AppDb, input: unknown, opts: ImportOptions): Impo
       for (const row of data.grids) tx.insert(grids).values(row).run();
       for (const row of data.slots) tx.insert(slots).values(row).run();
       for (const row of data.pools) tx.insert(pools).values(row).run();
-      for (const row of data.drives) {
-        tx.insert(drives)
-          .values({ ...row, replacedByDriveId: null })
-          .run();
-      }
-      for (const row of data.drives) {
-        if (row.replacedByDriveId !== null) {
-          tx.update(drives)
-            .set({ replacedByDriveId: row.replacedByDriveId })
-            .where(eq(drives.id, row.id))
-            .run();
-        }
-      }
+      for (const row of data.drives) tx.insert(drives).values(row).run();
       for (const row of data.memberships) tx.insert(memberships).values(row).run();
       for (const row of data.events) tx.insert(events).values(row).run();
       for (const row of data.appMeta) tx.insert(appMeta).values(row).run();

@@ -76,7 +76,7 @@ export function moveDrive(db: AppDb, driveId: string, input: MoveDriveInput): Mo
       if (occupant) {
         if (!dest.occupant) throw occupiedError(targetInfo, occupant);
         // The occupant's own dates are the move date unless the request gave one.
-        occupantAfter = resolveOccupant(tx, occupant, dest.occupant, drive.id, clock, date);
+        occupantAfter = resolveOccupant(tx, occupant, dest.occupant, clock, date);
       }
       moved = moveBetweenBays(tx, drive, sourceInfo, targetInfo, date);
     } else if (dest.kind === 'spares') {
@@ -85,11 +85,10 @@ export function moveDrive(db: AppDb, driveId: string, input: MoveDriveInput): Mo
       moved = retireInternal(tx, drive.id, {
         reason: dest.reason,
         date,
-        replacedByDriveId: spare?.id ?? null,
         note: dest.note ?? null,
       });
     } else {
-      moved = rmaInternal(tx, drive.id, date, dest.note ?? null, spare?.id ?? null);
+      moved = rmaInternal(tx, drive.id, date, dest.note ?? null);
     }
 
     let replacement: Drive | undefined;

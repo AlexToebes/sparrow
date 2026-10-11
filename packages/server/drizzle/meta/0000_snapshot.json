@@ -164,13 +164,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "replaced_by_drive_id": {
-          "name": "replaced_by_drive_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "retirement_note": {
           "name": "retirement_note",
           "type": "text",
@@ -221,15 +214,6 @@
           "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
-        },
-        "drives_replaced_by_drive_id_drives_id_fk": {
-          "name": "drives_replaced_by_drive_id_drives_id_fk",
-          "tableFrom": "drives",
-          "tableTo": "drives",
-          "columnsFrom": ["replaced_by_drive_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -250,10 +234,6 @@
         "drives_retired_needs_reason": {
           "name": "drives_retired_needs_reason",
           "value": "\"drives\".\"status\" <> 'retired' OR \"drives\".\"retirement_reason\" IS NOT NULL"
-        },
-        "drives_not_replaced_by_self": {
-          "name": "drives_not_replaced_by_self",
-          "value": "\"drives\".\"replaced_by_drive_id\" IS NULL OR \"drives\".\"replaced_by_drive_id\" <> \"drives\".\"id\""
         },
         "drives_drive_type_enum": {
           "name": "drives_drive_type_enum",

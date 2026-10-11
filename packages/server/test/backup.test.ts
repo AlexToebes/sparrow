@@ -48,11 +48,10 @@ function seedRealistic(): void {
 
   assignDrive(db(), { driveId: oldDrive.id, slotId: slot1!, poolId: pool.id, role: 'data' });
   assignDrive(db(), { driveId: spare.id, slotId: slot2!, poolId: null, role: null });
-  // Retire the old drive, replaced by the new one; this frees slot1 for the new drive.
+  // Retire the old drive; this frees slot1 for the new drive.
   retireDrive(db(), oldDrive.id, {
     reason: 'replaced',
     date: '2026-09-01',
-    replacedByDriveId: newDrive.id,
     note: 'SMART errors',
   });
   assignDrive(db(), { driveId: newDrive.id, slotId: slot1!, poolId: pool.id, role: 'hot-spare' });
@@ -92,7 +91,6 @@ describe('R41, R42: export', () => {
     expect(data.drives.find((d) => d.serial === 'OLD-1')).toMatchObject({
       status: 'retired',
       slotId: null,
-      replacedByDriveId: data.drives.find((d) => d.serial === 'new-1')!.id,
     });
     expect(data.memberships.length).toBeGreaterThan(0);
     expect(data.events.map((e) => e.type)).toContain('drive-retired');
@@ -310,14 +308,18 @@ describe('R43: failed imports leave data untouched', () => {
     expect(() => readdirSync(backupDir)).toThrow();
   });
 
-  it('rejects a replacedBy that points at a drive not in the file', () => {
+  it('R60: an older export that still has replacedByDriveId imports fine and drops the field', () => {
     seedRealistic();
-    const before = exportData(db());
     const file = exportData(db());
-    const i = file.data.drives.findIndex((d) => d.replacedByDriveId !== null);
-    file.data.drives[i] = { ...file.data.drives[i]!, replacedByDriveId: 'ghost' };
-    expect(invalidFrom(() => importData(db(), file, { backupDir })).code).toBe('invalid');
-    expectUnchanged(before);
+    const old = JSON.parse(JSON.stringify(file)) as {
+      data: { drives: Record<string, unknown>[] };
+    };
+    old.data.drives[0]!.replacedByDriveId = 'ghost-id-not-in-file';
+    old.data.drives[1]!.replacedByDriveId = null;
+    importData(db(), old, { backupDir });
+    const after = exportData(db());
+    expect(after.data.drives).toHaveLength(file.data.drives.length);
+    for (const d of after.data.drives) expect(d).not.toHaveProperty('replacedByDriveId');
   });
 
   it('rolls back everything when the database rejects a row mid-insert (duplicate serial)', () => {
@@ -334,7 +336,6 @@ describe('R43: failed imports leave data untouched', () => {
     file.data.drives = file.data.drives.map((d) => ({
       ...d,
       slotId: null,
-      replacedByDriveId: null,
       status: 'spare' as const,
       retirementReason: null,
       retirementDate: null,

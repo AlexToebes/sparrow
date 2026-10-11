@@ -82,7 +82,6 @@ export function createDrive(
         slotId: null,
         retirementReason: null,
         retirementDate: null,
-        replacedByDriveId: null,
         retirementNote: null,
         installedOn: null,
         createdAt: now,

@@ -97,7 +97,7 @@ export function AssignDialog({
   const [current, setCurrent] = useState<StepKey>(fixedSlot === null ? 'slot' : 'drive');
   const [error, setError] = useState<string | null>(null);
   const [apiOccupantId, setApiOccupantId] = useState<string | null>(null);
-  const [outcome, setOutcome] = useState(() => initialOutcome(fixedDrive));
+  const [outcome, setOutcome] = useState(() => initialOutcome());
 
   const slotById = useMemo(() => {
     const multi = (layout.data?.enclosures.length ?? 0) > 1;
@@ -329,11 +329,7 @@ export function AssignDialog({
           <SparePicker
             spares={spares.data ?? []}
             value={driveId}
-            onChange={(id) => {
-              setDriveId(id);
-              // R62: retiring the occupant defaults to "replaced by" the incoming drive.
-              setOutcome((o) => ({ ...o, retire: { ...o.retire, replacedByDriveId: id } }));
-            }}
+            onChange={setDriveId}
             loading={spares.isPending}
           />
         </>
@@ -352,13 +348,7 @@ export function AssignDialog({
             goes in?
           </Text>
           {occupant ? (
-            <OutcomeFields
-              state={outcome}
-              onChange={setOutcome}
-              outgoing={occupant}
-              drives={allDrives.data ?? []}
-              idPrefix="occ-retire"
-            />
+            <OutcomeFields state={outcome} onChange={setOutcome} idPrefix="occ-retire" />
           ) : null}
         </>
       ) : null}

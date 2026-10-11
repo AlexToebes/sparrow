@@ -1,4 +1,4 @@
-import { Select, Text, Textarea } from '@mantine/core';
+import { Select, Textarea } from '@mantine/core';
 import { RETIREMENT_REASONS, type Drive, type RetirementReason } from '@sparrow/shared';
 import { formatBytes } from '../lib/format';
 import { todayLocal } from './dates';
@@ -10,7 +10,6 @@ export interface RetireValues {
   reason: RetirementReason | null;
   /** R60: YYYY-MM-DD; empty = retirement date not recorded. */
   date: string;
-  replacedByDriveId: string | null;
   note: string;
 }
 
@@ -27,7 +26,6 @@ export function installedOnError(value: string): string | null {
 export const emptyRetireValues = (date: string = todayLocal()): RetireValues => ({
   reason: null,
   date,
-  replacedByDriveId: null,
   note: '',
 });
 
@@ -41,19 +39,14 @@ export const driveLabel = (d: Drive): string =>
   [d.serial, d.model, formatBytes(d.capacityBytes) || null].filter(Boolean).join(' · ');
 
 interface RetireFieldsProps {
-  /** The drive being retired, for the capacity comparison. */
-  drive: Drive;
-  /** Candidates for "replaced by": every other drive. */
-  candidates: Drive[];
   values: RetireValues;
   onChange: (values: RetireValues) => void;
   idPrefix?: string;
 }
 
-/** Reason, date, replaced-by and note (R60, R61, R62). Shared by the retire dialog and the occupied-slot dialog. */
-export function RetireFields({ drive, candidates, values, onChange, idPrefix }: RetireFieldsProps) {
+/** Reason, date and note (R60, R61, R62). Shared by the retire dialog and the occupied-slot dialog. */
+export function RetireFields({ values, onChange, idPrefix }: RetireFieldsProps) {
   const set = (patch: Partial<RetireValues>) => onChange({ ...values, ...patch });
-  const replacement = candidates.find((c) => c.id === values.replacedByDriveId) ?? null;
   const id = idPrefix ?? 'retire';
   return (
     <>
@@ -74,44 +67,6 @@ export function RetireFields({ drive, candidates, values, onChange, idPrefix }: 
         onChange={(date) => set({ date })}
         error={retirementDateError(values.date)}
       />
-      <Select
-        label="Replaced by"
-        description="Optional. Link the drive that took its place."
-        placeholder="No replacement"
-        clearable
-        searchable
-        data={candidates.map((c) => ({
-          value: c.id,
-          label: `${driveLabel(c)} (${c.status})`,
-        }))}
-        value={values.replacedByDriveId}
-        onChange={(v) => set({ replacedByDriveId: v })}
-        mt="sm"
-      />
-      {replacement ? (
-        <div className="compare" aria-label="Capacity comparison">
-          <div>
-            <Text size="xs" c="dimmed">
-              Retiring
-            </Text>
-            <Text className="mono" fw={600}>
-              {drive.serial}
-            </Text>
-            <Text className="mono">{formatBytes(drive.capacityBytes) || 'capacity unknown'}</Text>
-          </div>
-          <div>
-            <Text size="xs" c="dimmed">
-              Replaced by
-            </Text>
-            <Text className="mono" fw={600}>
-              {replacement.serial}
-            </Text>
-            <Text className="mono">
-              {formatBytes(replacement.capacityBytes) || 'capacity unknown'}
-            </Text>
-          </div>
-        </div>
-      ) : null}
       <Textarea
         label="Note"
         autosize

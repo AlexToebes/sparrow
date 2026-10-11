@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   DRIVE_STATUSES,
   driveSchema,
+  occupantResolutionSchema,
+  retireDriveInputSchema,
   enclosureSchema,
   eventSchema,
   gridSchema,
@@ -35,7 +37,6 @@ const drive = {
   slotId: null,
   retirementReason: null,
   retirementDate: null,
-  replacedByDriveId: null,
   retirementNote: null,
   installedOn: null,
   ...stamps,
@@ -132,8 +133,19 @@ describe('driveSchema', () => {
     ).toBe(true);
   });
 
-  it('R60: a drive cannot be replaced by itself', () => {
-    expect(driveSchema.safeParse({ ...drive, replacedByDriveId: 'd1' }).success).toBe(false);
+  it('R60: the retire and occupant inputs no longer take a replaced-by drive', () => {
+    expect(retireDriveInputSchema.safeParse({ reason: 'failed' }).success).toBe(true);
+    expect(
+      retireDriveInputSchema.safeParse({ reason: 'failed', replacedByDriveId: 'd2' }).success,
+    ).toBe(false);
+    expect(
+      occupantResolutionSchema.safeParse({
+        action: 'retire',
+        reason: 'failed',
+        replacedByDriveId: 'd2',
+      }).success,
+    ).toBe(false);
+    expect(occupantResolutionSchema.safeParse({ action: 'retire' }).success).toBe(false);
   });
 });
 

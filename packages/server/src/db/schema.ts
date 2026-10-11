@@ -1,6 +1,5 @@
 import { sql, type SQL } from 'drizzle-orm';
 import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import {
   DRIVE_CONDITIONS,
   DRIVE_STATUSES,
@@ -94,7 +93,6 @@ export const drives = sqliteTable(
     slotId: text('slot_id').references(() => slots.id, { onDelete: 'restrict' }),
     retirementReason: text('retirement_reason', { enum: RETIREMENT_REASONS }),
     retirementDate: text('retirement_date'),
-    replacedByDriveId: text('replaced_by_drive_id').references((): AnySQLiteColumn => drives.id),
     retirementNote: text('retirement_note'),
     // R68: calendar date (YYYY-MM-DD) the drive went into its slot; only while installed. NULL on an
     // installed drive = "installation date not recorded".
@@ -117,10 +115,6 @@ export const drives = sqliteTable(
     check(
       'drives_retired_needs_reason',
       sql`${t.status} <> 'retired' OR ${t.retirementReason} IS NOT NULL`,
-    ),
-    check(
-      'drives_not_replaced_by_self',
-      sql`${t.replacedByDriveId} IS NULL OR ${t.replacedByDriveId} <> ${t.id}`,
     ),
     check('drives_drive_type_enum', inListOrNull('drive_type', DRIVE_TYPES)),
     check('drives_status_enum', inList('status', DRIVE_STATUSES)),

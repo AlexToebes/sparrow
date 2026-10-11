@@ -33,7 +33,6 @@ export const driveSchema = z
     retirementReason: retirementReasonSchema.nullable(),
     /** R60: calendar date of the retirement; null on a retired drive means "not recorded". */
     retirementDate: dateSchema.nullable(),
-    replacedByDriveId: idSchema.nullable(),
     retirementNote: z.string().max(5000).nullable(),
     /**
      * R68: calendar date the drive was installed in its slot. Non-null only while installed; null
@@ -71,13 +70,6 @@ export const driveSchema = z
         code: 'custom',
         path: ['retirementReason'],
         message: 'required when retired',
-      });
-    }
-    if (d.replacedByDriveId !== null && d.replacedByDriveId === d.id) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['replacedByDriveId'],
-        message: 'a drive cannot replace itself',
       });
     }
   });

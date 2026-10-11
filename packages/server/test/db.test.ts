@@ -135,12 +135,6 @@ describe('constraints', () => {
     expect(ok.status).toBe('retired');
   });
 
-  it('R13: replaced-by must reference an existing drive', () => {
-    expect(() =>
-      repo.drives.create({ serial: 'A', status: 'spare', replacedByDriveId: 'nope' }),
-    ).toThrow(/FOREIGN KEY/);
-  });
-
   it('D5: drives expose no delete function', () => {
     expect(Object.keys(repo.drives).sort()).toEqual(['create', 'get', 'list']);
   });

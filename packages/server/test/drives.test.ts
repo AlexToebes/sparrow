@@ -215,7 +215,6 @@ describe('editing (R3, R14)', () => {
     expect(() => updateDrive(db(), d.id, { status: 'retired' })).toThrow(ZodError);
     expect(() => updateDrive(db(), d.id, { slotId: 'slot-1' })).toThrow(ZodError);
     expect(() => updateDrive(db(), d.id, { retirementReason: 'failed' })).toThrow(ZodError);
-    expect(() => updateDrive(db(), d.id, { replacedByDriveId: d.id })).toThrow(ZodError);
     expect(() => updateDrive(db(), d.id, { id: 'other' })).toThrow(ZodError);
     expect(getDrive(db(), d.id).status).toBe('spare');
     expect(eventCount()).toBe(before);

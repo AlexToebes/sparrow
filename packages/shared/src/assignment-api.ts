@@ -36,8 +36,6 @@ export const occupantResolutionSchema = z.discriminatedUnion('action', [
     reason: retirementReasonSchema,
     date: retirementDateSchema.optional(),
     note,
-    /** For reason 'replaced' this defaults to the incoming drive (R62). */
-    replacedByDriveId: idSchema.nullish(),
   }),
   z.strictObject({ action: z.literal('rma'), date: retirementDateSchema.optional(), note }),
 ]);
@@ -68,7 +66,6 @@ export type RemoveDriveInput = z.infer<typeof removeDriveInputSchema>;
 export const retireDriveInputSchema = z.strictObject({
   reason: retirementReasonSchema,
   date: retirementDateSchema.optional(),
-  replacedByDriveId: idSchema.nullish(),
   note,
 });
 export type RetireDriveInput = z.infer<typeof retireDriveInputSchema>;

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Radio, Select, Text, Textarea } from '@mantine/core';
-import type { Drive, MembershipRole } from '@sparrow/shared';
+import type { MembershipRole } from '@sparrow/shared';
 import { useAssignmentDefaults, type OccupantInput } from '../api/driveMutations';
 import { usePools } from '../api/hooks';
 import { NOT_RECORDED_HINT, OptionalDateField } from './OptionalDateField';
@@ -95,9 +95,10 @@ export interface OutcomeState {
   removedOn: string;
 }
 
-export const initialOutcome = (replacedByDriveId: string | null): OutcomeState => ({
+/** R62: retiring the occupant has no preset reason; the user chooses it. */
+export const initialOutcome = (): OutcomeState => ({
   choice: 'spare',
-  retire: { reason: 'replaced', date: todayLocal(), replacedByDriveId, note: '' },
+  retire: { reason: null, date: todayLocal(), note: '' },
   rmaDate: todayLocal(),
   rmaNote: '',
   removedOn: todayLocal(),
@@ -132,7 +133,6 @@ export function outcomeToResolution(
       reason: s.retire.reason!,
       date: s.retire.date === '' ? null : s.retire.date,
       note: note(s.retire.note),
-      replacedByDriveId: s.retire.replacedByDriveId,
     },
   };
 }
@@ -140,24 +140,11 @@ export function outcomeToResolution(
 interface OutcomeFieldsProps {
   state: OutcomeState;
   onChange: (state: OutcomeState) => void;
-  /** The drive leaving the slot. */
-  outgoing: Drive;
-  /** Every drive, for the "replaced by" choices. */
-  drives: Drive[];
   idPrefix: string;
-  /** Wording of the retire option. */
-  retireLabel?: string;
 }
 
 /** The three outcomes for the outgoing drive with their fields. Shared by the occupied-slot step and Replace with…. */
-export function OutcomeFields({
-  state,
-  onChange,
-  outgoing,
-  drives,
-  idPrefix,
-  retireLabel = 'Retire it (replaced)',
-}: OutcomeFieldsProps) {
+export function OutcomeFields({ state, onChange, idPrefix }: OutcomeFieldsProps) {
   const set = (patch: Partial<OutcomeState>) => onChange({ ...state, ...patch });
   return (
     <>
@@ -168,7 +155,7 @@ export function OutcomeFields({
         aria-label="What happens to the outgoing drive"
       >
         <Radio value="spare" label="Back to spares" mb="xs" />
-        <Radio value="retire" label={retireLabel} mb="xs" />
+        <Radio value="retire" label="Retire it" description="Broken or done" mb="xs" />
         <Radio value="rma" label="Send for RMA" mb="xs" />
       </Radio.Group>
       {state.choice === 'spare' ? (
@@ -182,8 +169,6 @@ export function OutcomeFields({
       {state.choice === 'retire' ? (
         <RetireFields
           idPrefix={idPrefix}
-          drive={outgoing}
-          candidates={drives.filter((d) => d.id !== outgoing.id)}
           values={state.retire}
           onChange={(retire) => set({ retire })}
         />

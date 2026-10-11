@@ -79,7 +79,6 @@ describe('repository records match shared schemas', () => {
       status: 'retired',
       retirementReason: 'replaced',
       retirementDate: '2026-03-04',
-      replacedByDriveId: installed.id,
       retirementNote: 'SMART failures',
       driveType: 'NVMe',
       condition: 'tested',

@@ -44,7 +44,6 @@ export function makeDrive(over: Partial<Drive> & { id: string; serial: string })
     slotId: null,
     retirementReason: null,
     retirementDate: null,
-    replacedByDriveId: null,
     retirementNote: null,
     installedOn: null,
     createdAt: T,

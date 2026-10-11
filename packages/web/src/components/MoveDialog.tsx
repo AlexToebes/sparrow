@@ -21,14 +21,13 @@ import { StepFlow, type StepDef } from './StepFlow';
 export type MoveDestinationChoice = 'spares' | 'slot' | 'retire' | 'rma';
 type Fill = 'empty' | 'spare';
 type OccupantChoice = 'spare' | 'retire' | 'rma';
-type Step = 'where' | 'bay' | 'occupant' | 'fill' | 'when' | 'details' | 'confirm';
+type Step = 'where' | 'bay' | 'occupant' | 'fill' | 'details' | 'confirm';
 
 const STEP_TITLE: Record<Step, string> = {
   where: 'Where does this drive go?',
   bay: 'Which bay?',
   occupant: 'What happens to the drive in that bay?',
   fill: 'What goes into this bay?',
-  when: 'When? (optional)',
   details: 'Details',
   confirm: 'Confirm',
 };
@@ -116,9 +115,10 @@ function ChoiceCards<V extends string>({
 
 /**
  * R73: "Move" on an installed drive, replacing Replace and Remove to spares. One decision per step
- * (R70): where it goes (spares, another bay, retire, RMA), the bay on the grids, what happens to the
+ * (R70): where it goes (spares, another bay, retire, RMA) together with the one optional date for
+ * everything (R68, R69), the bay on the grids, what happens to the
  * drive already in that bay (R37), what goes into the vacated bay (a spare, with sizes compared,
- * R60), one optional date for everything (R68, R69), pool and role of an incoming spare (R35), then a
+ * R60), pool and role of an incoming spare (R35), then a
  * summary and ONE POST /api/drives/:id/move. A move between bays keeps the pool membership.
  * `initialDestination` preselects the answer to the first question (the Retire button). Mount only
  * while open.
@@ -194,7 +194,6 @@ export function MoveDialog({
       ...(dest === 'slot' ? ['bay' as const] : []),
       ...(dest === 'slot' && occupantId ? ['occupant' as const] : []),
       'fill',
-      'when',
       ...(fill === 'spare' ? ['details' as const] : []),
       'confirm',
     ] satisfies Step[]
@@ -210,7 +209,7 @@ export function MoveDialog({
 
   const valid =
     current === 'where'
-      ? dest !== null && (dest !== 'retire' || reason !== null)
+      ? dest !== null && (dest !== 'retire' || reason !== null) && moveDateError(date) === null
       : current === 'bay'
         ? targetId !== null
         : current === 'occupant'
@@ -224,10 +223,6 @@ export function MoveDialog({
   const next = () => {
     if (current === 'where' && dest === 'retire' && reason === null) {
       return setError('Choose a reason.');
-    }
-    if (current === 'when') {
-      const problem = moveDateError(date);
-      if (problem) return setError(problem);
     }
     const to = steps[index + 1];
     if (to) goTo(to.key);
@@ -254,8 +249,6 @@ export function MoveDialog({
                         action: 'retire' as const,
                         reason: occupantReason!,
                         note: trimmed(occupantNote),
-                        // The moving drive takes the bay, whatever the reason.
-                        replacedByDriveId: drive.id,
                       },
             }
           : {}),
@@ -285,7 +278,7 @@ export function MoveDialog({
   const confirm = () => {
     const problem = moveDateError(date);
     if (problem) {
-      goTo('when');
+      goTo('where');
       return setError(problem);
     }
     setError(null);
@@ -421,6 +414,16 @@ export function MoveDialog({
               onChange={(e) => setNote(e.currentTarget.value)}
             />
           ) : null}
+          <OptionalDateField
+            label="When? (optional)"
+            description={NOT_RECORDED_HINT}
+            value={date}
+            onChange={(v) => {
+              setDate(v);
+              setError(null);
+            }}
+            error={moveDateError(date)}
+          />
           {errorAlert}
         </>
       ) : null}
@@ -527,32 +530,6 @@ export function MoveDialog({
               ) : null}
             </>
           ) : null}
-        </>
-      ) : null}
-
-      {current === 'when' ? (
-        <>
-          <Text>
-            One date for the whole move: when {driveWord} {dest === 'slot' ? 'moved' : 'left'}
-            {dest === 'slot' ? ' (its installation date in the new bay)' : ''}
-            {spare ? (
-              <>
-                {' '}
-                and when <strong className="mono">{spare.serial}</strong> went into {here}
-              </>
-            ) : null}
-            .
-          </Text>
-          <OptionalDateField
-            label="Date (optional)"
-            description={NOT_RECORDED_HINT}
-            value={date}
-            onChange={(v) => {
-              setDate(v);
-              setError(null);
-            }}
-            error={error}
-          />
         </>
       ) : null}
 

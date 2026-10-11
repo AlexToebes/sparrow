@@ -150,26 +150,25 @@ describe('R73: retire and RMA', () => {
       retirementReason: 'failed',
       retirementDate: daysAgo(4),
       retirementNote: 'clicking',
-      replacedByDriveId: null,
     });
     expect(ofType(a.id, 'drive-removed')[0]!.payload).toMatchObject({ removedOn: daysAgo(4) });
     expect(ofType(a.id, 'drive-retired')).toHaveLength(1);
     expect(ofType(a.id, 'pool-left')).toHaveLength(1);
   });
 
-  it('R73, R62: retiring with a replacement sets replaced-by to it, whatever the reason', () => {
+  it('R73: retiring with a replacement puts the spare in the vacated bay', () => {
     const { a, s1 } = setup();
     const c = spare('C');
     const result = moveDrive(db(), a.id, {
       destination: { kind: 'retire', reason: 'other' },
       replacement: { driveId: c.id },
     });
-    expect(result.drive.replacedByDriveId).toBe(c.id);
+    expect(result.drive.status).toBe('retired');
     expect(getDrive(db(), c.id)).toMatchObject({ status: 'installed', slotId: s1 });
-    expect(ofType(a.id, 'drive-retired')[0]!.payload).toMatchObject({ replacedByDriveId: c.id });
+    expect(ofType(a.id, 'drive-retired')[0]!.payload).not.toHaveProperty('replacedByDriveId');
   });
 
-  it('R73, R27: RMA writes the RMA event; with a replacement it is linked as replaced-by', () => {
+  it('R73, R27: RMA writes the RMA event; with a replacement the spare takes the bay', () => {
     const { a, b } = setup();
     const c = spare('C');
     moveDrive(db(), a.id, { destination: { kind: 'rma', note: 'sent' }, date: daysAgo(1) });
@@ -179,7 +178,7 @@ describe('R73: retire and RMA', () => {
       note: 'sent',
     });
     moveDrive(db(), b.id, { destination: { kind: 'rma' }, replacement: { driveId: c.id } });
-    expect(getDrive(db(), b.id).replacedByDriveId).toBe(c.id);
+    expect(getDrive(db(), b.id).status).toBe('retired');
     expect(getDrive(db(), c.id).status).toBe('installed');
   });
 
@@ -284,7 +283,7 @@ describe('R73: move to another bay', () => {
     expect(members(b.id)[0]!.endedAt).not.toBeNull();
   });
 
-  it('R73, R37, R62: occupant retired as replaced is replaced by the moving drive; dates follow the move', () => {
+  it('R73, R37, R62: occupant retired with the chosen reason; dates follow the move', () => {
     const { a, b, s2 } = setup();
     moveDrive(db(), a.id, {
       destination: {
@@ -297,7 +296,6 @@ describe('R73: move to another bay', () => {
     expect(getDrive(db(), b.id)).toMatchObject({
       status: 'retired',
       retirementReason: 'replaced',
-      replacedByDriveId: a.id,
       retirementDate: daysAgo(2),
       retirementNote: 'old',
     });
