@@ -8,6 +8,7 @@ import { useDrives, useLayout, usePools } from '../api/hooks';
 import { poolDetailSchema, type PoolSummary } from '../api/schemas';
 import { DeletePool, PoolForm } from '../components/PoolForm';
 import { DriveDetail } from '../components/DriveDetail';
+import { PoolHistory } from '../components/PoolHistory';
 import { AlertTriangleIcon, CheckCircleIcon, PlusIcon } from '../components/icons';
 import { formatBytes } from '../lib/format';
 import { slotLabel } from '../lib/health';
@@ -105,6 +106,7 @@ function PoolCard({
           ))}
         </ul>
       ) : null}
+      <PoolHistory poolId={pool.id} poolName={pool.name} />
     </section>
   );
 }

@@ -28,6 +28,7 @@ export const queryKeys = {
   slotStatus: ['status'] as const,
   pools: ['pools'] as const,
   pool: (id: string) => ['pools', id] as const,
+  poolHistory: (id: string) => ['pools', id, 'history'] as const,
 };
 
 export const useLayout = () =>
@@ -53,6 +54,14 @@ export const useSlotHistory = (slotId: string | null) =>
     queryKey: queryKeys.slotHistory(slotId ?? ''),
     queryFn: () => apiGet(`/api/slots/${slotId}/history`, slotHistorySchema),
     enabled: slotId !== null,
+  });
+
+/** The pool's history (its record and its members joining, leaving, changing role), newest first. */
+export const usePoolHistory = (poolId: string, enabled: boolean) =>
+  useQuery({
+    queryKey: queryKeys.poolHistory(poolId),
+    queryFn: () => apiGet(`/api/pools/${poolId}/history`, eventsSchema),
+    enabled,
   });
 
 export const useInbox = () =>

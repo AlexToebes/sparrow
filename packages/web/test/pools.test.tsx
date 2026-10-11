@@ -4,6 +4,7 @@ import userEvent from './user';
 import { App } from '../src/App';
 import { sizeCheckText } from '../src/lib/poolSize';
 import { errorResponse, posts, setupServer, T } from './server';
+import { drive, makeEvent } from './events';
 import { renderApp } from './utils';
 
 const pool = (id: string, name: string, over: Record<string, unknown> = {}) => ({
@@ -29,7 +30,7 @@ const member = (driveId: string, serial: string, over: Record<string, unknown> =
   ...over,
 });
 
-function twoPools() {
+function twoPools(extra: Record<string, unknown> = {}) {
   const tank = pool('p1', 'tank', { expectedMembers: 3, memberCount: 2, sizeCheck: 'fewer' });
   const scratch = pool('p2', 'scratch', { layoutLabel: null });
   return setupServer({
@@ -42,6 +43,7 @@ function twoPools() {
       ],
     },
     'GET /api/pools/p2': { ...scratch, members: [] },
+    ...extra,
   });
 }
 
@@ -52,6 +54,73 @@ describe('sizeCheckText (R34)', () => {
     expect(sizeCheckText('more', 7, 6)).toBe('7 drives, expected 6');
     expect(sizeCheckText('ok', 6, 6)).toBe('6 of 6 drives');
     expect(sizeCheckText(null, 6, null)).toBeNull();
+  });
+});
+
+describe('Pool history on the card (events linked to the pool)', () => {
+  const poolLink = [{ poolId: 'p1', poolName: 'tank' }];
+  const history = [
+    makeEvent(
+      'pool-left',
+      '2026-10-11T09:00:00.000Z',
+      { role: 'data' },
+      { drives: [drive('d0', 'AAA0')], pools: poolLink },
+    ),
+    makeEvent(
+      'pool-updated',
+      '2026-10-10T09:00:00.000Z',
+      { name: 'tank', changes: { name: { from: 'old', to: 'tank' } } },
+      { drives: [], pools: poolLink },
+    ),
+    makeEvent(
+      'pool-role-changed',
+      '2026-10-09T09:00:00.000Z',
+      { from: 'data', to: 'hot-spare' },
+      { drives: [drive('d2', 'CCC2')], pools: poolLink },
+    ),
+    makeEvent(
+      'pool-joined',
+      '2026-10-08T09:00:00.000Z',
+      { role: 'data', startedAt: '2022-04-05T00:00:00.000Z' },
+      { drives: [drive('d0', 'AAA0')], pools: poolLink },
+    ),
+    makeEvent('pool-created', '2026-10-07T09:00:00.000Z', {}, { drives: [], pools: poolLink }),
+  ];
+
+  it('is collapsed by default and loads the history only when opened', async () => {
+    const calls = twoPools();
+    renderApp(<App />, '/pools');
+    const tank = await screen.findByRole('region', { name: 'tank' });
+    const summary = within(tank).getByText('History');
+    expect(summary.closest('details')).not.toHaveAttribute('open');
+    expect(calls.some((c) => c.url.includes('/api/pools/p1/history'))).toBe(false);
+  });
+
+  it('lists the pool events newest first with members named from the drive links', async () => {
+    twoPools({ 'GET /api/pools/p1/history': history });
+    renderApp(<App />, '/pools');
+    const tank = await screen.findByRole('region', { name: 'tank' });
+    await userEvent.click(within(tank).getByText('History'));
+    const list = await within(tank).findByRole('list', { name: 'tank history list' });
+    const items = within(list).getAllByRole('listitem');
+    expect(items.map((i) => i.querySelector('.story-title')!.textContent)).toEqual([
+      'AAA0 left',
+      'Renamed from old to tank',
+      'CCC2 changed role',
+      'AAA0 joined as data',
+      'Pool created',
+    ]);
+    expect(items[2]).toHaveTextContent('data → hot spare');
+    // A start date the user gave is shown as typed.
+    expect(items[3]).toHaveTextContent('2022-04-05');
+  });
+
+  it('says so when a pool has no history yet', async () => {
+    twoPools({ 'GET /api/pools/p2/history': [] });
+    renderApp(<App />, '/pools');
+    const scratch = await screen.findByRole('region', { name: 'scratch' });
+    await userEvent.click(within(scratch).getByText('History'));
+    expect(await within(scratch).findByText('No history yet.')).toBeInTheDocument();
   });
 });
 

@@ -1298,3 +1298,21 @@ body {
 .pool-member > :last-child {
   justify-self: end;
 }
+
+/* Pool card: collapsed history list (events linked to the pool). */
+.pool-history {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--sp-line);
+}
+.pool-history > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+.pool-history-list {
+  margin-top: 10px;
+}
