@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { App } from '../src/App';
 import { makeDrive } from './utils';
 import { errorResponse, fixtureData, posts, setupServer } from './server';
-import { pickSlot, renderApp } from './utils';
+import { next, pickSlot, renderApp } from './utils';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const field = (root: Pick<typeof screen, 'getAllByLabelText'>, label: string | RegExp) =>
@@ -22,11 +22,15 @@ describe('Assigning with the slot picker (R70, R8, R35)', () => {
     // An empty tile's "+ Assign" opens the dialog with that slot selected.
     await userEvent.click(await screen.findByRole('button', { name: /^Bay 2, Empty/ }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
-    const bay2 = await within(dlg).findByRole('radio', { name: 'Front bays, Bay 2, empty' });
-    expect(bay2).toHaveAttribute('aria-checked', 'true');
+    // The slot step is skipped: the first step is the drive, with the bay as a read-only summary.
+    expect(within(dlg).getByText(/Step 1 of 3 · Choose the drive/)).toBeInTheDocument();
+    expect(within(dlg).getByText('Bay 2')).toBeInTheDocument();
+    expect(within(dlg).queryByRole('radio', { name: /Front bays, Bay/ })).not.toBeInTheDocument();
     // The spare is chosen on cards, then the slot's pool and role defaults arrive (R35).
-    await userEvent.click(within(dlg).getByRole('radio', { name: /SPARE9/ }));
+    await userEvent.click(await within(dlg).findByRole('radio', { name: /SPARE9/ }));
+    await next(within(dlg));
     await waitFor(() => expect(field(within(dlg), 'Pool')).toHaveValue('No pool'));
+    await next(within(dlg));
     await userEvent.click(within(dlg).getByRole('button', { name: 'Assign' }));
     await waitFor(() => expect(posts(calls, '/api/slots/s1/assign')).toHaveLength(1));
     expect(posts(calls, '/api/slots/s1/assign')[0]!.body).toMatchObject({
@@ -51,11 +55,64 @@ describe('Assigning with the slot picker (R70, R8, R35)', () => {
     expect(big).toHaveTextContent('Desk drawer');
     expect(within(dlg).queryByText('OLD7')).not.toBeInTheDocument();
     expect(within(dlg).queryByRole('textbox', { name: 'Search spares' })).not.toBeInTheDocument();
-    // Nothing is chosen yet, so the dialog cannot assign.
-    expect(within(dlg).getByRole('button', { name: 'Assign' })).toBeDisabled();
+    // The picker step shows nothing else, and nothing is chosen yet, so Next is disabled.
+    expect(within(dlg).queryByLabelText('Pool')).not.toBeInTheDocument();
+    expect(within(dlg).queryByLabelText('Installed on (optional)')).not.toBeInTheDocument();
+    expect(within(dlg).getByRole('button', { name: 'Next' })).toBeDisabled();
     await userEvent.click(big);
     expect(big).toHaveAttribute('aria-checked', 'true');
-    expect(within(dlg).getByRole('button', { name: 'Assign' })).toBeEnabled();
+    expect(within(dlg).getByRole('button', { name: 'Next' })).toBeEnabled();
+  });
+
+  it('R70: opened from a slot, "Change" brings the slot step back and the step count follows', async () => {
+    const calls = setupServer();
+    renderApp(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: /^Bay 2, Empty/ }));
+    const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
+    expect(within(dlg).getByText(/Step 1 of 3 · Choose the drive/)).toBeInTheDocument();
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Change' }));
+    // The picker is alone on its step, with Bay 2 still selected.
+    expect(within(dlg).getByText(/Step 1 of 4 · Choose the slot/)).toBeInTheDocument();
+    expect(within(dlg).getByRole('radio', { name: 'Front bays, Bay 2, empty' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(within(dlg).queryByRole('radio', { name: /SPARE9/ })).not.toBeInTheDocument();
+    expect(within(dlg).queryByRole('button', { name: 'Change' })).not.toBeInTheDocument();
+    await pickSlot(within(dlg), /Bay 1, occupied/);
+    await next(within(dlg));
+    expect(within(dlg).getByText(/Step 2 of 5 · Choose the drive/)).toBeInTheDocument();
+    await userEvent.click(within(dlg).getByRole('radio', { name: /SPARE9/ }));
+    await next(within(dlg));
+    expect(
+      within(dlg).getByText(/Step 3 of 5 · What happens to the drive in this bay/),
+    ).toBeInTheDocument();
+    // Back keeps the choices made on earlier steps.
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Back' }));
+    expect(within(dlg).getByRole('radio', { name: /SPARE9/ })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Back' }));
+    expect(within(dlg).getByRole('radio', { name: /Bay 1, occupied/ })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(within(dlg).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    expect(posts(calls, '/api/slots/s0/assign')).toHaveLength(0);
+  });
+
+  it('R70: the confirm step summarises the placement before the one API call', async () => {
+    const calls = setupServer();
+    renderApp(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Assign SPARE9' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
+    await pickSlot(within(dlg), /Bay 2, empty/);
+    await next(within(dlg));
+    await next(within(dlg));
+    expect(within(dlg).getByText(/Step 3 of 3 · Confirm/)).toBeInTheDocument();
+    expect(within(dlg).getByText(/goes into/)).toHaveTextContent(/SPARE9.*goes into Bay 2/);
+    expect(posts(calls, '/api/slots/s1/assign')).toHaveLength(0);
   });
 
   it('R8: with more than six spares the cards get a search box', async () => {
@@ -90,11 +147,18 @@ describe('Assigning with the slot picker (R70, R8, R35)', () => {
     renderApp(<App />, '/');
     await userEvent.click(await screen.findByRole('button', { name: 'Assign SPARE9' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
+    expect(within(dlg).getByText(/Step 1 of 3 · Choose the slot/)).toBeInTheDocument();
     await pickSlot(within(dlg), /Bay 3, occupied by CCC2/);
+    // The occupant step is added once the chosen slot is occupied.
+    expect(within(dlg).getByText(/Step 1 of 4 · Choose the slot/)).toBeInTheDocument();
+    await next(within(dlg));
+    const occ = dlg;
+    expect(
+      within(occ).getByText(/Step 2 of 4 · What happens to the drive in this bay/),
+    ).toBeInTheDocument();
+    await next(within(occ));
     await waitFor(() => expect(field(within(dlg), 'Pool')).toHaveValue('tank · raidz2'));
-    expect(within(dlg).getByText(/This slot is occupied by CCC2/)).toBeInTheDocument();
-    await userEvent.click(within(dlg).getByRole('button', { name: 'Next' }));
-    const occ = await screen.findByRole('dialog', { name: 'Bay 3 is occupied' });
+    await next(within(occ));
     await userEvent.click(within(occ).getByRole('button', { name: 'Move to spares and assign' }));
     await waitFor(() => expect(posts(calls, '/api/slots/s2/assign')).toHaveLength(1));
     expect(posts(calls, '/api/slots/s2/assign')[0]!.body).toMatchObject({
@@ -111,12 +175,13 @@ describe('Assigning with the slot picker (R70, R8, R35)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Assign SPARE9' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
     await pickSlot(within(dlg), /Bay 1, occupied/);
-    await waitFor(() => expect(field(within(dlg), 'Pool')).toHaveValue('tank · raidz2'));
-    await userEvent.click(within(dlg).getByRole('button', { name: 'Next' }));
-    const occ = await screen.findByRole('dialog', { name: 'Bay 1 is occupied' });
+    await next(within(dlg));
+    const occ = dlg;
     const removed = within(occ).getByLabelText('Removed on (optional)');
     expect((removed as HTMLInputElement).value).toMatch(DATE);
     await userEvent.click(within(occ).getByRole('button', { name: 'Clear' }));
+    await next(within(occ));
+    await next(within(occ));
     await userEvent.click(within(occ).getByRole('button', { name: 'Move to spares and assign' }));
     await waitFor(() => expect(posts(calls, '/api/slots/s0/assign')).toHaveLength(1));
     expect(posts(calls, '/api/slots/s0/assign')[0]!.body).toMatchObject({

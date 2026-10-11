@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
-import { render, within } from '@testing-library/react';
+import { render, waitFor, within } from '@testing-library/react';
+import { expect } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -82,4 +83,11 @@ export function mockApi(routes: Record<string, unknown>) {
 /** R70: choose a slot on the visual picker by its radio name, e.g. /Front bays, Bay 2, empty/. */
 export async function pickSlot(root: ReturnType<typeof within>, name: string | RegExp) {
   await userEvent.click(await root.findByRole('radio', { name }));
+}
+
+/** Multi-step dialogs: press Next (waits until it is enabled, e.g. once the pool defaults loaded). */
+export async function next(root: ReturnType<typeof within>) {
+  const button = await root.findByRole('button', { name: 'Next' });
+  await waitFor(() => expect(button).toBeEnabled());
+  await userEvent.click(button);
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../src/App';
-import { makeDrive, makeSlot, pickSlot, renderApp } from './utils';
+import { makeDrive, makeSlot, next, pickSlot, renderApp } from './utils';
 
 const T = '2026-01-01T00:00:00.000Z';
 const recent = new Date(Date.now() - 2 * 60_000).toISOString();
@@ -148,8 +148,11 @@ describe('Inbox (R22, R23, R25, R58)', () => {
     expect(posts(calls, '/api/inbox/ABC%2F1/link')).toHaveLength(0);
     await userEvent.click(within(card).getByRole('button', { name: 'Link to SPARE1' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
+    expect(within(dlg).getByText(/Step 1 of 3 · Choose the slot/)).toBeInTheDocument();
     await pickSlot(within(dlg), /Bay 2, empty/);
+    await next(within(dlg));
     await waitFor(() => expect(field(within(dlg), 'Pool')).toHaveValue('tank · raidz2'));
+    await next(within(dlg));
     await userEvent.click(within(dlg).getByRole('button', { name: 'Assign' }));
     await waitFor(() => expect(posts(calls, '/api/inbox/ABC%2F1/link')).toHaveLength(1));
     expect(posts(calls, '/api/inbox/ABC%2F1/link')[0]!.body).toEqual({
@@ -175,8 +178,11 @@ describe('Inbox (R22, R23, R25, R58)', () => {
     await pick(within(pickDlg), 'Spare', /SPARE1/);
     await userEvent.click(within(pickDlg).getByRole('button', { name: 'Next' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
+    expect(within(dlg).getByText(/Step 1 of 3 · Choose the slot/)).toBeInTheDocument();
     await pickSlot(within(dlg), /Bay 2, empty/);
+    await next(within(dlg));
     await waitFor(() => expect(field(within(dlg), 'Pool')).toHaveValue('tank · raidz2'));
+    await next(within(dlg));
     await userEvent.click(within(dlg).getByRole('button', { name: 'Assign' }));
     await waitFor(() => expect(posts(calls, '/api/inbox/X1/link')).toHaveLength(1));
   });
@@ -193,9 +199,11 @@ describe('Inbox (R22, R23, R25, R58)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Create new record' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
     await pickSlot(within(dlg), /Bay 1, occupied by AAA0/);
-    await waitFor(() => expect(field(within(dlg), 'Pool')).toHaveValue('tank · raidz2'));
-    await userEvent.click(within(dlg).getByRole('button', { name: 'Next' }));
-    const occ = await screen.findByRole('dialog', { name: 'Bay 1 is occupied' });
+    await next(within(dlg));
+    const occ = dlg;
+    expect(within(occ).getByText(/Step 2 of 4 · What happens to the drive/)).toBeInTheDocument();
+    await next(within(occ));
+    await next(within(occ));
     await userEvent.click(within(occ).getByRole('button', { name: 'Move to spares and assign' }));
     await waitFor(() => expect(posts(calls, '/api/inbox/X2/create')).toHaveLength(1));
     expect(posts(calls, '/api/inbox/X2/create')[0]!.body).toEqual({
@@ -219,9 +227,11 @@ describe('Inbox (R22, R23, R25, R58)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Create new record' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
     await pickSlot(within(dlg), /Bay 2, empty/);
+    await next(within(dlg));
     fireEvent.change(within(dlg).getByLabelText('Installed on (optional)'), {
       target: { value: '2022-03-04' },
     });
+    await next(within(dlg));
     await userEvent.click(within(dlg).getByRole('button', { name: 'Assign' }));
     await waitFor(() => expect(posts(calls, '/api/inbox/X2/create')).toHaveLength(1));
     expect(posts(calls, '/api/inbox/X2/create')[0]!.body).toMatchObject({
@@ -241,12 +251,15 @@ describe('Inbox (R22, R23, R25, R58)', () => {
     renderApp(<App />, '/inbox');
     await userEvent.click(await screen.findByRole('button', { name: 'Create new record' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
+    await pickSlot(within(dlg), /Bay 2, empty/);
+    await next(within(dlg));
     const date = within(dlg).getByLabelText('Installed on (optional)');
     expect(date).toHaveValue('');
     expect(
       within(dlg).getByText(/it’s better to show ‘not recorded’ than a guess/),
     ).toBeInTheDocument();
-    await pickSlot(within(dlg), /Bay 2, empty/);
+    await next(within(dlg));
+    expect(within(dlg).getByText(/Install date: not recorded/)).toBeInTheDocument();
     await userEvent.click(within(dlg).getByRole('button', { name: 'Assign' }));
     await waitFor(() => expect(posts(calls, '/api/inbox/X2/create')).toHaveLength(1));
     expect(posts(calls, '/api/inbox/X2/create')[0]!.body).not.toHaveProperty('installedOn');

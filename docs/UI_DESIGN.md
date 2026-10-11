@@ -50,6 +50,9 @@ material, not code to copy: build with Mantine components, the shared zod types 
   check icon. Occupied tiles are selectable and lead to the occupant step.
 - Spares are chosen on cards (`SparePicker`), not a dropdown. "Replace" shows the fixed bay as a read-only grid.
 
+## Multi-step dialogs (R70)
+- One decision per step; the slot picker is always its own step. `StepFlow` shows "Step N of M · title" (M counts only the steps in play), one step's content, and a footer (Back / Next, or the final action) that stays visible while the content scrolls. Next is disabled until the step is valid, and focus moves to the step heading on every change. On a phone the dialog is fullscreen. Assign and Replace use it; opened from a slot, Assign skips the slot step and shows a read-only bay summary with a "Change" link.
+
 ## Formatting rules
 - Capacities in decimal units via one helper (`formatBytes(4_000_000_000_000) === "4 TB"`, 500 GB, 1.92 TB).
 - Timestamps: stored UTC, shown in local time; relative ("2 min ago", "3 d ago") for freshness, absolute
