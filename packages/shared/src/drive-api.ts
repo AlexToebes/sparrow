@@ -36,6 +36,8 @@ export const updateDriveInputSchema = z.strictObject({
   serial: serialInput.optional(),
   /** The R2 fallback identifier: trimmed; null clears it. */
   wwn: z.string().trim().pipe(fields.wwn.unwrap()).nullable().optional(),
+  /** R68: only for an installed drive; the server rejects it for spares and retired drives. */
+  installedOn: fields.installedOn.unwrap().optional(),
   ...editableFields,
 });
 export type UpdateDriveInput = z.infer<typeof updateDriveInputSchema>;

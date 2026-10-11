@@ -1,0 +1,790 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "fe34aa4c-a349-4f56-8084-bb4c13ac9ab3",
+  "prevId": "34453db5-1df1-41f1-9b68-d547941bcf95",
+  "tables": {
+    "app_meta": {
+      "name": "app_meta",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "drives": {
+      "name": "drives",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "serial": {
+          "name": "serial",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "serial_normalized": {
+          "name": "serial_normalized",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "wwn": {
+          "name": "wwn",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "capacity_bytes": {
+          "name": "capacity_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "drive_type": {
+          "name": "drive_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "form_factor": {
+          "name": "form_factor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "storage_location": {
+          "name": "storage_location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "condition": {
+          "name": "condition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_test_date": {
+          "name": "last_test_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "purchase_date": {
+          "name": "purchase_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "warranty_expiry": {
+          "name": "warranty_expiry",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "vendor": {
+          "name": "vendor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "slot_id": {
+          "name": "slot_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "retirement_reason": {
+          "name": "retirement_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "retirement_date": {
+          "name": "retirement_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "replaced_by_drive_id": {
+          "name": "replaced_by_drive_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "retirement_note": {
+          "name": "retirement_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "installed_on": {
+          "name": "installed_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "drives_serial_normalized_unique": {
+          "name": "drives_serial_normalized_unique",
+          "columns": ["serial_normalized"],
+          "isUnique": true
+        },
+        "drives_slot_id_unique": {
+          "name": "drives_slot_id_unique",
+          "columns": ["slot_id"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "drives_slot_id_slots_id_fk": {
+          "name": "drives_slot_id_slots_id_fk",
+          "tableFrom": "drives",
+          "tableTo": "slots",
+          "columnsFrom": ["slot_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "drives_replaced_by_drive_id_drives_id_fk": {
+          "name": "drives_replaced_by_drive_id_drives_id_fk",
+          "tableFrom": "drives",
+          "tableTo": "drives",
+          "columnsFrom": ["replaced_by_drive_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "drives_slot_only_when_installed": {
+          "name": "drives_slot_only_when_installed",
+          "value": "\"drives\".\"slot_id\" IS NULL OR \"drives\".\"status\" = 'installed'"
+        },
+        "drives_installed_needs_slot": {
+          "name": "drives_installed_needs_slot",
+          "value": "\"drives\".\"status\" <> 'installed' OR \"drives\".\"slot_id\" IS NOT NULL"
+        },
+        "drives_installed_on_only_when_installed": {
+          "name": "drives_installed_on_only_when_installed",
+          "value": "\"drives\".\"installed_on\" IS NULL OR \"drives\".\"status\" = 'installed'"
+        },
+        "drives_installed_needs_installed_on": {
+          "name": "drives_installed_needs_installed_on",
+          "value": "\"drives\".\"status\" <> 'installed' OR \"drives\".\"installed_on\" IS NOT NULL"
+        },
+        "drives_retired_needs_reason_and_date": {
+          "name": "drives_retired_needs_reason_and_date",
+          "value": "\"drives\".\"status\" <> 'retired' OR (\"drives\".\"retirement_reason\" IS NOT NULL AND \"drives\".\"retirement_date\" IS NOT NULL)"
+        },
+        "drives_not_replaced_by_self": {
+          "name": "drives_not_replaced_by_self",
+          "value": "\"drives\".\"replaced_by_drive_id\" IS NULL OR \"drives\".\"replaced_by_drive_id\" <> \"drives\".\"id\""
+        },
+        "drives_drive_type_enum": {
+          "name": "drives_drive_type_enum",
+          "value": "drive_type IS NULL OR drive_type IN ('HDD', 'SSD', 'NVMe')"
+        },
+        "drives_status_enum": {
+          "name": "drives_status_enum",
+          "value": "status IN ('spare', 'installed', 'retired')"
+        },
+        "drives_condition_enum": {
+          "name": "drives_condition_enum",
+          "value": "condition IS NULL OR condition IN ('new', 'used', 'tested')"
+        },
+        "drives_retirement_reason_enum": {
+          "name": "drives_retirement_reason_enum",
+          "value": "retirement_reason IS NULL OR retirement_reason IN ('failed', 'replaced', 'other')"
+        }
+      }
+    },
+    "enclosures": {
+      "name": "enclosures",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "enclosures_name_not_empty": {
+          "name": "enclosures_name_not_empty",
+          "value": "length(\"enclosures\".\"name\") > 0"
+        }
+      }
+    },
+    "events": {
+      "name": "events",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "drive_id": {
+          "name": "drive_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "at": {
+          "name": "at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payload": {
+          "name": "payload",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "events_drive_at_idx": {
+          "name": "events_drive_at_idx",
+          "columns": ["drive_id", "at"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "events_drive_id_drives_id_fk": {
+          "name": "events_drive_id_drives_id_fk",
+          "tableFrom": "events",
+          "tableTo": "drives",
+          "columnsFrom": ["drive_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "events_type_enum": {
+          "name": "events_type_enum",
+          "value": "type IN ('drive-created', 'drive-updated', 'drive-installed', 'drive-removed', 'drive-retired', 'drive-reinstated', 'drive-sent-for-rma', 'drive-linked', 'pool-joined', 'pool-left', 'pool-role-changed')"
+        }
+      }
+    },
+    "grids": {
+      "name": "grids",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "enclosure_id": {
+          "name": "enclosure_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rows": {
+          "name": "rows",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "columns": {
+          "name": "columns",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "orientation": {
+          "name": "orientation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "grids_enclosure_name_unique": {
+          "name": "grids_enclosure_name_unique",
+          "columns": ["enclosure_id", "name"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "grids_enclosure_id_enclosures_id_fk": {
+          "name": "grids_enclosure_id_enclosures_id_fk",
+          "tableFrom": "grids",
+          "tableTo": "enclosures",
+          "columnsFrom": ["enclosure_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "grids_name_not_empty": {
+          "name": "grids_name_not_empty",
+          "value": "length(\"grids\".\"name\") > 0"
+        },
+        "grids_rows_min": {
+          "name": "grids_rows_min",
+          "value": "\"grids\".\"rows\" >= 1"
+        },
+        "grids_columns_min": {
+          "name": "grids_columns_min",
+          "value": "\"grids\".\"columns\" >= 1"
+        },
+        "grids_orientation_enum": {
+          "name": "grids_orientation_enum",
+          "value": "orientation IN ('landscape', 'portrait')"
+        }
+      }
+    },
+    "memberships": {
+      "name": "memberships",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "drive_id": {
+          "name": "drive_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pool_id": {
+          "name": "pool_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ended_at": {
+          "name": "ended_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "memberships_one_open_per_drive": {
+          "name": "memberships_one_open_per_drive",
+          "columns": ["drive_id"],
+          "isUnique": true,
+          "where": "\"memberships\".\"ended_at\" IS NULL"
+        }
+      },
+      "foreignKeys": {
+        "memberships_drive_id_drives_id_fk": {
+          "name": "memberships_drive_id_drives_id_fk",
+          "tableFrom": "memberships",
+          "tableTo": "drives",
+          "columnsFrom": ["drive_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "memberships_pool_id_pools_id_fk": {
+          "name": "memberships_pool_id_pools_id_fk",
+          "tableFrom": "memberships",
+          "tableTo": "pools",
+          "columnsFrom": ["pool_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "memberships_ended_after_started": {
+          "name": "memberships_ended_after_started",
+          "value": "\"memberships\".\"ended_at\" IS NULL OR \"memberships\".\"ended_at\" >= \"memberships\".\"started_at\""
+        },
+        "memberships_role_enum": {
+          "name": "memberships_role_enum",
+          "value": "role IN ('data', 'hot-spare')"
+        },
+        "memberships_source_enum": {
+          "name": "memberships_source_enum",
+          "value": "source IN ('manual', 'provider-suggested')"
+        }
+      }
+    },
+    "pools": {
+      "name": "pools",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "layout_label": {
+          "name": "layout_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "pools_name_unique": {
+          "name": "pools_name_unique",
+          "columns": ["name"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "pools_name_not_empty": {
+          "name": "pools_name_not_empty",
+          "value": "length(\"pools\".\"name\") > 0"
+        }
+      }
+    },
+    "provider_snapshot": {
+      "name": "provider_snapshot",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider_id": {
+          "name": "provider_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "observations": {
+          "name": "observations",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_success_at": {
+          "name": "last_success_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_attempt_at": {
+          "name": "last_attempt_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "provider_snapshot_singleton": {
+          "name": "provider_snapshot_singleton",
+          "value": "\"provider_snapshot\".\"id\" = 1"
+        }
+      }
+    },
+    "slots": {
+      "name": "slots",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "grid_id": {
+          "name": "grid_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "slots_grid_position_unique": {
+          "name": "slots_grid_position_unique",
+          "columns": ["grid_id", "position"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "slots_grid_id_grids_id_fk": {
+          "name": "slots_grid_id_grids_id_fk",
+          "tableFrom": "slots",
+          "tableTo": "grids",
+          "columnsFrom": ["grid_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "slots_position_min": {
+          "name": "slots_position_min",
+          "value": "\"slots\".\"position\" >= 0"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

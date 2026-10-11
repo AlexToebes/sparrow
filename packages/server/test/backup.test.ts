@@ -339,6 +339,7 @@ describe('R43: failed imports leave data untouched', () => {
       retirementReason: null,
       retirementDate: null,
       retirementNote: null,
+      installedOn: null,
     }));
 
     const err = invalidFrom(() => importData(db(), file, { backupDir }));

@@ -159,7 +159,7 @@ describe('R40: blocked shrink and removal of occupied slots', () => {
 
     // Step 7 owns unassignment; free the slot directly so the grid can be removed.
     opened.sqlite
-      .prepare('UPDATE drives SET slot_id = NULL, status = ? WHERE id = ?')
+      .prepare('UPDATE drives SET slot_id = NULL, installed_on = NULL, status = ? WHERE id = ?')
       .run('spare', drive.id);
     layout.deleteGrid(grid.id);
     expect(service().getLayout().enclosures[0]!.grids).toHaveLength(0);

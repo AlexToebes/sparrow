@@ -11,6 +11,7 @@ import { getGrid, getSlot } from '../db/layout-repo.js';
 import { drives, events, pools } from '../db/schema.js';
 import { conflict, invalid, notFound } from './errors.js';
 import { recordEvent, type DbTransaction } from './events.js';
+import { parseInstalledOn, startOfInstalledOn, todayUtc } from './installed-on.js';
 import { endOpenMembership, openMembership, startMembership } from './memberships.js';
 
 // Slot assignment and retirement (R8, R35, R37, R60, R61, R62, D7). Every public function runs in
@@ -22,7 +23,6 @@ import { endOpenMembership, openMembership, startMembership } from './membership
 type Tx = DbTransaction;
 
 const nowIso = () => new Date().toISOString();
-const todayUtc = () => nowIso().slice(0, 10);
 
 const DEFAULT_ROLE: MembershipRole = 'data';
 
@@ -62,7 +62,7 @@ function freeSlot(tx: Tx, drive: Drive, note: string | null): Drive {
   const pool = endOpenMembership(tx, drive.id, at);
   const updated = tx
     .update(drives)
-    .set({ status: 'spare', slotId: null, updatedAt: at })
+    .set({ status: 'spare', slotId: null, installedOn: null, updatedAt: at })
     .where(eq(drives.id, drive.id))
     .returning()
     .get();
@@ -76,6 +76,8 @@ function freeSlot(tx: Tx, drive: Drive, note: string | null): Drive {
       gridName: info.gridName,
       poolId: pool?.poolId ?? null,
       role: pool?.role ?? null,
+      // R68: the history keeps the installation date, so time in the slot can be computed.
+      installedOn: drive.installedOn,
       note,
     },
   });
@@ -121,6 +123,7 @@ function retireInternal(tx: Tx, driveId: string, opts: RetireOptions): Drive {
     .set({
       status: 'retired',
       slotId: null,
+      installedOn: null,
       retirementReason: opts.reason,
       retirementDate: opts.date,
       replacedByDriveId: opts.replacedByDriveId,
@@ -220,6 +223,8 @@ export interface AssignDriveInput {
   poolId?: string | null | undefined;
   role?: MembershipRole | null | undefined;
   occupant?: OccupantResolution | undefined;
+  /** R68: YYYY-MM-DD the drive actually went in; defaults to today (UTC), never in the future. */
+  installedOn?: string | undefined;
 }
 
 export interface AssignDriveResult {
@@ -230,6 +235,9 @@ export interface AssignDriveResult {
 
 /** spare -> installed (R8, R35, R37). An occupied slot is never silently replaced. */
 export function assignDrive(db: AppDb, input: AssignDriveInput): AssignDriveResult {
+  const clock = new Date();
+  const installedOn =
+    input.installedOn === undefined ? todayUtc(clock) : parseInstalledOn(input.installedOn, clock);
   return db.transaction((tx) => {
     const drive = loadDrive(tx, input.driveId);
     if (drive.status === 'retired') throw invalid('Retired drives cannot be assigned');
@@ -281,18 +289,28 @@ export function assignDrive(db: AppDb, input: AssignDriveInput): AssignDriveResu
     const at = nowIso();
     const updated = tx
       .update(drives)
-      .set({ status: 'installed', slotId: input.slotId, updatedAt: at })
+      .set({ status: 'installed', slotId: input.slotId, installedOn, updatedAt: at })
       .where(eq(drives.id, drive.id))
       .returning()
       .get();
     if (poolId !== null && role !== null) {
-      startMembership(tx, { driveId: drive.id, poolId, role, startedAt: at, slotId: input.slotId });
+      // R29/R68: the membership starts when the drive went in; the events stay stamped "now".
+      const start = startOfInstalledOn(installedOn, new Date(at));
+      startMembership(tx, {
+        driveId: drive.id,
+        poolId,
+        role,
+        startedAt: start.startedAt,
+        slotId: input.slotId,
+        userSupplied: start.userSupplied,
+      });
     }
+    // R14: `at` is when the change was recorded; the installation date travels in the payload.
     recordEvent(tx, {
       driveId: drive.id,
       type: 'drive-installed',
       at,
-      payload: { ...info, poolId, role },
+      payload: { ...info, poolId, role, installedOn },
     });
     return resolved ? { drive: updated, occupant: resolved } : { drive: updated };
   });

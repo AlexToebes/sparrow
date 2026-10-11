@@ -44,9 +44,13 @@ export function makeDrive(over: Partial<Drive> & { id: string; serial: string })
     retirementDate: null,
     replacedByDriveId: null,
     retirementNote: null,
+    installedOn: null,
     createdAt: T,
     updatedAt: T,
     ...over,
+    ...(over.installedOn === undefined && (over.status ?? 'installed') === 'installed'
+      ? { installedOn: '2026-01-01' }
+      : {}),
   };
 }
 

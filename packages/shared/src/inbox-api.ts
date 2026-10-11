@@ -7,7 +7,7 @@ import {
   driveTypeSchema,
   retirementReasonSchema,
 } from './enums.js';
-import { occupantResolutionSchema } from './assignment-api.js';
+import { installedOnSchema, occupantResolutionSchema } from './assignment-api.js';
 import { membershipRoleSchema } from './enums.js';
 import { observationSchema } from './observation.js';
 
@@ -22,6 +22,8 @@ const placement = {
   poolId: idSchema.nullish(),
   role: membershipRoleSchema.optional(),
   occupant: occupantResolutionSchema.optional(),
+  /** R68: omitted = today. */
+  installedOn: installedOnSchema.optional(),
 };
 
 /** POST /api/inbox/:key/link. Links the observation to an existing spare and installs it. */

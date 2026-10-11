@@ -82,7 +82,9 @@ describe('assign (R8, R35, D7)', () => {
       gridName: 'Front',
       poolId: null,
       role: null,
+      installedOn: TODAY(),
     });
+    expect(drive.installedOn).toBe(TODAY());
   });
 
   it('R35: explicit pool creates a manual membership and pool-joined; role defaults to data', () => {
@@ -400,6 +402,7 @@ describe('remove, retire, RMA, reinstate (R60, R61, R27)', () => {
       gridName: 'Front',
       poolId: pool,
       role: 'data',
+      installedOn: TODAY(),
       note: 'shelf',
     });
   });
@@ -546,7 +549,9 @@ describe('invariants and atomicity (D7, R14)', () => {
     assignDrive(db(), { driveId: a.id, slotId: slots[0]! });
     expect(() =>
       opened.sqlite
-        .prepare("UPDATE drives SET status='installed', slot_id=? WHERE id=?")
+        .prepare(
+          "UPDATE drives SET status='installed', installed_on='2026-01-01', slot_id=? WHERE id=?",
+        )
         .run(slots[0], b.id),
     ).toThrow(/UNIQUE/);
     expect(() =>

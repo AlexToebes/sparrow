@@ -8,8 +8,10 @@ import {
   type DriveStatus,
 } from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
-import { drives } from '../db/schema.js';
+import { drives, memberships } from '../db/schema.js';
 import { conflict, notFound } from './errors.js';
+import { parseInstalledOn, startOfInstalledOn } from './installed-on.js';
+import { openMembership } from './memberships.js';
 import { recordEvent, type DbTransaction } from './events.js';
 
 // Drive records are never hard-deleted (D5): there is deliberately no delete function here.
@@ -82,6 +84,7 @@ export function createDrive(
         retirementDate: null,
         replacedByDriveId: null,
         retirementNote: null,
+        installedOn: null,
         createdAt: now,
         updatedAt: now,
       })
@@ -137,6 +140,30 @@ export function updateDrive(db: AppDb, id: string, input: unknown): Drive {
       }
     }
 
+    let membershipStartedAt: { from: string; to: string } | undefined;
+    if (patch.installedOn !== undefined && patch.installedOn !== current.installedOn) {
+      // R68: only while installed; leaving the slot clears the date (history keeps it in events).
+      if (current.status !== 'installed' || current.installedOn === null) {
+        throw conflict(
+          `Drive ${id} is ${current.status}; the installation date can only be set while it is installed`,
+        );
+      }
+      const clock = new Date();
+      const to = parseInstalledOn(patch.installedOn, clock);
+      changes.installedOn = { from: current.installedOn, to };
+      values.installedOn = to;
+      // The open membership started with the install; keep it in step unless it was edited apart.
+      const open = openMembership(tx, id);
+      if (open && open.startedAt.slice(0, 10) === current.installedOn) {
+        const start = startOfInstalledOn(to, clock);
+        tx.update(memberships)
+          .set({ startedAt: start.startedAt })
+          .where(eq(memberships.id, open.id))
+          .run();
+        membershipStartedAt = { from: open.startedAt, to: start.startedAt };
+      }
+    }
+
     for (const field of EDITABLE_FIELDS as readonly EditableField[]) {
       const to = patch[field];
       if (to === undefined) continue;
@@ -154,7 +181,11 @@ export function updateDrive(db: AppDb, id: string, input: unknown): Drive {
       .where(eq(drives.id, id))
       .returning()
       .get();
-    recordEvent(tx, { driveId: id, type: 'drive-updated', payload: { changes } });
+    recordEvent(tx, {
+      driveId: id,
+      type: 'drive-updated',
+      payload: { changes, ...(membershipStartedAt ? { membershipStartedAt } : {}) },
+    });
     return updated;
   });
 }

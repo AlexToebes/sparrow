@@ -108,6 +108,7 @@ const placementOf = (input: LinkObservationInput | CreateFromObservationInput) =
   poolId: input.poolId,
   role: input.role,
   occupant: input.occupant,
+  installedOn: input.installedOn,
 });
 
 /**

@@ -6,6 +6,9 @@ import { membershipRoleSchema, retirementReasonSchema } from './enums.js';
 
 const note = z.string().trim().min(1).max(5000).nullish();
 
+/** R68: the day the drive went into the slot. Omitted = today (UTC); the server rejects future dates. */
+export const installedOnSchema = dateSchema;
+
 /** How to deal with the drive already in the slot (R37). */
 export const occupantResolutionSchema = z.discriminatedUnion('action', [
   z.strictObject({ action: z.literal('spare') }),
@@ -27,6 +30,7 @@ export const assignDriveInputSchema = z.strictObject({
   poolId: idSchema.nullish(),
   role: membershipRoleSchema.optional(),
   occupant: occupantResolutionSchema.optional(),
+  installedOn: installedOnSchema.optional(),
 });
 export type AssignDriveInput = z.infer<typeof assignDriveInputSchema>;
 

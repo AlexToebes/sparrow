@@ -37,6 +37,7 @@ const drive = {
   retirementDate: null,
   replacedByDriveId: null,
   retirementNote: null,
+  installedOn: null,
   ...stamps,
 };
 
@@ -100,11 +101,18 @@ describe('driveSchema', () => {
   });
 
   it('D7: installed requires a slot, and slot only when installed', () => {
-    expect(driveSchema.safeParse({ ...drive, status: 'installed' }).success).toBe(false);
-    expect(driveSchema.safeParse({ ...drive, status: 'installed', slotId: 's1' }).success).toBe(
-      true,
-    );
+    const installed = { ...drive, status: 'installed', installedOn: '2026-01-02' };
+    expect(driveSchema.safeParse(installed).success).toBe(false);
+    expect(driveSchema.safeParse({ ...installed, slotId: 's1' }).success).toBe(true);
     expect(driveSchema.safeParse({ ...drive, slotId: 's1' }).success).toBe(false);
+  });
+
+  it('R68: installedOn is a date, required when installed and only allowed then', () => {
+    const installed = { ...drive, status: 'installed', slotId: 's1' };
+    expect(driveSchema.safeParse({ ...installed, installedOn: null }).success).toBe(false);
+    expect(driveSchema.safeParse({ ...installed, installedOn: '2024-02-29' }).success).toBe(true);
+    expect(driveSchema.safeParse({ ...installed, installedOn: '29/02/2024' }).success).toBe(false);
+    expect(driveSchema.safeParse({ ...drive, installedOn: '2024-02-29' }).success).toBe(false);
   });
 
   it('R60: retired requires reason and date', () => {

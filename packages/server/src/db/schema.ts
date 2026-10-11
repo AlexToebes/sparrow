@@ -96,6 +96,8 @@ export const drives = sqliteTable(
     retirementDate: text('retirement_date'),
     replacedByDriveId: text('replaced_by_drive_id').references((): AnySQLiteColumn => drives.id),
     retirementNote: text('retirement_note'),
+    // R68: calendar date (YYYY-MM-DD) the drive went into its slot; set only while installed.
+    installedOn: text('installed_on'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
   },
@@ -106,6 +108,14 @@ export const drives = sqliteTable(
     check(
       'drives_installed_needs_slot',
       sql`${t.status} <> 'installed' OR ${t.slotId} IS NOT NULL`,
+    ),
+    check(
+      'drives_installed_on_only_when_installed',
+      sql`${t.installedOn} IS NULL OR ${t.status} = 'installed'`,
+    ),
+    check(
+      'drives_installed_needs_installed_on',
+      sql`${t.status} <> 'installed' OR ${t.installedOn} IS NOT NULL`,
     ),
     check(
       'drives_retired_needs_reason_and_date',
