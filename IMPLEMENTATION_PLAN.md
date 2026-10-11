@@ -190,6 +190,10 @@ Backend steps 2 to 10 expose their behavior through API routes as they go, so th
   - Done when: server tests cover pairing, each outcome, unrecorded dates, renamed bays and the 404; an old export with `replacedByDriveId` imports; web tests cover the toggle in each context.
 
 ---
+- [x] **Post-MVP (Dismiss suggestions)**
+  - Requirements: R72 (extended at the owner's request), R14, R53.
+  - What changed: `suggestion-dismissed` events `{ field, value }` (value null = restored); `core/suggestions.ts` hides a suggestion while the latest event for that field has the same (normalized) value, so a different later value reappears; `POST /api/drives/:id/suggestions/dismiss` and `/undismiss` (204; a field not currently suggested / dismissed is 409, nothing written); `GET /api/drives/:id/suggestions` also returns `dismissed`; `GET /api/suggestions` counts exclude dismissed ones. Web: per-row "Dismiss", "Dismiss selected", "N dismissed - show" with "Undo"; life story lines.
+  - Done when: server tests cover hide, reappear on a new value, undo, counts, 409 and events; web tests cover dismiss, dismiss selected, undo and the story.
 
 ## Parking lot (not in the MVP)
 
@@ -200,7 +204,6 @@ Copy from `REQUIREMENTS.md` section 6 and add new ideas here. Do not build these
 - Richer slot display (model, capacity, serial, temperature, pool badge).
 - Reject a retirement or removal date earlier than the installation date (only the removal to spares is checked today, R69).
 - Enclosure-wide "recent changes" feed (all installs, removals and retirements across the NAS, newest first).
-- Dismiss provider suggestions (R72): remember that a "differs" suggestion was seen and rejected, without storing provider data.
 - Swap two installed drives (Move into an occupied bay currently sends the occupant to the spares, retirement or RMA, not into the vacated bay).
 - Several providers at once.
 - Automatic pool membership.
@@ -211,6 +214,8 @@ Copy from `REQUIREMENTS.md` section 6 and add new ideas here. Do not build these
 ## Notes log
 
 - 2026-10-11, Post-MVP 7 (R74, replaced-by removed): the baseline migration `0000_curly_shriek.sql` and `meta/0000_snapshot.json` were EDITED IN PLACE (no new migration; `db:generate` reports no changes), so an existing database must be wiped. The self-FK, `replaced_by_drive_id` and the `drives_not_replaced_by_self` CHECK are gone. Request schemas are strict, so `replacedByDriveId` in a retire, RMA, occupant or move body is now a 400; an OLD export that has it still imports (the field is stripped before validation). Old `drive-retired` / `drive-reinstated` events may still carry `replacedByDriveId` / `previousReplacedByDriveId` in their payload; nothing reads them. Slot history pairs `drive-installed` / `drive-removed` per drive in insertion order (rowid) by the payload `slotId`; a `drive-retired` / `drive-sent-for-rma` event with the same `slotId` right after a removal makes it retired / RMA, `movedToSlotId` makes it moved. Tapping an empty tile now opens the slot panel (history and an "Assign a drive" button) instead of going straight to the Assign dialog. Move's date moved from its own step onto step 1.
+- 2026-10-11, Post-MVP (Dismiss suggestions, R72): no schema change (uses the foundation's `suggestion-dismissed` event type). Dismissal is per drive and field and keyed by the suggested value, so it follows the provider's current value rather than blocking the field forever. Undo is a second event with `value: null` rather than a delete (events are append-only). Dismiss and undismiss answer 204 and are confirm-free in the UI because they are reversible.
+
 - 2026-10-11, R71 label: the inbox is labelled "Discovered" in the UI (`/drives/discovered`, old `/inbox` and `/drives/inbox` redirect); API paths, hooks, file names and schema names keep "inbox". The health box now sits directly under the facts, above the suggested updates. No backend change.
 - 2026-10-11, Post-MVP 5 (R71, R72): suggestions are never stored, so there is no schema change and no migration; "differs" suggestions do not count toward any indicator because the owner may know better and there is no dismissal yet. Applying a WWN that another record holds fails with the usual `updateDrive` 409 (the suggestion is still listed). The inbox badge counts only unresolved observations (R9), not suggested updates, which have their own section. The open drive on the Drives page is now in the URL (`/drives?drive=ID`) so the inbox can link to it. This entry shares the "Post-MVP 5" label with the R70 note below (written before the entry existed).
 - 2026-10-11, Post-MVP (health history, R20): no schema change; the last recorded health is read from the latest `health-changed` event of the drive. Decommissioned observations are skipped (their health is a last-known value, R63). Matched spares and retired drives do get events (status untouched). A failure while recording is logged and never fails the poll or discards the stored snapshot. The story places a health entry at its `reportedAt` (a stale or epoch `reportedAt` therefore sorts early, with the logged day shown as "recorded"); health entries do not affect the in-service or shelf totals.

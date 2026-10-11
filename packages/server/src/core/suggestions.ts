@@ -7,6 +7,7 @@ import type {
 } from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
 import { conflict } from './errors.js';
+import { listDriveEvents, recordEvent } from './events.js';
 import { getDrive, updateDrive } from './drives.js';
 import { getMatchState, type Match } from './matching.js';
 
@@ -64,18 +65,59 @@ export function suggestionsFor({ drive, observation }: Match): Suggestion[] {
   return out;
 }
 
+/**
+ * The latest `suggestion-dismissed` value per field (R72). Events come newest first, so the first
+ * one seen for a field wins; a null value means the owner restored the suggestion.
+ */
+function dismissedValues(db: AppDb, driveId: string): Map<SuggestionField, string | number> {
+  const latest = new Map<SuggestionField, string | number | null>();
+  for (const e of listDriveEvents(db, driveId)) {
+    if (e.type !== 'suggestion-dismissed') continue;
+    const field = e.payload.field as SuggestionField;
+    if (latest.has(field)) continue;
+    const v = e.payload.value;
+    latest.set(field, typeof v === 'string' || typeof v === 'number' ? v : null);
+  }
+  const out = new Map<SuggestionField, string | number>();
+  for (const [f, v] of latest) if (v !== null) out.set(f, v);
+  return out;
+}
+
+/** Splits a match's suggestions into shown ones and ones hidden by a dismissal of the same value. */
+function split(db: AppDb, match: Match): { active: Suggestion[]; dismissed: Suggestion[] } {
+  const all = suggestionsFor(match);
+  if (all.length === 0) return { active: [], dismissed: [] };
+  const hidden = dismissedValues(db, match.drive.id);
+  const active: Suggestion[] = [];
+  const dismissed: Suggestion[] = [];
+  for (const s of all) {
+    const d = hidden.get(s.field);
+    (d !== undefined && same(s.field, d, s.suggested) ? dismissed : active).push(s);
+  }
+  return { active, dismissed };
+}
+
 /** GET /api/drives/:id/suggestions. A drive without a matching observation has none. */
 export function getDriveSuggestions(db: AppDb, providerId: string, driveId: string): Suggestion[] {
+  return getDriveSuggestionLists(db, providerId, driveId).active;
+}
+
+/** The shown suggestions and the dismissed ones (R72). */
+export function getDriveSuggestionLists(
+  db: AppDb,
+  providerId: string,
+  driveId: string,
+): { active: Suggestion[]; dismissed: Suggestion[] } {
   getDrive(db, driveId); // 404 for an unknown drive
   const match = getMatchState(db, providerId).matchedByDriveId.get(driveId);
-  return match ? suggestionsFor(match) : [];
+  return match ? split(db, match) : { active: [], dismissed: [] };
 }
 
 /** GET /api/suggestions: per drive, how many suggestions of each kind (drives with none are left out). */
 export function getSuggestionSummary(db: AppDb, providerId: string): SuggestionSummaryResponse {
   const byDriveId: SuggestionSummaryResponse['byDriveId'] = {};
   for (const [id, match] of getMatchState(db, providerId).matchedByDriveId) {
-    const all = suggestionsFor(match);
+    const all = split(db, match).active; // dismissed ones do not count
     if (all.length === 0) continue;
     const fill = all.filter((s) => s.kind === 'fill');
     byDriveId[id] = {
@@ -85,6 +127,65 @@ export function getSuggestionSummary(db: AppDb, providerId: string): SuggestionS
     };
   }
   return { byDriveId };
+}
+
+/**
+ * POST /api/drives/:id/suggestions/dismiss. Writes one `suggestion-dismissed` event per field,
+ * carrying the suggested value, so the suggestion stays hidden until the provider reports a
+ * different value. A field that is not currently shown fails the whole call (409, nothing written).
+ */
+export function dismissSuggestions(
+  db: AppDb,
+  providerId: string,
+  driveId: string,
+  fields: readonly SuggestionField[],
+): void {
+  getDrive(db, driveId);
+  db.transaction((tx) => {
+    const inner = tx as unknown as AppDb;
+    const match = getMatchState(inner, providerId).matchedByDriveId.get(driveId);
+    const active = match ? split(inner, match).active : [];
+    const picked = [...new Set(fields)].map((field) => {
+      const s = active.find((x) => x.field === field);
+      if (!s) throw conflict(`The suggestion for ${field} no longer applies`, { field });
+      return s;
+    });
+    for (const s of picked) {
+      recordEvent(tx, {
+        driveId,
+        type: 'suggestion-dismissed',
+        payload: { field: s.field, value: s.suggested },
+      });
+    }
+  });
+}
+
+/**
+ * POST /api/drives/:id/suggestions/undismiss. Writes a `suggestion-dismissed` event with
+ * `value: null` ("restored") per field; the latest event per field decides. A field that is not
+ * currently dismissed fails the whole call (409).
+ */
+export function undismissSuggestions(
+  db: AppDb,
+  providerId: string,
+  driveId: string,
+  fields: readonly SuggestionField[],
+): void {
+  getDrive(db, driveId);
+  db.transaction((tx) => {
+    const inner = tx as unknown as AppDb;
+    const match = getMatchState(inner, providerId).matchedByDriveId.get(driveId);
+    const dismissed = match ? split(inner, match).dismissed : [];
+    const picked = [...new Set(fields)].map((field) => {
+      if (!dismissed.some((x) => x.field === field)) {
+        throw conflict(`The suggestion for ${field} is not dismissed`, { field });
+      }
+      return field;
+    });
+    for (const field of picked) {
+      recordEvent(tx, { driveId, type: 'suggestion-dismissed', payload: { field, value: null } });
+    }
+  });
 }
 
 /**
@@ -102,7 +203,7 @@ export function applySuggestions(
   return db.transaction((tx) => {
     const inner = tx as unknown as AppDb; // a transaction handle opens a savepoint, like inbox.ts
     const match = getMatchState(inner, providerId).matchedByDriveId.get(driveId);
-    const current = match ? suggestionsFor(match) : [];
+    const current = match ? split(inner, match).active : [];
     const patch: Record<string, string | number> = {};
     for (const field of new Set(fields)) {
       const suggestion = current.find((s) => s.field === field);

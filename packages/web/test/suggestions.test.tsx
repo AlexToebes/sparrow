@@ -211,4 +211,71 @@ describe('Suggested updates (R72)', () => {
     ]);
     expect(manual[0]!.title).toBe('Details edited');
   });
+
+  it('R72: Dismiss on a row and Dismiss selected post the fields without a confirmation', async () => {
+    const calls = driveSetup({
+      'POST /api/drives/d0/suggestions/dismiss': () => new Response(null, { status: 204 }),
+    });
+    const s = await openDetail();
+    await userEvent.click(s.getByRole('button', { name: 'Dismiss model suggestion' }));
+    await waitFor(() => expect(posts(calls, '/api/drives/d0/suggestions/dismiss')).toHaveLength(1));
+    expect(posts(calls, '/api/drives/d0/suggestions/dismiss')[0]!.body).toEqual({
+      fields: ['model'],
+    });
+    await userEvent.click(s.getByRole('checkbox', { name: /Model/ })); // untick model
+    await userEvent.click(s.getByRole('button', { name: 'Dismiss selected' }));
+    await waitFor(() => expect(posts(calls, '/api/drives/d0/suggestions/dismiss')).toHaveLength(2));
+    expect(posts(calls, '/api/drives/d0/suggestions/dismiss')[1]!.body).toEqual({
+      fields: ['capacityBytes'],
+    });
+  });
+
+  it('R72: dismissed suggestions sit behind "N dismissed — show", with Undo posting to undismiss', async () => {
+    const calls = driveSetup({
+      'GET /api/drives/d0/suggestions': { suggestions: [fill], dismissed: [model] },
+      'POST /api/drives/d0/suggestions/undismiss': () => new Response(null, { status: 204 }),
+    });
+    const s = await openDetail();
+    expect(s.queryByText('WDC WD80')).not.toBeInTheDocument();
+    const toggle = s.getByRole('button', { name: '1 dismissed — show' });
+    await userEvent.click(toggle);
+    expect(s.getByText('WDC WD80')).toBeInTheDocument();
+    await userEvent.click(s.getByRole('button', { name: 'Undo dismissing model suggestion' }));
+    await waitFor(() =>
+      expect(posts(calls, '/api/drives/d0/suggestions/undismiss')).toHaveLength(1),
+    );
+    expect(posts(calls, '/api/drives/d0/suggestions/undismiss')[0]!.body).toEqual({
+      fields: ['model'],
+    });
+  });
+
+  it('R72: the section still shows the dismissed toggle when only dismissed suggestions remain', async () => {
+    driveSetup({ 'GET /api/drives/d0/suggestions': { suggestions: [], dismissed: [model] } });
+    const s = await openDetail();
+    expect(s.getByRole('button', { name: '1 dismissed — show' })).toBeInTheDocument();
+    expect(s.queryByRole('button', { name: 'Apply selected' })).not.toBeInTheDocument();
+  });
+
+  it('R72: the life story reads "Dismissed suggested model \'...\'" and "Restored suggestion for model"', () => {
+    const at = '2026-03-01T10:00:00.000Z';
+    const story = buildStory([
+      {
+        id: 'e2',
+        driveId: 'd0',
+        type: 'suggestion-dismissed',
+        at: '2026-03-02T10:00:00.000Z',
+        payload: { field: 'model', value: null },
+      },
+      {
+        id: 'e1',
+        driveId: 'd0',
+        type: 'suggestion-dismissed',
+        at,
+        payload: { field: 'model', value: 'WDC WD80EFZX' },
+      },
+    ]);
+    const titles = story.map((i) => i.title);
+    expect(titles).toContain("Dismissed suggested model 'WDC WD80EFZX'");
+    expect(titles).toContain('Restored suggestion for model');
+  });
 });
