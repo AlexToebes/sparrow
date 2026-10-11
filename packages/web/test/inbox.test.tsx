@@ -157,7 +157,6 @@ describe('Inbox (R22, R23, R25, R58)', () => {
       slotId: 's1',
       poolId: 'p1',
       role: 'data',
-      installedOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     });
   });
 
@@ -203,7 +202,6 @@ describe('Inbox (R22, R23, R25, R58)', () => {
       slotId: 's0',
       poolId: 'p1',
       role: 'data',
-      installedOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       occupant: { action: 'spare' },
     });
   });
@@ -220,7 +218,7 @@ describe('Inbox (R22, R23, R25, R58)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Create new record' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
     await pick(within(dlg), /^Slot/, 'Bay 2');
-    fireEvent.change(within(dlg).getByLabelText('Installed on'), {
+    fireEvent.change(within(dlg).getByLabelText('Installed on (optional)'), {
       target: { value: '2022-03-04' },
     });
     await userEvent.click(within(dlg).getByRole('button', { name: 'Assign' }));
@@ -229,6 +227,28 @@ describe('Inbox (R22, R23, R25, R58)', () => {
       slotId: 's1',
       installedOn: '2022-03-04',
     });
+  });
+
+  it('R68: in the inbox flow "Installed on" starts empty and nothing is sent unless filled in', async () => {
+    const calls = setup(
+      { 'POST /api/inbox/X2/create': { drive: spare } },
+      {
+        entries: [{ observationKey: 'X2', observation: obs('NEW-2'), suggestion: null }],
+        count: 1,
+      },
+    );
+    renderApp(<App />, '/inbox');
+    await userEvent.click(await screen.findByRole('button', { name: 'Create new record' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
+    const date = within(dlg).getByLabelText('Installed on (optional)');
+    expect(date).toHaveValue('');
+    expect(
+      within(dlg).getByText(/it’s better to show ‘not recorded’ than a guess/),
+    ).toBeInTheDocument();
+    await pick(within(dlg), /^Slot/, 'Bay 2');
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Assign' }));
+    await waitFor(() => expect(posts(calls, '/api/inbox/X2/create')).toHaveLength(1));
+    expect(posts(calls, '/api/inbox/X2/create')[0]!.body).not.toHaveProperty('installedOn');
   });
 
   it('R24: first run (no drives) shows the intro; R58: unidentified is informational only', async () => {

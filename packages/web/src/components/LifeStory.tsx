@@ -14,6 +14,7 @@ export function LifeStory({ driveId }: { driveId: string }) {
   const sum = summarizeStory(data);
   const parts = [
     sum.inService > 0 ? `${formatDuration(sum.inService)} in service` : null,
+    sum.installUnrecorded ? 'Installation date not recorded' : null,
     sum.onShelf > 0 ? `${formatDuration(sum.onShelf)} on the shelf` : null,
   ].filter(Boolean);
   return (
@@ -26,11 +27,19 @@ export function LifeStory({ driveId }: { driveId: string }) {
       ) : null}
       <ol className="story">
         {items.map((item) => (
-          <li key={item.id} className="story-item" data-kind={item.kind}>
+          <li
+            key={item.id}
+            className="story-item"
+            data-kind={item.kind}
+            data-unrecorded={item.unrecorded ? 'true' : undefined}
+          >
             <span className="story-dot" aria-hidden="true" />
             <div className="story-head">
               <span>
                 <span className="mono story-date">{item.date}</span>
+                {item.unrecorded ? (
+                  <span className="story-recorded"> · date recorded, install date unknown</span>
+                ) : null}
                 {item.recorded ? (
                   <span className="story-recorded"> · recorded {item.recorded}</span>
                 ) : null}

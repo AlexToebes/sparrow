@@ -15,8 +15,9 @@ export const todayLocal = (): string => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
-/** R68: the installation date must be a real date and not later than today (local). */
+/** R68: an installation date is optional (empty = not recorded); if given it must be a real date, not later than today (local). */
 export function installedOnError(value: string): string | null {
+  if (value === '') return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value))) {
     return 'Enter the date the drive was installed.';
   }

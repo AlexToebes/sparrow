@@ -11,16 +11,18 @@ import { installedOnError, todayLocal } from './RetireFields';
  */
 export function InstalledOnDialog({ drive, onClose }: { drive: Drive; onClose: () => void }) {
   const update = useUpdateDrive(drive.id);
-  const [value, setValue] = useState(drive.installedOn ?? todayLocal());
+  const [value, setValue] = useState(drive.installedOn ?? '');
   const [problem, setProblem] = useState<string | null>(null);
 
   const save = () => {
     const bad = installedOnError(value);
     setProblem(bad);
     if (bad) return;
-    if (value === drive.installedOn) return onClose();
-    update.mutate({ installedOn: value }, { onSuccess: onClose });
+    const next = value === '' ? null : value;
+    if (next === drive.installedOn) return onClose();
+    update.mutate({ installedOn: next }, { onSuccess: onClose });
   };
+  const clear = () => update.mutate({ installedOn: null }, { onSuccess: onClose });
 
   return (
     <Modal opened onClose={onClose} title="Installation date" centered>
@@ -28,8 +30,8 @@ export function InstalledOnDialog({ drive, onClose }: { drive: Drive; onClose: (
         When did <strong className="mono">{drive.serial}</strong> go into its slot?
       </Text>
       <TextInput
-        label="Installed on"
-        description="The change is logged with today’s date."
+        label="Installed on (optional)"
+        description="Leave empty if you don’t know. The change is logged with today’s date."
         type="date"
         mt="sm"
         max={todayLocal()}
@@ -42,6 +44,11 @@ export function InstalledOnDialog({ drive, onClose }: { drive: Drive; onClose: (
         <Button variant="default" onClick={onClose}>
           Cancel
         </Button>
+        {drive.installedOn ? (
+          <Button variant="default" onClick={clear} disabled={update.isPending}>
+            Clear date
+          </Button>
+        ) : null}
         <Button onClick={save} loading={update.isPending}>
           Save
         </Button>

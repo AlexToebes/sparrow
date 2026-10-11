@@ -226,7 +226,7 @@ describe('Assignment (R8, R35, R37, R62)', () => {
       driveId: 'd9',
       poolId: 'p1',
       role: 'hot-spare',
-      installedOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      installedOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), // moving a spare in now: today
     });
   });
 
@@ -235,13 +235,13 @@ describe('Assignment (R8, R35, R37, R62)', () => {
     renderApp(<App />);
     await userEvent.click(await screen.findByRole('button', { name: 'Assign SPARE9' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
-    const date = within(dlg).getByLabelText('Installed on');
+    const date = within(dlg).getByLabelText('Installed on (optional)');
     expect(date).toHaveAttribute('type', 'date');
     expect((date as HTMLInputElement).value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(date).toHaveAttribute('max', (date as HTMLInputElement).value);
     expect(
       within(dlg).getByText(
-        'Set an earlier date if the drive was installed before you recorded it.',
+        'Leave empty if you don’t know — it’s better to show ‘not recorded’ than a guess.',
       ),
     ).toBeInTheDocument();
     await pick(/^Slot/, /Bay 2/);
@@ -254,18 +254,33 @@ describe('Assignment (R8, R35, R37, R62)', () => {
     });
   });
 
-  it('R68: a cleared or future installation date is refused before anything is sent', async () => {
+  it('R68: Clear empties the field and an explicit null ("not recorded") is sent; Today refills it', async () => {
     const calls = setup();
     renderApp(<App />);
     await userEvent.click(await screen.findByRole('button', { name: 'Assign SPARE9' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
     await pick(/^Slot/, /Bay 2/);
-    fireEvent.change(within(dlg).getByLabelText('Installed on'), { target: { value: '' } });
+    const date = within(dlg).getByLabelText('Installed on (optional)');
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Clear' }));
+    expect(date).toHaveValue('');
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Today' }));
+    expect((date as HTMLInputElement).value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Clear' }));
     await userEvent.click(within(dlg).getByRole('button', { name: 'Assign' }));
-    expect(
-      await within(dlg).findByText(/Enter the date the drive was installed/),
-    ).toBeInTheDocument();
-    fireEvent.change(within(dlg).getByLabelText('Installed on'), {
+    await waitFor(() => expect(posts(calls, '/api/slots/s1/assign')).toHaveLength(1));
+    expect(posts(calls, '/api/slots/s1/assign')[0]!.body).toMatchObject({
+      driveId: 'd9',
+      installedOn: null,
+    });
+  });
+
+  it('R68: a future installation date is refused before anything is sent', async () => {
+    const calls = setup();
+    renderApp(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Assign SPARE9' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
+    await pick(/^Slot/, /Bay 2/);
+    fireEvent.change(within(dlg).getByLabelText('Installed on (optional)'), {
       target: { value: '2999-01-01' },
     });
     await userEvent.click(within(dlg).getByRole('button', { name: 'Assign' }));
@@ -466,7 +481,7 @@ describe('Installation date on the drive detail (R68)', () => {
     expect(row.nextElementSibling).toHaveTextContent('2026-01-01');
     await userEvent.click(screen.getByRole('button', { name: 'Edit installation date' }));
     const dlg = await screen.findByRole('dialog', { name: 'Installation date' });
-    fireEvent.change(within(dlg).getByLabelText('Installed on'), {
+    fireEvent.change(within(dlg).getByLabelText('Installed on (optional)'), {
       target: { value: '2021-02-03' },
     });
     await userEvent.click(within(dlg).getByRole('button', { name: 'Save' }));
@@ -491,13 +506,71 @@ describe('Installation date on the drive detail (R68)', () => {
     await userEvent.click(await screen.findByText('AAA0'));
     await userEvent.click(await screen.findByRole('button', { name: 'Edit installation date' }));
     const dlg = await screen.findByRole('dialog', { name: 'Installation date' });
-    fireEvent.change(within(dlg).getByLabelText('Installed on'), {
+    fireEvent.change(within(dlg).getByLabelText('Installed on (optional)'), {
       target: { value: '2020-01-01' },
     });
     await userEvent.click(within(dlg).getByRole('button', { name: 'Save' }));
     expect(
       await within(dlg).findByText('installedOn must not be in the future'),
     ).toBeInTheDocument();
+  });
+
+  it('shows "not recorded" with a Set date action, and Clear date sends null', async () => {
+    const calls = setup({
+      'GET /api/drives/d0/events': [
+        {
+          id: 'e1',
+          driveId: 'd0',
+          type: 'drive-installed',
+          at: '2026-10-11T09:00:00.000Z',
+          payload: { slotLabel: 'Bay 1', installedOn: null },
+        },
+      ],
+      'GET /api/drives': [makeDrive({ id: 'd0', serial: 'AAA0', slotId: 's0', installedOn: null })],
+      'PATCH /api/drives/d0': makeDrive({
+        id: 'd0',
+        serial: 'AAA0',
+        slotId: 's0',
+        installedOn: null,
+      }),
+    });
+    renderApp(<App />, '/drives');
+    await userEvent.click(await screen.findByText('AAA0'));
+    const setBtn = await screen.findByRole('button', { name: 'Set installation date' });
+    expect(setBtn.closest('dd')).toHaveTextContent('not recorded');
+    expect(setBtn.closest('dd')!.previousElementSibling).toHaveTextContent('Installed');
+    expect(await screen.findByText('Installation date not recorded')).toBeInTheDocument(); // life story header
+    expect(
+      screen.getByText('Installed in Bay 1 (installation date not recorded)'),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Set installation date' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Installation date' });
+    expect(within(dlg).getByLabelText('Installed on (optional)')).toHaveValue('');
+    expect(within(dlg).queryByRole('button', { name: 'Clear date' })).not.toBeInTheDocument();
+    fireEvent.change(within(dlg).getByLabelText('Installed on (optional)'), {
+      target: { value: '2020-05-06' },
+    });
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(posts(calls, '/api/drives/d0')).toHaveLength(1));
+    expect(posts(calls, '/api/drives/d0')[0]!.body).toEqual({ installedOn: '2020-05-06' });
+  });
+
+  it('a dated drive offers Clear date, which sends installedOn null', async () => {
+    const calls = setup({
+      'PATCH /api/drives/d0': makeDrive({
+        id: 'd0',
+        serial: 'AAA0',
+        slotId: 's0',
+        installedOn: null,
+      }),
+    });
+    renderApp(<App />, '/drives');
+    await userEvent.click(await screen.findByText('AAA0'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit installation date' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Installation date' });
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Clear date' }));
+    await waitFor(() => expect(posts(calls, '/api/drives/d0')).toHaveLength(1));
+    expect(posts(calls, '/api/drives/d0')[0]!.body).toEqual({ installedOn: null });
   });
 
   it('offers no installation date for spares or retired drives', async () => {

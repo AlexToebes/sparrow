@@ -9,6 +9,8 @@ export interface StoryItem {
   date: string;
   /** "recorded 2026-10-11" when the entry describes an earlier date than the day it was logged. */
   recorded: string | null;
+  /** R68: an install whose date is unknown; `date` is then the day it was logged ("recorded"). */
+  unrecorded: boolean;
   kind: DriveEvent['type'];
   title: string;
   detail: string | null;
@@ -25,6 +27,10 @@ const dateStr = (v: unknown): string | null => {
   return s !== null && DATE_ONLY.test(s) ? s : null;
 };
 const midnight = (date: string) => `${date}T00:00:00.000Z`;
+
+/** R68: a drive-installed event that says the installation date was not recorded (explicit null). */
+const isUnrecordedInstall = (e: DriveEvent): boolean =>
+  e.type === 'drive-installed' && 'installedOn' in e.payload && e.payload.installedOn === null;
 
 /**
  * R68: the event log records WHEN a change was made (`at`); an installation can describe an earlier
@@ -72,6 +78,8 @@ function installedOnChange(e: DriveEvent): { from: string | null; to: string | n
   return { from: dateStr(from), to: dateStr(to) };
 }
 
+const dateOrNotRecorded = (v: string | null) => v ?? 'not recorded';
+
 function where(p: Record<string, unknown>): string | null {
   const label = str(p.slotLabel);
   const grid = str(p.gridName);
@@ -106,14 +114,19 @@ function describe(
       const date = installedOnChange(e);
       if (date) {
         return {
-          title: `Installation date changed from ${date.from ?? 'unknown'} to ${date.to ?? 'unknown'}`,
+          title: `Installation date changed from ${dateOrNotRecorded(date.from)} to ${dateOrNotRecorded(date.to)}`,
           detail: others.length > 0 ? `Also edited: ${others.join(', ')}` : null,
         };
       }
       return { title: 'Details edited', detail: others.join(', ') || null };
     }
     case 'drive-installed':
-      return { title: `Installed in ${where(p) ?? 'a slot'}`, detail: join(str(p.role), note) };
+      return {
+        title: `Installed in ${where(p) ?? 'a slot'}${
+          isUnrecordedInstall(e) ? ' (installation date not recorded)' : ''
+        }`,
+        detail: join(str(p.role), note),
+      };
     case 'drive-removed':
       return { title: `Removed from ${where(p) ?? 'a slot'}`, detail: note };
     case 'drive-retired':
@@ -157,6 +170,7 @@ export function buildStory(
       at: o.at,
       date: o.date,
       recorded: o.recorded,
+      unrecorded: isUnrecordedInstall(o.event),
       kind: o.event.type,
       title,
       detail,
@@ -168,6 +182,11 @@ export function buildStory(
 export interface StorySummary {
   inService: number;
   onShelf: number;
+  /**
+   * R68: some installed phase has no known installation date. Its time is NOT counted in
+   * `inService`: the day it was logged is when it was recorded, not when it went in.
+   */
+  installUnrecorded: boolean;
 }
 
 /** Time installed and time on the shelf, from the event sequence up to `end` (now, or retirement). */
@@ -175,13 +194,15 @@ export function summarizeStory(
   eventsNewestFirst: DriveEvent[],
   now: number = Date.now(),
 ): StorySummary {
-  const out: StorySummary = { inService: 0, onShelf: 0 };
+  const out: StorySummary = { inService: 0, onShelf: 0, installUnrecorded: false };
   type Phase = 'shelf' | 'installed' | 'retired' | null;
   let state: Phase = null as Phase;
   let since = 0;
+  let known = true; // is the start of the running installed phase a real installation date?
   const close = (at: number) => {
     if (state === 'shelf') out.onShelf += Math.max(0, at - since);
-    if (state === 'installed') out.inService += Math.max(0, at - since);
+    if (state === 'installed' && known) out.inService += Math.max(0, at - since);
+    if (state === 'installed' && !known) out.installUnrecorded = true;
   };
   for (const o of orderedByEffective(eventsNewestFirst)) {
     const at = Date.parse(o.at);
@@ -204,10 +225,16 @@ export function summarizeStory(
       close(at);
       state = next;
       since = at;
+      known = !isUnrecordedInstall(e);
     }
     // Editing the installation date moves the start of the phase that is running.
     const edit = installedOnChange(e);
-    if (state === 'installed' && edit?.to) since = Date.parse(midnight(edit.to));
+    if (state === 'installed' && edit?.to) {
+      since = Date.parse(midnight(edit.to));
+      known = true;
+    } else if (state === 'installed' && edit && edit.to === null) {
+      known = false;
+    }
   }
   close(now);
   return out;

@@ -1,5 +1,15 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Alert, Button, Modal, Radio, Select, Text, Textarea, TextInput } from '@mantine/core';
+import {
+  Alert,
+  Button,
+  Group,
+  Modal,
+  Radio,
+  Select,
+  Text,
+  Textarea,
+  TextInput,
+} from '@mantine/core';
 import type { Drive, MembershipRole, OccupantResolution } from '@sparrow/shared';
 import { ApiError } from '../api/client';
 import { occupantFromError, useAssignDrive, useAssignmentDefaults } from '../api/driveMutations';
@@ -20,8 +30,11 @@ export interface PlacementInput {
   poolId: string | null;
   role?: MembershipRole;
   occupant?: OccupantResolution;
-  /** R68: YYYY-MM-DD the drive actually went in (today unless backdated). */
-  installedOn?: string;
+  /**
+   * R68: YYYY-MM-DD the drive went in; null = "not recorded" (explicit, so the server does not
+   * default it to today); absent = leave it to the server (inbox: not recorded).
+   */
+  installedOn?: string | null;
 }
 
 /**
@@ -73,7 +86,8 @@ export function AssignDialog({
   const [driveId, setDriveId] = useState<string | null>(fixedDrive);
   const [poolPick, setPoolPick] = useState<string | undefined>(undefined);
   const [rolePick, setRolePick] = useState<MembershipRole | undefined>(undefined);
-  const [installedOn, setInstalledOn] = useState(todayLocal);
+  // R68: drives found in the NAS (the inbox flow) start with no date; moving a spare in starts at today.
+  const [installedOn, setInstalledOn] = useState(() => (placement ? '' : todayLocal()));
   const [step, setStep] = useState<'form' | 'occupant'>('form');
   const [error, setError] = useState<string | null>(null);
   const [apiOccupantId, setApiOccupantId] = useState<string | null>(null);
@@ -132,7 +146,8 @@ export function AssignDialog({
       slotId,
       poolId: poolValue,
       ...(poolValue !== null ? { role: roleValue } : {}),
-      installedOn,
+      // Non-inbox: an emptied field is an explicit null (not recorded); inbox: omitted = not recorded.
+      ...(installedOn !== '' ? { installedOn } : placement ? {} : { installedOn: null }),
       ...(resolution ? { occupant: resolution } : {}),
     };
     const callbacks = {
@@ -288,13 +303,34 @@ export function AssignDialog({
             </>
           ) : null}
           <TextInput
-            label="Installed on"
-            description="Set an earlier date if the drive was installed before you recorded it."
+            label="Installed on (optional)"
+            description="Leave empty if you don’t know — it’s better to show ‘not recorded’ than a guess."
             type="date"
             mt="sm"
             max={todayLocal()}
             value={installedOn}
             onChange={(e) => setInstalledOn(e.currentTarget.value)}
+            rightSectionWidth={150}
+            rightSection={
+              <Group gap={4} wrap="nowrap">
+                <Button
+                  size="compact-xs"
+                  variant="subtle"
+                  onClick={() => setInstalledOn(todayLocal())}
+                >
+                  Today
+                </Button>
+                <Button
+                  size="compact-xs"
+                  variant="subtle"
+                  color="gray"
+                  disabled={installedOn === ''}
+                  onClick={() => setInstalledOn('')}
+                >
+                  Clear
+                </Button>
+              </Group>
+            }
           />
           {occupantId && slotId ? (
             <Alert color="yellow" mt="sm">

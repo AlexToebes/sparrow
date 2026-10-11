@@ -15,6 +15,42 @@ const newestFirst = (...logged: DriveEvent[]) => [...logged].reverse();
 const NOW = Date.parse('2026-10-11T12:00:00.000Z');
 const DAY = 86_400_000;
 
+describe('life story with an unrecorded installation date (R68)', () => {
+  const created = ev('drive-created', '2026-10-11T08:00:00.000Z');
+  const installed = ev('drive-installed', '2026-10-11T09:00:00.000Z', {
+    slotLabel: 'Bay 3',
+    installedOn: null,
+  });
+  const events = newestFirst(created, installed);
+
+  it('titles the install as not recorded and shows the logged day as its date', () => {
+    const item = buildStory(events).find((s) => s.kind === 'drive-installed')!;
+    expect(item.title).toBe('Installed in Bay 3 (installation date not recorded)');
+    expect(item).toMatchObject({ unrecorded: true, recorded: null });
+    expect(item.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('does not count in-service time from the recording date; flags it instead', () => {
+    const sum = summarizeStory(events, NOW);
+    expect(sum.inService).toBe(0);
+    expect(sum.installUnrecorded).toBe(true);
+    expect(sum.onShelf).toBe(60 * 60 * 1000);
+  });
+
+  it('counts in service again once a date is set by an edit, and labels the edit', () => {
+    const edit = ev('drive-updated', '2026-10-11T10:00:00.000Z', {
+      changes: { installedOn: { from: null, to: '2020-01-01' } },
+    });
+    const log = newestFirst(created, installed, edit);
+    expect(buildStory(log).at(-1)!.title).toBe(
+      'Installation date changed from not recorded to 2020-01-01',
+    );
+    const sum = summarizeStory(log, NOW);
+    expect(sum.installUnrecorded).toBe(false);
+    expect(sum.inService).toBe(NOW - Date.parse('2020-01-01T00:00:00.000Z'));
+  });
+});
+
 describe('life story with a backdated installation (R68)', () => {
   const created = ev('drive-created', '2026-10-11T08:00:00.000Z');
   const joined = ev('pool-joined', '2026-10-11T09:00:00.000Z', {
@@ -48,6 +84,7 @@ describe('life story with a backdated installation (R68)', () => {
     const sum = summarizeStory(events, NOW);
     const expected = NOW - Date.parse('2023-04-05T00:00:00.000Z');
     expect(sum.inService).toBe(expected);
+    expect(sum.installUnrecorded).toBe(false);
     expect(sum.inService).toBeGreaterThan(1000 * DAY);
     expect(sum.onShelf).toBe(0);
   });

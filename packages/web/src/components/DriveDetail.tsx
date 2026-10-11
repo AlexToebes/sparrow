@@ -136,19 +136,25 @@ export function DriveDetail({ drive, view = null, where = null }: DriveDetailPro
                 : 'Retired'
           }
         />
-        {drive.status === 'installed' && drive.installedOn ? (
+        {drive.status === 'installed' ? (
           <>
-            <dt>Installed on</dt>
+            <dt>{drive.installedOn ? 'Installed on' : 'Installed'}</dt>
             <dd>
               <span className="inline-edit">
-                <span className="mono">{drive.installedOn}</span>
+                {drive.installedOn ? (
+                  <span className="mono">{drive.installedOn}</span>
+                ) : (
+                  <span className="not-recorded">not recorded</span>
+                )}
                 <Button
                   size="compact-xs"
                   variant="subtle"
-                  aria-label="Edit installation date"
+                  aria-label={
+                    drive.installedOn ? 'Edit installation date' : 'Set installation date'
+                  }
                   onClick={() => setDialog('installed-on')}
                 >
-                  Edit
+                  {drive.installedOn ? 'Edit' : 'Set date'}
                 </Button>
               </span>
             </dd>

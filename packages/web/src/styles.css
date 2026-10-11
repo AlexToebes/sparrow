@@ -526,6 +526,14 @@ body {
 .story-recorded {
   font-style: italic;
 }
+.not-recorded {
+  color: var(--mantine-color-dimmed);
+  font-style: italic;
+}
+.story-item[data-unrecorded='true'] .story-dot {
+  background: transparent;
+  border-style: dashed;
+}
 .story-title {
   font-weight: 600;
 }
