@@ -908,6 +908,25 @@ body {
   color: #fff;
 }
 
+.pick-tile[data-current='true'] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  border-style: dashed;
+}
+.pick-tile[data-current='true']:hover {
+  background: var(--sp-card);
+}
+.pick-current {
+  align-self: flex-start;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--sp-line);
+  background: var(--sp-card);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--sp-dim);
+}
+
 /* Spare cards (R8, R70) */
 .spare-picker {
   display: flex;
@@ -965,6 +984,10 @@ body {
 .spare-card .pick-check {
   position: static;
   flex: none;
+}
+.choice-list {
+  max-height: none;
+  overflow-y: visible;
 }
 .swap-compare {
   display: grid;

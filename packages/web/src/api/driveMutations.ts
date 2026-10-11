@@ -9,6 +9,7 @@ import {
   type ApplySuggestionsInput,
   type AssignDriveInput,
   type CreateDriveInput,
+  type MoveDriveInput,
   type OccupantResolution,
   type RetireDriveInput,
   type RmaInput,
@@ -101,6 +102,22 @@ export function useAssignDrive() {
         assignBodySchema.parse(body),
         assignResultSchema,
       ),
+    onSuccess: invalidate,
+  });
+}
+
+const moveResultSchema = z.object({
+  drive: driveSchema,
+  occupant: driveSchema.optional(),
+  replacement: driveSchema.optional(),
+});
+
+/** R73: one Move for an installed drive (spares, another bay, retire or RMA, optionally with a spare). */
+export function useMoveDrive(driveId: string) {
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: (body: MoveDriveInput) =>
+      apiSend('POST', `/api/drives/${driveId}/move`, body, moveResultSchema),
     onSuccess: invalidate,
   });
 }

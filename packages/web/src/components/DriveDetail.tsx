@@ -12,8 +12,7 @@ import { InstalledOnDialog } from './InstalledOnDialog';
 import { LifeStory } from './LifeStory';
 import { MembershipSection } from './MembershipSection';
 import { MissingDrivePanel } from './MissingDrivePanel';
-import { RemoveToSparesDialog } from './RemoveToSparesDialog';
-import { ReplaceDialog } from './ReplaceDialog';
+import { MoveDialog } from './MoveDialog';
 import { RetireDialog } from './RetireDialog';
 import { StateIcon, poolColor } from './SlotTile';
 import { SuggestedUpdates } from './SuggestedUpdates';
@@ -52,7 +51,7 @@ interface DriveDetailProps {
 }
 
 type Dialog =
-  'assign' | 'replace' | 'edit' | 'installed-on' | 'retire' | 'remove' | 'reinstate' | null;
+  'assign' | 'move' | 'move-retire' | 'edit' | 'installed-on' | 'retire' | 'reinstate' | null;
 
 /** One drive: facts, health (when in a slot), actions and life story. Used by the slot panel and the Drives page. */
 export function DriveDetail({ drive, view = null, where = null }: DriveDetailProps) {
@@ -105,13 +104,8 @@ export function DriveDetail({ drive, view = null, where = null }: DriveDetailPro
           </Button>
         ) : null}
         {drive.status === 'installed' && drive.slotId ? (
-          <Button size="compact-md" onClick={() => setDialog('replace')}>
-            Replace
-          </Button>
-        ) : null}
-        {drive.status === 'installed' ? (
-          <Button size="compact-md" variant="light" onClick={() => setDialog('remove')}>
-            Remove to spares
+          <Button size="compact-md" onClick={() => setDialog('move')}>
+            Move
           </Button>
         ) : null}
         {drive.status === 'retired' ? (
@@ -119,7 +113,14 @@ export function DriveDetail({ drive, view = null, where = null }: DriveDetailPro
             Reinstate
           </Button>
         ) : (
-          <Button size="compact-md" variant="light" color="red" onClick={() => setDialog('retire')}>
+          <Button
+            size="compact-md"
+            variant="light"
+            color="red"
+            onClick={() =>
+              setDialog(drive.status === 'installed' && drive.slotId ? 'move-retire' : 'retire')
+            }
+          >
             Retire
           </Button>
         )}
@@ -231,14 +232,14 @@ export function DriveDetail({ drive, view = null, where = null }: DriveDetailPro
       {dialog === 'edit' ? <DriveFormDialog drive={drive} onClose={close} /> : null}
       {dialog === 'installed-on' ? <InstalledOnDialog drive={drive} onClose={close} /> : null}
       {dialog === 'retire' ? <RetireDialog drive={drive} opened onClose={close} /> : null}
-      {dialog === 'remove' ? (
-        <RemoveToSparesDialog drive={drive} where={where} onClose={close}>
-          {view?.state === 'missing'
-            ? 'Sparrow could not see this drive lately, so check that it is really out of the NAS.'
-            : null}
-        </RemoveToSparesDialog>
+      {dialog === 'move' || dialog === 'move-retire' ? (
+        <MoveDialog
+          drive={drive}
+          where={where}
+          initialDestination={dialog === 'move-retire' ? 'retire' : null}
+          onClose={close}
+        />
       ) : null}
-      {dialog === 'replace' ? <ReplaceDialog drive={drive} where={where} onClose={close} /> : null}
       {dialog === 'reinstate' ? (
         <ConfirmDialog
           title="Reinstate drive"

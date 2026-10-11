@@ -54,10 +54,15 @@ material, not code to copy: build with Mantine components, the shared zod types 
   the shared `BayGrid` (same rows, columns and orientation as the Layout page) with each tile a radio showing
   label, serial plus capacity or "Empty", and the health icon. The selected tile has an accent border and a
   check icon. Occupied tiles are selectable and lead to the occupant step.
-- Spares are chosen on cards (`SparePicker`), not a dropdown. "Replace" shows the fixed bay as a read-only grid.
+- Spares are chosen on cards (`SparePicker`), not a dropdown. "Move" (R73) draws the grids with the bay the drive is leaving disabled and tagged "Current".
 
 ## Multi-step dialogs (R70)
-- One decision per step; the slot picker is always its own step. `StepFlow` shows "Step N of M · title" (M counts only the steps in play), one step's content, and a footer (Back / Next, or the final action) that stays visible while the content scrolls. Next is disabled until the step is valid, and focus moves to the step heading on every change. On a phone the dialog is fullscreen. Assign and Replace use it; opened from a slot, Assign skips the slot step and shows a read-only bay summary with a "Change" link.
+- One decision per step; the slot picker is always its own step. `StepFlow` shows "Step N of M · title" (M counts only the steps in play), one step's content, and a footer (Back / Next, or the final action) that stays visible while the content scrolls. Next is disabled until the step is valid, and focus moves to the step heading on every change. On a phone the dialog is fullscreen. Assign and Move use it; opened from a slot, Assign skips the slot step and shows a read-only bay summary with a "Change" link.
+
+## Move (R73)
+- An installed drive has one primary **Move** button (drive detail and the slot panel); there is no separate Replace or Remove to spares. **Retire** stays its own button: for a spare it opens the Retire dialog, for an installed drive it opens Move with "Retire" already chosen.
+- Steps (only the ones that apply are counted): **Where does this drive go?** (radio cards: Spares shelf, Another bay, Retire with a required reason and optional note, Send for RMA with an optional note) -> **Which bay?** (only for Another bay: `SlotPicker`, the current bay disabled) -> **What happens to the drive in that bay?** (only when that bay is occupied: back to spares, retire with reason, RMA; R37) -> **What goes into this bay?** (Leave it empty, or A spare via `SparePicker` with the outgoing drive's size suggestions and both capacities, R60; the bay is the one being vacated) -> **When? (optional)** (ONE date field, default today, Today/Clear, the usual "better not recorded than a guess" helper; it is the removal, retirement or RMA date of this drive, its installation date in a new bay and the installation date of the incoming spare; empty = not recorded for all) -> **Details** (only when a spare goes in: pool and role, defaulting from the outgoing drive, R35) -> **Confirm** (one-paragraph summary, one `POST /api/drives/:id/move`).
+- A move between bays keeps the drive's pool membership; the summary says so. The life story reads the pair of events as one entry, "Moved from Bay 3 to Bay 7".
 
 ## Formatting rules
 - Capacities in decimal units via one helper (`formatBytes(4_000_000_000_000) === "4 TB"`, 500 GB, 1.92 TB).

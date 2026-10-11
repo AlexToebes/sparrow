@@ -133,6 +133,8 @@ export function setupServer(
     'POST /api/slots/s1/assign': { drive: drives[2] },
     'POST /api/slots/s2/assign': { drive: drives[2], occupant: drives[1] },
     'POST /api/slots/s3/assign': { drive: drives[2] },
+    'POST /api/drives/d0/move': { drive: drives[0] },
+    'POST /api/drives/d2/move': { drive: drives[1] },
     'POST /api/drives/d0/remove': drives[0],
     'POST /api/drives/d2/remove': drives[1],
     ...extra,
