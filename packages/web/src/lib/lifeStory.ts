@@ -190,17 +190,70 @@ function describe(
   }
 }
 
+/**
+ * R73: a move between bays logs drive-removed (movedToSlotId) right before drive-installed
+ * (movedFromSlotId). The story reads that pair as one entry, "Moved from Bay 3 to Bay 7".
+ */
+function isMovePair(first: DriveEvent, second: DriveEvent | undefined): boolean {
+  return (
+    second !== undefined &&
+    first.type === 'drive-removed' &&
+    second.type === 'drive-installed' &&
+    str(first.payload.movedToSlotId) !== null &&
+    str(first.payload.movedToSlotId) === str(second.payload.slotId) &&
+    str(second.payload.movedFromSlotId) === str(first.payload.slotId)
+  );
+}
+
+/** "Bay 3" when both bays are in the same grid, else "Front bays, Bay 3". */
+function moveWhere(
+  from: Record<string, unknown>,
+  to: Record<string, unknown>,
+  end: 'from' | 'to',
+): string {
+  const p = end === 'from' ? from : to;
+  const sameGrid = str(from.gridName) === str(to.gridName);
+  return (sameGrid ? str(p.slotLabel) : where(p)) ?? where(p) ?? 'a slot';
+}
+
 /** Events newest first (as the API returns) in, oldest-first story out. */
 export function buildStory(
   eventsNewestFirst: DriveEvent[],
   poolName: PoolNameLookup = () => null,
 ): StoryItem[] {
   const ordered = orderedByEffective(eventsNewestFirst);
-  return ordered.map((o, i) => {
+  const items: StoryItem[] = [];
+  for (let i = 0; i < ordered.length; i++) {
+    const o = ordered[i]!;
     const prev = ordered[i - 1];
     const ms = prev ? Date.parse(o.at) - Date.parse(prev.at) : 0;
+    const gap = prev ? (ms < 24 * 3600_000 ? 'same day' : `after ${formatDuration(ms)}`) : null;
+    const pair = ordered[i + 1];
+    if (pair && isMovePair(o.event, pair.event)) {
+      // One entry for the move; it takes the later (installed) event's date and flags.
+      const unrecorded = isUnrecordedInstall(pair.event);
+      items.push({
+        id: pair.event.id,
+        at: pair.at,
+        date: pair.date,
+        recorded: pair.recorded,
+        unrecorded,
+        removalUnrecorded: false,
+        retirementUnrecorded: false,
+        kind: 'drive-installed',
+        title: `Moved from ${moveWhere(o.event.payload, pair.event.payload, 'from')} to ${moveWhere(
+          o.event.payload,
+          pair.event.payload,
+          'to',
+        )}${unrecorded ? ' (date not recorded)' : ''}`,
+        detail: null,
+        gap,
+      });
+      i++;
+      continue;
+    }
     const { title, detail } = describe(o.event, poolName);
-    return {
+    items.push({
       id: o.event.id,
       at: o.at,
       date: o.date,
@@ -211,9 +264,10 @@ export function buildStory(
       kind: o.event.type,
       title,
       detail,
-      gap: prev ? (ms < 24 * 3600_000 ? 'same day' : `after ${formatDuration(ms)}`) : null,
-    };
-  });
+      gap,
+    });
+  }
+  return items;
 }
 
 export interface StorySummary {

@@ -19,6 +19,11 @@ interface SlotPickerProps {
   readOnly?: boolean;
   /** With `readOnly`: show only the grid that holds `value`. */
   onlyGridOfValue?: boolean;
+  /**
+   * Slots that cannot be chosen, shown dimmed and tagged "Current" (R73: the bay a drive is moving
+   * out of). They are skipped by the arrow keys and cannot be selected.
+   */
+  disabledSlotIds?: string[];
 }
 
 interface Item {
@@ -32,8 +37,10 @@ interface Item {
 }
 
 /** "Front bays, Bay 3, occupied by ZL2ABC03" / "…, empty" (R70). */
-export function slotRadioName(where: string, view: SlotView): string {
-  return `${where}, ${view.label}, ${view.drive ? `occupied by ${view.drive.serial}` : 'empty'}`;
+export function slotRadioName(where: string, view: SlotView, current = false): string {
+  return `${where}, ${view.label}, ${current ? 'current bay, ' : ''}${
+    view.drive ? `occupied by ${view.drive.serial}` : 'empty'
+  }`;
 }
 
 /**
@@ -48,6 +55,7 @@ export function SlotPicker({
   label = 'Slot',
   readOnly = false,
   onlyGridOfValue = false,
+  disabledSlotIds = [],
 }: SlotPickerProps) {
   const layout = useLayout();
   const drives = useDrives();
@@ -93,7 +101,9 @@ export function SlotPicker({
     : model;
   // Reading order across all grids, for arrow-key moves.
   const order: Item[] = shown.flatMap((g) =>
-    [...g.items].sort((a, b) => a.row - b.row || a.column - b.column),
+    [...g.items]
+      .filter((i) => !disabledSlotIds.includes(i.slot.id))
+      .sort((a, b) => a.row - b.row || a.column - b.column),
   );
   const tabbable = order.some((i) => i.slot.id === value) ? value : (order[0]?.slot.id ?? null);
 
@@ -162,6 +172,7 @@ export function SlotPicker({
                 const item = items.find((i) => i.slot.id === slot.id)!;
                 const { view } = item;
                 const selected = slot.id === value;
+                const isCurrent = disabledSlotIds.includes(slot.id);
                 const body = (
                   <>
                     <span className="pick-top">
@@ -184,6 +195,7 @@ export function SlotPicker({
                         <span className="pick-empty">Empty</span>
                       )}
                     </span>
+                    {isCurrent ? <span className="pick-current">Current</span> : null}
                     {selected ? (
                       <span className="pick-check">
                         <CheckIcon size={12} />
@@ -211,7 +223,9 @@ export function SlotPicker({
                     type="button"
                     role="radio"
                     aria-checked={selected}
-                    aria-label={slotRadioName(item.where, view)}
+                    aria-label={slotRadioName(item.where, view, isCurrent)}
+                    disabled={isCurrent}
+                    data-current={isCurrent ? 'true' : undefined}
                     aria-description={view.note ? `${view.word}, ${view.note}` : view.word}
                     tabIndex={slot.id === tabbable ? 0 : -1}
                     ref={(el) => {

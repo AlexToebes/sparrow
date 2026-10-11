@@ -104,7 +104,7 @@ function setup(extra: Record<string, unknown | ((body: unknown) => Response)> = 
     'POST /api/drives': drives[1],
     'POST /api/slots/s1/assign': { drive: drives[1] },
     'POST /api/slots/s0/assign': { drive: drives[1], occupant: drives[0] },
-    'POST /api/drives/d0/retire': drives[0],
+    'POST /api/drives/d9/retire': drives[1],
     'POST /api/drives/d7/reinstate': drives[1],
     ...extra,
   };
@@ -458,28 +458,28 @@ describe('Retire and reinstate (R60, R61)', () => {
     });
   });
 
-  it('R60, R61: retire with a replacement shows both capacities and confirms before sending', async () => {
+  it('R60, R61: retiring a spare with a replacement shows both capacities and confirms before sending', async () => {
     const calls = setup();
     renderApp(<App />, '/drives');
-    await userEvent.click(await screen.findByText('AAA0'));
+    await userEvent.click(await screen.findByText('SPARE9'));
     await userEvent.click(await screen.findByRole('button', { name: 'Retire' }));
-    const dlg = await screen.findByRole('dialog', { name: 'Retire AAA0' });
+    const dlg = await screen.findByRole('dialog', { name: 'Retire SPARE9' });
     await userEvent.click(within(dlg).getByRole('button', { name: 'Review' }));
     expect(await within(dlg).findByText('Choose a reason.')).toBeInTheDocument();
     await pick(/Reason/, 'Failed');
-    await pick(/Replaced by/, /SPARE9/);
+    await pick(/Replaced by/, /AAA0/);
     const compare = within(dlg).getByLabelText('Capacity comparison');
-    expect(within(compare).getByText('4 TB')).toBeInTheDocument();
     expect(within(compare).getByText('8 TB')).toBeInTheDocument();
+    expect(within(compare).getByText('4 TB')).toBeInTheDocument();
     await userEvent.type(within(dlg).getByLabelText('Note'), 'clicking noises');
     await userEvent.click(within(dlg).getByRole('button', { name: 'Review' }));
-    expect(posts(calls, '/api/drives/d0/retire')).toHaveLength(0);
+    expect(posts(calls, '/api/drives/d9/retire')).toHaveLength(0);
     await userEvent.click(await within(dlg).findByRole('button', { name: 'Confirm retire' }));
-    await waitFor(() => expect(posts(calls, '/api/drives/d0/retire')).toHaveLength(1));
-    expect(posts(calls, '/api/drives/d0/retire')[0]!.body).toEqual({
+    await waitFor(() => expect(posts(calls, '/api/drives/d9/retire')).toHaveLength(1));
+    expect(posts(calls, '/api/drives/d9/retire')[0]!.body).toEqual({
       reason: 'failed',
       date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-      replacedByDriveId: 'd9',
+      replacedByDriveId: 'd0',
       note: 'clicking noises',
     });
   });
@@ -487,9 +487,9 @@ describe('Retire and reinstate (R60, R61)', () => {
   it('R60: the retirement date is optional: Clear sends null, the reason is still required', async () => {
     const calls = setup();
     renderApp(<App />, '/drives');
-    await userEvent.click(await screen.findByText('AAA0'));
+    await userEvent.click(await screen.findByText('SPARE9'));
     await userEvent.click(await screen.findByRole('button', { name: 'Retire' }));
-    const dlg = await screen.findByRole('dialog', { name: 'Retire AAA0' });
+    const dlg = await screen.findByRole('dialog', { name: 'Retire SPARE9' });
     const date = within(dlg).getByLabelText(/Retirement date \(optional\)/);
     expect((date as HTMLInputElement).value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(within(dlg).getByText(/better ‘not recorded’ than a guess/)).toBeInTheDocument();
@@ -502,8 +502,8 @@ describe('Retire and reinstate (R60, R61)', () => {
     await userEvent.click(within(dlg).getByRole('button', { name: 'Review' }));
     expect(await within(dlg).findByText(/retirement date not recorded/)).toBeInTheDocument();
     await userEvent.click(await within(dlg).findByRole('button', { name: 'Confirm retire' }));
-    await waitFor(() => expect(posts(calls, '/api/drives/d0/retire')).toHaveLength(1));
-    expect(posts(calls, '/api/drives/d0/retire')[0]!.body).toMatchObject({
+    await waitFor(() => expect(posts(calls, '/api/drives/d9/retire')).toHaveLength(1));
+    expect(posts(calls, '/api/drives/d9/retire')[0]!.body).toMatchObject({
       reason: 'failed',
       date: null,
     });
@@ -511,7 +511,7 @@ describe('Retire and reinstate (R60, R61)', () => {
 
   it('shows the API error readably when retiring fails', async () => {
     setup({
-      'POST /api/drives/d0/retire': () =>
+      'POST /api/drives/d9/retire': () =>
         new Response(
           JSON.stringify({
             error: { code: 'invalid', message: 'Replacement chain would loop back' },
@@ -522,9 +522,9 @@ describe('Retire and reinstate (R60, R61)', () => {
         ),
     });
     renderApp(<App />, '/drives');
-    await userEvent.click(await screen.findByText('AAA0'));
+    await userEvent.click(await screen.findByText('SPARE9'));
     await userEvent.click(await screen.findByRole('button', { name: 'Retire' }));
-    const dlg = await screen.findByRole('dialog', { name: 'Retire AAA0' });
+    const dlg = await screen.findByRole('dialog', { name: 'Retire SPARE9' });
     await pick(/Reason/, 'Other');
     await userEvent.click(within(dlg).getByRole('button', { name: 'Review' }));
     await userEvent.click(await within(dlg).findByRole('button', { name: 'Confirm retire' }));

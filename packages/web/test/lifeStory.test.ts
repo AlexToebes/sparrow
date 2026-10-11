@@ -276,3 +276,62 @@ describe('life story with an optional retirement date (R60)', () => {
     });
   });
 });
+
+describe('life story of a move between bays (R73)', () => {
+  const created = ev('drive-created', '2026-01-01T08:00:00.000Z');
+  const installed = ev('drive-installed', '2026-01-02T09:00:00.000Z', {
+    slotId: 's3',
+    slotLabel: 'Bay 3',
+    gridName: 'Front bays',
+    installedOn: '2026-01-02',
+  });
+  const removed = ev('drive-removed', '2026-10-11T09:00:00.000Z', {
+    slotId: 's3',
+    slotLabel: 'Bay 3',
+    gridName: 'Front bays',
+    installedOn: '2026-01-02',
+    removedOn: '2026-10-11',
+    movedToSlotId: 's7',
+  });
+  const arrived = ev('drive-installed', '2026-10-11T09:00:00.000Z', {
+    slotId: 's7',
+    slotLabel: 'Bay 7',
+    gridName: 'Front bays',
+    installedOn: '2026-10-11',
+    movedFromSlotId: 's3',
+  });
+
+  it('R73: reads the removed + installed pair as one entry', () => {
+    const story = buildStory(newestFirst(created, installed, removed, arrived));
+    expect(story.map((s) => s.title)).toEqual([
+      'Added to Sparrow',
+      'Installed in Front bays, Bay 3',
+      'Moved from Bay 3 to Bay 7',
+    ]);
+  });
+
+  it('R73: names the grid when the bays are in different grids; flags an unrecorded date', () => {
+    const toOther = ev('drive-installed', '2026-10-11T09:00:00.000Z', {
+      slotId: 's7',
+      slotLabel: 'Left',
+      gridName: 'Internal SSDs',
+      installedOn: null,
+      movedFromSlotId: 's3',
+    });
+    const story = buildStory(newestFirst(created, installed, removed, toOther));
+    expect(story.at(-1)!.title).toBe(
+      'Moved from Front bays, Bay 3 to Internal SSDs, Left (date not recorded)',
+    );
+  });
+
+  it('R73: a removal that is not part of a move stays a plain removal', () => {
+    const plain = ev('drive-removed', '2026-10-11T09:00:00.000Z', {
+      slotId: 's3',
+      slotLabel: 'Bay 3',
+      removedOn: '2026-10-11',
+    });
+    expect(buildStory(newestFirst(created, installed, plain)).at(-1)!.title).toBe(
+      'Removed from Bay 3',
+    );
+  });
+});
