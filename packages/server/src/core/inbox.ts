@@ -108,7 +108,8 @@ const placementOf = (input: LinkObservationInput | CreateFromObservationInput) =
   poolId: input.poolId,
   role: input.role,
   occupant: input.occupant,
-  installedOn: input.installedOn,
+  // R68: a drive found in the NAS is already installed; an omitted date means "not recorded".
+  installedOn: input.installedOn ?? null,
 });
 
 /**

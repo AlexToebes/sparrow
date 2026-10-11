@@ -107,28 +107,17 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 
 /**
  * R68: schema-1 files written before installed_on existed have no `installedOn` on their drives.
- * Fill it the way migration 0003 does for existing databases: for an installed drive, the date of
- * its latest drive-installed event, else of its updatedAt; for any other drive, null. Drives that
+ * Such a file cannot say when anything was installed, and the date of an event is when it was
+ * recorded, not an installation date, so those drives become "not recorded" (null). Drives that
  * carry the key (even as null) are left alone, so the file is otherwise validated as written.
  */
 function backfillInstalledOn(input: unknown): unknown {
   if (!isRecord(input) || !isRecord(input.data)) return input;
-  const { drives: driveRows, events: eventRows } = input.data;
+  const { drives: driveRows } = input.data;
   if (!Array.isArray(driveRows)) return input;
-  const latestInstall = new Map<string, string>();
-  if (Array.isArray(eventRows)) {
-    for (const e of eventRows) {
-      if (!isRecord(e) || e.type !== 'drive-installed') continue;
-      if (typeof e.driveId !== 'string' || typeof e.at !== 'string') continue;
-      const seen = latestInstall.get(e.driveId);
-      if (seen === undefined || e.at >= seen) latestInstall.set(e.driveId, e.at);
-    }
-  }
-  const upgraded = driveRows.map((d) => {
-    if (!isRecord(d) || 'installedOn' in d) return d;
-    const at = d.status === 'installed' ? (latestInstall.get(String(d.id)) ?? d.updatedAt) : null;
-    return { ...d, installedOn: typeof at === 'string' ? at.slice(0, 10) : null };
-  });
+  const upgraded = driveRows.map((d) =>
+    !isRecord(d) || 'installedOn' in d ? d : { ...d, installedOn: null },
+  );
   return { ...input, data: { ...input.data, drives: upgraded } };
 }
 

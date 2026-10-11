@@ -6,8 +6,15 @@ import { membershipRoleSchema, retirementReasonSchema } from './enums.js';
 
 const note = z.string().trim().min(1).max(5000).nullish();
 
-/** R68: the day the drive went into the slot. Omitted = today (UTC); the server rejects future dates. */
-export const installedOnSchema = dateSchema;
+/**
+ * R68: the day the drive went into the slot, or null for "installation date not recorded". The
+ * server rejects future dates. Omitting the field is deliberately NOT the same as null, and the
+ * default depends on the flow:
+ *  - POST /api/slots/:id/assign (moving a spare in now): omitted = today (UTC); null = not recorded.
+ *  - POST /api/inbox/:key/link and /create (a drive already found in the NAS): omitted or null =
+ *    not recorded, because the real installation date is unknown unless the user says so.
+ */
+export const installedOnSchema = dateSchema.nullable();
 
 /** How to deal with the drive already in the slot (R37). */
 export const occupantResolutionSchema = z.discriminatedUnion('action', [

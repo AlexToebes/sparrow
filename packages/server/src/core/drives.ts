@@ -143,18 +143,24 @@ export function updateDrive(db: AppDb, id: string, input: unknown): Drive {
     let membershipStartedAt: { from: string; to: string } | undefined;
     if (patch.installedOn !== undefined && patch.installedOn !== current.installedOn) {
       // R68: only while installed; leaving the slot clears the date (history keeps it in events).
-      if (current.status !== 'installed' || current.installedOn === null) {
+      if (current.status !== 'installed') {
         throw conflict(
           `Drive ${id} is ${current.status}; the installation date can only be set while it is installed`,
         );
       }
       const clock = new Date();
-      const to = parseInstalledOn(patch.installedOn, clock);
+      const to = patch.installedOn === null ? null : parseInstalledOn(patch.installedOn, clock);
       changes.installedOn = { from: current.installedOn, to };
       values.installedOn = to;
       // The open membership started with the install; keep it in step unless it was edited apart.
       const open = openMembership(tx, id);
-      if (open && open.startedAt.slice(0, 10) === current.installedOn) {
+      // Only when both dates are known; with an unrecorded side the membership is left untouched.
+      if (
+        open &&
+        to !== null &&
+        current.installedOn !== null &&
+        open.startedAt.slice(0, 10) === current.installedOn
+      ) {
         const start = startOfInstalledOn(to, clock);
         tx.update(memberships)
           .set({ startedAt: start.startedAt })

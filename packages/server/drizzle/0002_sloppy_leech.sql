@@ -1,1 +1,0 @@
-ALTER TABLE `drives` ADD `wwn` text;

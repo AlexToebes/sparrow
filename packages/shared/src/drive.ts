@@ -34,7 +34,10 @@ export const driveSchema = z
     retirementDate: dateSchema.nullable(),
     replacedByDriveId: idSchema.nullable(),
     retirementNote: z.string().max(5000).nullable(),
-    /** R68: calendar date the drive was installed in its slot; set only while installed. */
+    /**
+     * R68: calendar date the drive was installed in its slot. Non-null only while installed; null
+     * on an installed drive means "installation date not recorded" (never guessed).
+     */
     installedOn: dateSchema.nullable(),
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
@@ -52,13 +55,6 @@ export const driveSchema = z
         code: 'custom',
         path: ['slotId'],
         message: 'slotId is only allowed when installed',
-      });
-    }
-    if (d.status === 'installed' && d.installedOn === null) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['installedOn'],
-        message: 'installedOn is required when installed',
       });
     }
     if (d.status !== 'installed' && d.installedOn !== null) {

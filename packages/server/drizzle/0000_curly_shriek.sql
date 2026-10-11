@@ -1,7 +1,13 @@
+CREATE TABLE `app_meta` (
+	`key` text PRIMARY KEY NOT NULL,
+	`value` text NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE `drives` (
 	`id` text PRIMARY KEY NOT NULL,
 	`serial` text NOT NULL,
 	`serial_normalized` text NOT NULL,
+	`wwn` text,
 	`model` text,
 	`capacity_bytes` integer,
 	`drive_type` text,
@@ -19,12 +25,14 @@ CREATE TABLE `drives` (
 	`retirement_date` text,
 	`replaced_by_drive_id` text,
 	`retirement_note` text,
+	`installed_on` text,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`slot_id`) REFERENCES `slots`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`replaced_by_drive_id`) REFERENCES `drives`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "drives_slot_only_when_installed" CHECK("drives"."slot_id" IS NULL OR "drives"."status" = 'installed'),
 	CONSTRAINT "drives_installed_needs_slot" CHECK("drives"."status" <> 'installed' OR "drives"."slot_id" IS NOT NULL),
+	CONSTRAINT "drives_installed_on_only_when_installed" CHECK("drives"."installed_on" IS NULL OR "drives"."status" = 'installed'),
 	CONSTRAINT "drives_retired_needs_reason_and_date" CHECK("drives"."status" <> 'retired' OR ("drives"."retirement_reason" IS NOT NULL AND "drives"."retirement_date" IS NOT NULL)),
 	CONSTRAINT "drives_not_replaced_by_self" CHECK("drives"."replaced_by_drive_id" IS NULL OR "drives"."replaced_by_drive_id" <> "drives"."id"),
 	CONSTRAINT "drives_drive_type_enum" CHECK(drive_type IS NULL OR drive_type IN ('HDD', 'SSD', 'NVMe')),
@@ -98,6 +106,16 @@ CREATE TABLE `pools` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `pools_name_unique` ON `pools` (`name`);--> statement-breakpoint
+CREATE TABLE `provider_snapshot` (
+	`id` integer PRIMARY KEY NOT NULL,
+	`provider_id` text NOT NULL,
+	`observations` text NOT NULL,
+	`last_success_at` text,
+	`last_attempt_at` text,
+	`last_error` text,
+	CONSTRAINT "provider_snapshot_singleton" CHECK("provider_snapshot"."id" = 1)
+);
+--> statement-breakpoint
 CREATE TABLE `slots` (
 	`id` text PRIMARY KEY NOT NULL,
 	`grid_id` text NOT NULL,

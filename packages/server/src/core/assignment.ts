@@ -223,8 +223,11 @@ export interface AssignDriveInput {
   poolId?: string | null | undefined;
   role?: MembershipRole | null | undefined;
   occupant?: OccupantResolution | undefined;
-  /** R68: YYYY-MM-DD the drive actually went in; defaults to today (UTC), never in the future. */
-  installedOn?: string | undefined;
+  /**
+   * R68: YYYY-MM-DD the drive actually went in, never in the future. undefined = today (UTC);
+   * null = "installation date not recorded" (an unknown date is stored as such, never guessed).
+   */
+  installedOn?: string | null | undefined;
 }
 
 export interface AssignDriveResult {
@@ -237,7 +240,11 @@ export interface AssignDriveResult {
 export function assignDrive(db: AppDb, input: AssignDriveInput): AssignDriveResult {
   const clock = new Date();
   const installedOn =
-    input.installedOn === undefined ? todayUtc(clock) : parseInstalledOn(input.installedOn, clock);
+    input.installedOn === undefined
+      ? todayUtc(clock)
+      : input.installedOn === null
+        ? null
+        : parseInstalledOn(input.installedOn, clock);
   return db.transaction((tx) => {
     const drive = loadDrive(tx, input.driveId);
     if (drive.status === 'retired') throw invalid('Retired drives cannot be assigned');
@@ -295,7 +302,11 @@ export function assignDrive(db: AppDb, input: AssignDriveInput): AssignDriveResu
       .get();
     if (poolId !== null && role !== null) {
       // R29/R68: the membership starts when the drive went in; the events stay stamped "now".
-      const start = startOfInstalledOn(installedOn, new Date(at));
+      // An unrecorded installation date starts it at the recording time.
+      const start =
+        installedOn === null
+          ? { startedAt: at, userSupplied: false }
+          : startOfInstalledOn(installedOn, new Date(at));
       startMembership(tx, {
         driveId: drive.id,
         poolId,

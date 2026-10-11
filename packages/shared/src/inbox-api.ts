@@ -22,7 +22,7 @@ const placement = {
   poolId: idSchema.nullish(),
   role: membershipRoleSchema.optional(),
   occupant: occupantResolutionSchema.optional(),
-  /** R68: omitted = today. */
+  /** R68: omitted or null = installation date not recorded (the drive is already in the NAS). */
   installedOn: installedOnSchema.optional(),
 };
 

@@ -1,9 +1,33 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8374e872-9bfc-4c38-9daa-48fa163ae1b0",
+  "id": "51bf9fa7-afb0-4c1e-bde3-bfc40e8ae5ce",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
+    "app_meta": {
+      "name": "app_meta",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "drives": {
       "name": "drives",
       "columns": {
@@ -26,6 +50,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "wwn": {
+          "name": "wwn",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "model": {
@@ -147,6 +178,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "installed_on": {
+          "name": "installed_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -204,6 +242,10 @@
         "drives_installed_needs_slot": {
           "name": "drives_installed_needs_slot",
           "value": "\"drives\".\"status\" <> 'installed' OR \"drives\".\"slot_id\" IS NOT NULL"
+        },
+        "drives_installed_on_only_when_installed": {
+          "name": "drives_installed_on_only_when_installed",
+          "value": "\"drives\".\"installed_on\" IS NULL OR \"drives\".\"status\" = 'installed'"
         },
         "drives_retired_needs_reason_and_date": {
           "name": "drives_retired_needs_reason_and_date",
@@ -597,6 +639,63 @@
         "pools_name_not_empty": {
           "name": "pools_name_not_empty",
           "value": "length(\"pools\".\"name\") > 0"
+        }
+      }
+    },
+    "provider_snapshot": {
+      "name": "provider_snapshot",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider_id": {
+          "name": "provider_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "observations": {
+          "name": "observations",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_success_at": {
+          "name": "last_success_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_attempt_at": {
+          "name": "last_attempt_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "provider_snapshot_singleton": {
+          "name": "provider_snapshot_singleton",
+          "value": "\"provider_snapshot\".\"id\" = 1"
         }
       }
     },

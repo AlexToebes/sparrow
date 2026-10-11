@@ -91,6 +91,37 @@ describe('R68: installation date when assigning', () => {
     expect(assignDrive(db(), { driveId: d.id, slotId: slot! }).drive.installedOn).toBe(TODAY());
   });
 
+  it('R68, R14: installedOn null stores "not recorded"; the event says so and the membership starts now', () => {
+    const [slot] = slotIds();
+    const pool = makePool();
+    const d = spare('A');
+    const out = assignDrive(db(), {
+      driveId: d.id,
+      slotId: slot!,
+      poolId: pool,
+      installedOn: null,
+    });
+    expect(out.drive.installedOn).toBeNull();
+    expect(out.drive.status).toBe('installed');
+    expect(event(d.id, 'drive-installed').payload).toMatchObject({ installedOn: null });
+    const joined = event(d.id, 'pool-joined');
+    expect(members(d.id)[0]!.startedAt).toBe(joined.at);
+    expect(joined.payload).not.toHaveProperty('startedAt');
+  });
+
+  it('R68: the database allows an installed drive without an installation date, but a spare keeps none', () => {
+    const [slot] = slotIds();
+    const d = spare('A');
+    assignDrive(db(), { driveId: d.id, slotId: slot!, installedOn: null });
+    expect(() =>
+      opened.sqlite
+        .prepare(
+          "UPDATE drives SET status = 'spare', slot_id = NULL, installed_on = '2025-01-01' WHERE id = ?",
+        )
+        .run(d.id),
+    ).toThrow(/CHECK/);
+  });
+
   it('R29, R68: the pool membership starts at midnight UTC of a past date; pool-joined is stamped now', () => {
     const [slot] = slotIds();
     const pool = makePool();
@@ -142,6 +173,20 @@ describe('R68: installation date when assigning', () => {
     expect(ok.statusCode).toBe(200);
     expect(ok.json()).toMatchObject({ drive: { installedOn: '2025-03-04' } });
   });
+
+  it('R68: over the API, an omitted installedOn on assign is today and an explicit null is not recorded', async () => {
+    const [s1, s2] = slotIds();
+    const a = spare('A');
+    const b = spare('B');
+    const post = (slot: string | undefined, payload: object) =>
+      app.inject({ method: 'POST', url: `/api/slots/${slot}/assign`, payload });
+    expect((await post(s1, { driveId: a.id })).json()).toMatchObject({
+      drive: { installedOn: TODAY() },
+    });
+    expect((await post(s2, { driveId: b.id, installedOn: null })).json()).toMatchObject({
+      drive: { status: 'installed', installedOn: null },
+    });
+  });
 });
 
 describe('R68: editing the installation date', () => {
@@ -189,15 +234,58 @@ describe('R68: editing the installation date', () => {
     expect(listDriveEvents(db(), d.id)).toHaveLength(before);
   });
 
-  it('R68: a future date is rejected (400) and installedOn: null is not accepted', async () => {
+  it('R68: a future or malformed date is rejected (400) and nothing changes', async () => {
     const [slot] = slotIds();
     const d = spare('A');
     assignDrive(db(), { driveId: d.id, slotId: slot! });
     const patch = (payload: object) =>
       app.inject({ method: 'PATCH', url: `/api/drives/${d.id}`, payload });
     expect((await patch({ installedOn: daysAgo(-9) })).statusCode).toBe(400);
-    expect((await patch({ installedOn: null })).statusCode).toBe(400);
+    expect((await patch({ installedOn: 'soon' })).statusCode).toBe(400);
     expect(getDrive(db(), d.id).installedOn).toBe(TODAY());
+  });
+
+  it('R14, R68: PATCH null clears the date (drive-updated from/to) and leaves the membership alone', async () => {
+    const [slot] = slotIds();
+    const pool = makePool();
+    const d = spare('A');
+    assignDrive(db(), { driveId: d.id, slotId: slot!, poolId: pool, installedOn: '2025-01-01' });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/drives/${d.id}`,
+      payload: { installedOn: null },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ status: 'installed', installedOn: null });
+    const updated = event(d.id, 'drive-updated');
+    expect(updated.payload).toMatchObject({
+      changes: { installedOn: { from: '2025-01-01', to: null } },
+    });
+    expect(updated.payload).not.toHaveProperty('membershipStartedAt');
+    expect(members(d.id)[0]!.startedAt).toBe('2025-01-01T00:00:00.000Z');
+  });
+
+  it('R14, R68: PATCH sets a date on a drive with no recorded date, leaving the membership alone', () => {
+    const [slot] = slotIds();
+    const pool = makePool();
+    const d = spare('A');
+    assignDrive(db(), { driveId: d.id, slotId: slot!, poolId: pool, installedOn: null });
+    const started = members(d.id)[0]!.startedAt;
+    updateDrive(db(), d.id, { installedOn: '2024-03-03' });
+    expect(getDrive(db(), d.id).installedOn).toBe('2024-03-03');
+    expect(event(d.id, 'drive-updated').payload).toMatchObject({
+      changes: { installedOn: { from: null, to: '2024-03-03' } },
+    });
+    expect(members(d.id)[0]!.startedAt).toBe(started);
+  });
+
+  it('R68: clearing an already-unrecorded date is a no-op without an event', () => {
+    const [slot] = slotIds();
+    const d = spare('A');
+    assignDrive(db(), { driveId: d.id, slotId: slot!, installedOn: null });
+    const before = listDriveEvents(db(), d.id).length;
+    updateDrive(db(), d.id, { installedOn: null });
+    expect(listDriveEvents(db(), d.id)).toHaveLength(before);
   });
 
   it('R68: a spare or a retired drive cannot be given an installation date (409)', async () => {
@@ -236,6 +324,14 @@ describe('R68: leaving the slot clears the date, the history keeps it', () => {
     expect(sendForRma(db(), b.id, {}).installedOn).toBeNull();
     expect(event(a.id, 'drive-removed').payload).toMatchObject({ installedOn: '2025-05-05' });
     expect(event(b.id, 'drive-removed').payload).toMatchObject({ installedOn: '2025-06-06' });
+  });
+
+  it('R14, R68: removing a drive with no recorded date logs installedOn null', () => {
+    const [slot] = slotIds();
+    const d = spare('A');
+    assignDrive(db(), { driveId: d.id, slotId: slot!, installedOn: null });
+    expect(removeToSpares(db(), d.id).installedOn).toBeNull();
+    expect(event(d.id, 'drive-removed').payload).toMatchObject({ installedOn: null });
   });
 
   it('R37, R68: resolving an occupant keeps its date in drive-removed; the newcomer gets its own', () => {
@@ -295,6 +391,33 @@ describe('R22, R23, R68: inbox flows pass installedOn through', () => {
     });
     expect(bad.statusCode).toBe(400);
   });
+
+  it('R22, R68: link and create default to "not recorded" when installedOn is omitted; an explicit date is kept', async () => {
+    const [s1, s2, s3] = slotIds();
+    const shelf = spare('SHELF');
+    snapshot([obs('SHELF'), obs('NEWONE'), obs('THIRD')]);
+    const link = await app.inject({
+      method: 'POST',
+      url: '/api/inbox/SHELF/link',
+      payload: { driveId: shelf.id, slotId: s1 },
+    });
+    expect(link.statusCode).toBe(200);
+    expect(getDrive(db(), shelf.id)).toMatchObject({ status: 'installed', installedOn: null });
+    expect(event(shelf.id, 'drive-installed').payload).toMatchObject({ installedOn: null });
+    const create = await app.inject({
+      method: 'POST',
+      url: '/api/inbox/NEWONE/create',
+      payload: { slotId: s2 },
+    });
+    expect(create.statusCode).toBe(201);
+    expect(create.json()).toMatchObject({ drive: { status: 'installed', installedOn: null } });
+    const explicit = await app.inject({
+      method: 'POST',
+      url: '/api/inbox/THIRD/create',
+      payload: { slotId: s3, installedOn: null },
+    });
+    expect(explicit.json()).toMatchObject({ drive: { installedOn: null } });
+  });
 });
 
 describe('R41, R43, R68: export and import', () => {
@@ -319,7 +442,22 @@ describe('R41, R43, R68: export and import', () => {
     }
   });
 
-  it('R43, R68: an older schema-1 file without installedOn still imports, derived from its events', () => {
+  it('R43, R68: installedOn null for an installed drive is valid and survives a round trip', () => {
+    const [slot] = slotIds();
+    const d = spare('A');
+    assignDrive(db(), { driveId: d.id, slotId: slot!, installedOn: null });
+    const first = exportData(db());
+    expect(first.data.drives[0]).toMatchObject({ status: 'installed', installedOn: null });
+    const fresh = openDatabase(':memory:');
+    try {
+      importData(fresh.db, JSON.parse(JSON.stringify(first)), { backupDir: tmp });
+      expect(exportData(fresh.db).data.drives).toEqual(first.data.drives);
+    } finally {
+      fresh.sqlite.close();
+    }
+  });
+
+  it('R43, R68: an older schema-1 file without installedOn still imports; its installed drives become "not recorded"', () => {
     const [slot, other] = slotIds();
     const a = spare('A');
     const b = spare('B');
@@ -327,7 +465,7 @@ describe('R41, R43, R68: export and import', () => {
     assignDrive(db(), { driveId: b.id, slotId: other! });
     spare('C');
     const file = JSON.parse(JSON.stringify(exportData(db()))) as ReturnType<typeof exportData>;
-    // Make the file look like an old one: no installedOn key, and a recorded install date of 2026-05-06.
+    // Make the file look like an old one: no installedOn key, and a recorded install event of 2026-05-06.
     for (const drive of file.data.drives) delete (drive as { installedOn?: unknown }).installedOn;
     for (const e of file.data.events) {
       if (e.type === 'drive-installed' && e.driveId === a.id) {
@@ -339,43 +477,10 @@ describe('R41, R43, R68: export and import', () => {
     try {
       importData(fresh.db, file, { backupDir: tmp });
       const byId = new Map(exportData(fresh.db).data.drives.map((d) => [d.id, d]));
-      expect(byId.get(a.id)!.installedOn).toBe('2026-05-06');
-      // No usable event day for b would fall back to updatedAt; here its event date is today.
-      expect(byId.get(b.id)!.installedOn).toBe(TODAY());
+      // The event date is when it was recorded, not an installation date, so nothing is derived.
+      expect(byId.get(a.id)).toMatchObject({ status: 'installed', installedOn: null });
+      expect(byId.get(b.id)).toMatchObject({ status: 'installed', installedOn: null });
       expect([...byId.values()].filter((d) => d.status === 'spare')[0]!.installedOn).toBeNull();
-    } finally {
-      fresh.sqlite.close();
-    }
-  });
-
-  it('R43, R68: an old file whose installed drive has no install event falls back to updatedAt', () => {
-    const [slot] = slotIds();
-    const a = spare('A');
-    assignDrive(db(), { driveId: a.id, slotId: slot! });
-    const file = JSON.parse(JSON.stringify(exportData(db()))) as ReturnType<typeof exportData>;
-    file.data.events = file.data.events.filter((e) => e.type !== 'drive-installed');
-    for (const drive of file.data.drives) {
-      delete (drive as { installedOn?: unknown }).installedOn;
-      drive.updatedAt = '2025-11-12T10:00:00.000Z';
-    }
-    const fresh = openDatabase(':memory:');
-    try {
-      importData(fresh.db, file, { backupDir: tmp });
-      expect(exportData(fresh.db).data.drives[0]!.installedOn).toBe('2025-11-12');
-    } finally {
-      fresh.sqlite.close();
-    }
-  });
-
-  it('R43: a file that states installedOn: null for an installed drive is rejected as invalid', () => {
-    const [slot] = slotIds();
-    const a = spare('A');
-    assignDrive(db(), { driveId: a.id, slotId: slot! });
-    const file = JSON.parse(JSON.stringify(exportData(db()))) as ReturnType<typeof exportData>;
-    file.data.drives[0]!.installedOn = null;
-    const fresh = openDatabase(':memory:');
-    try {
-      expect(thrown(() => importData(fresh.db, file, { backupDir: tmp })).code).toBe('invalid');
     } finally {
       fresh.sqlite.close();
     }

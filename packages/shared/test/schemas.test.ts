@@ -107,9 +107,9 @@ describe('driveSchema', () => {
     expect(driveSchema.safeParse({ ...drive, slotId: 's1' }).success).toBe(false);
   });
 
-  it('R68: installedOn is a date, required when installed and only allowed then', () => {
+  it('R68: installedOn is a date or null (not recorded) when installed, and only allowed then', () => {
     const installed = { ...drive, status: 'installed', slotId: 's1' };
-    expect(driveSchema.safeParse({ ...installed, installedOn: null }).success).toBe(false);
+    expect(driveSchema.safeParse({ ...installed, installedOn: null }).success).toBe(true);
     expect(driveSchema.safeParse({ ...installed, installedOn: '2024-02-29' }).success).toBe(true);
     expect(driveSchema.safeParse({ ...installed, installedOn: '29/02/2024' }).success).toBe(false);
     expect(driveSchema.safeParse({ ...drive, installedOn: '2024-02-29' }).success).toBe(false);

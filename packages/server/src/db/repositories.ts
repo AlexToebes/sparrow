@@ -94,7 +94,11 @@ export function createRepositories(db: AppDb) {
         const serial = input.serial.trim();
         // R68: an installed row needs an installation date; default to today for direct inserts.
         const installedOn =
-          input.installedOn ?? (input.status === 'installed' ? now().slice(0, 10) : null);
+          input.installedOn === undefined
+            ? input.status === 'installed'
+              ? now().slice(0, 10)
+              : null
+            : input.installedOn;
         return db
           .insert(drives)
           .values({
