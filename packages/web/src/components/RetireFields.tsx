@@ -56,7 +56,6 @@ export function RetireFields({ drive, candidates, values, onChange, idPrefix }: 
         value={values.reason}
         onChange={(v) => set({ reason: v as RetirementReason | null })}
         allowDeselect={false}
-        comboboxProps={{ withinPortal: false }}
       />
       <TextInput
         id={`${id}-date`}
@@ -79,7 +78,6 @@ export function RetireFields({ drive, candidates, values, onChange, idPrefix }: 
         }))}
         value={values.replacedByDriveId}
         onChange={(v) => set({ replacedByDriveId: v })}
-        comboboxProps={{ withinPortal: false }}
         mt="sm"
       />
       {replacement ? (

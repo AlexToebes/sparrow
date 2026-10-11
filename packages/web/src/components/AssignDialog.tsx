@@ -213,7 +213,6 @@ export function AssignDialog({
               value={driveId}
               onChange={setDriveId}
               nothingFoundMessage="No spares"
-              comboboxProps={{ withinPortal: false }}
             />
           ) : (
             <Text>
@@ -234,7 +233,6 @@ export function AssignDialog({
                 setPoolPick(undefined);
                 setRolePick(undefined);
               }}
-              comboboxProps={{ withinPortal: false }}
             />
           ) : (
             <Text mt="xs">
@@ -263,7 +261,6 @@ export function AssignDialog({
                 onChange={(v) => setPoolPick(v ?? NO_POOL)}
                 allowDeselect={false}
                 disabled={defaults.isPending}
-                comboboxProps={{ withinPortal: false }}
               />
               {poolValue !== null ? (
                 <Select
@@ -276,7 +273,6 @@ export function AssignDialog({
                   value={roleValue}
                   onChange={(v) => setRolePick((v as MembershipRole | null) ?? undefined)}
                   allowDeselect={false}
-                  comboboxProps={{ withinPortal: false }}
                 />
               ) : null}
             </>

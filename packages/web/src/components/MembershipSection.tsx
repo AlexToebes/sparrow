@@ -81,7 +81,6 @@ export function MembershipSection({ drive }: { drive: Drive }) {
           value={poolId}
           onChange={setPoolPick}
           allowDeselect={false}
-          comboboxProps={{ withinPortal: false }}
         />
         <Select
           aria-label="Role"
@@ -89,7 +88,6 @@ export function MembershipSection({ drive }: { drive: Drive }) {
           value={role}
           onChange={(v) => setRolePick(v as MembershipRole | null)}
           allowDeselect={false}
-          comboboxProps={{ withinPortal: false }}
         />
         <Button
           size="compact-md"

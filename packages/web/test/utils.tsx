@@ -3,12 +3,13 @@ import { render } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
+import { theme } from '../src/theme';
 import type { Drive, LayoutSlot } from '@sparrow/shared';
 
 export function renderApp(ui: ReactElement, route = '/') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MantineProvider>
+    <MantineProvider theme={theme}>
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
       </QueryClientProvider>

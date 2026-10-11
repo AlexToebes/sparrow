@@ -229,6 +229,21 @@ describe('Assignment (R8, R35, R37, R62)', () => {
     });
   });
 
+  it('D8: dropdowns open outside the dialog body so it cannot clip them', async () => {
+    setup();
+    renderApp(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Assign SPARE9' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
+    await userEvent.click(field(within(dlg), /^Slot/));
+    const option = await screen.findByRole('option', { name: /Bay 2/, hidden: true });
+    // Layout is not testable in jsdom; the structural guarantee is that the list lives in a
+    // portal on document.body, not inside the (scrolling, clipping) modal content.
+    expect(dlg.contains(option)).toBe(false);
+    expect(option.closest('.mantine-Popover-dropdown')?.parentElement?.parentElement).toBe(
+      document.body,
+    );
+  });
+
   it('R8: only spares are offered, never retired or installed drives', async () => {
     setup();
     renderApp(<App />, '/drives');

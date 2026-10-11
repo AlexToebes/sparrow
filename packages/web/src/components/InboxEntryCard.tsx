@@ -82,7 +82,6 @@ export function InboxEntryCard({ entry }: { entry: InboxEntry }) {
             value={pick}
             onChange={setPick}
             nothingFoundMessage="No spares"
-            comboboxProps={{ withinPortal: false }}
           />
           <div className="dialog-actions">
             <Button variant="default" onClick={close}>

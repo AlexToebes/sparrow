@@ -64,7 +64,6 @@ export function ImportRetiredPanel({ candidates }: { candidates: RetiredCandidat
           value={bulk}
           onChange={(v) => setBulk(v as RetirementReason | null)}
           allowDeselect={false}
-          comboboxProps={{ withinPortal: false }}
         />
         <Button
           variant="default"
@@ -139,7 +138,6 @@ export function ImportRetiredPanel({ candidates }: { candidates: RetiredCandidat
                       value={row.reason}
                       onChange={(v) => patch(c, { reason: v as RetirementReason | null })}
                       allowDeselect={false}
-                      comboboxProps={{ withinPortal: false }}
                     />
                   </Table.Td>
                   <Table.Td>

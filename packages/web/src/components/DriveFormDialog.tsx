@@ -154,7 +154,6 @@ export function DriveFormDialog({ drive, onClose, onSaved }: DriveFormDialogProp
             onChange={(v) => set({ unit: (v as CapacityUnit | null) ?? 'TB' })}
             allowDeselect={false}
             w={84}
-            comboboxProps={{ withinPortal: false }}
           />
         </div>
         <Select
@@ -163,7 +162,6 @@ export function DriveFormDialog({ drive, onClose, onSaved }: DriveFormDialogProp
           value={f.driveType}
           onChange={(v) => set({ driveType: v as DriveType | null })}
           clearable
-          comboboxProps={{ withinPortal: false }}
         />
         <TextInput
           label="Form factor"
@@ -183,7 +181,6 @@ export function DriveFormDialog({ drive, onClose, onSaved }: DriveFormDialogProp
           value={f.condition}
           onChange={(v) => set({ condition: v as DriveCondition | null })}
           clearable
-          comboboxProps={{ withinPortal: false }}
         />
         <TextInput
           label="Last test date"
