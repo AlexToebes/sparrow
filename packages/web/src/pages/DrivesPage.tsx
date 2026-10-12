@@ -12,13 +12,14 @@ import {
 import { Drawer } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { Link, useSearchParams } from 'react-router';
-import type { Drive, DriveStatus } from '@sparrow/shared';
-import { useDrives, useInbox, useLayout, useSuggestionSummary } from '../api/hooks';
+import type { Drive, DriveStatus, SlotStatus } from '@sparrow/shared';
+import { useDrives, useInbox, useLayout, useSlotStatus, useSuggestionSummary } from '../api/hooks';
 import { DriveDetail } from '../components/DriveDetail';
 import { DriveFormDialog } from '../components/DriveFormDialog';
 import { InboxIcon, PlusIcon, UpdateIcon } from '../components/icons';
 import { formatBytes } from '../lib/format';
-import { slotLabel } from '../lib/health';
+import { HEALTH_WORD, slotLabel } from '../lib/health';
+import { StateIcon } from '../components/SlotTile';
 
 type Filter = DriveStatus | 'all';
 
@@ -55,11 +56,52 @@ function UpdatesFlag() {
   );
 }
 
+/**
+ * A compact health indicator for an installed drive: icon plus word, never color alone (AGENTS 8).
+ * Stale data keeps its last known health but is labelled stale (R18, R47). Nothing for a drive
+ * without a slot status (spares and retired drives have none).
+ */
+export function HealthMark({ status }: { status: SlotStatus | undefined }) {
+  if (!status) return <span className="dim">—</span>;
+  if (status.flag) {
+    return (
+      <span className="health-mark" data-state="missing">
+        <StateIcon state="missing" size={14} /> Missing
+      </span>
+    );
+  }
+  if (status.lastReportedAt === null) {
+    return (
+      <span className="health-mark" data-state="unknown">
+        <StateIcon state="unknown" size={14} /> Not reported
+      </span>
+    );
+  }
+  if (status.stale) {
+    return (
+      <span className="health-mark" data-state="stale">
+        <StateIcon state="stale" size={14} /> Stale, last {HEALTH_WORD[status.health].toLowerCase()}
+      </span>
+    );
+  }
+  return (
+    <span className="health-mark" data-state={status.health}>
+      <StateIcon state={status.health} size={14} /> {HEALTH_WORD[status.health]}
+    </span>
+  );
+}
+
 export function DrivesPage() {
   const phone = useMediaQuery('(max-width: 48em)') ?? false;
   const drives = useDrives();
+  const slotStatus = useSlotStatus();
   const layout = useLayout();
   const inboxCount = useInbox().data?.count ?? 0;
+  const statusBySlot = useMemo(
+    () => new Map((slotStatus.data?.slots ?? []).map((st) => [st.slotId, st])),
+    [slotStatus.data],
+  );
+  const healthOf = (d: Drive) => (d.slotId ? statusBySlot.get(d.slotId) : undefined);
   const suggestions = useSuggestionSummary().data?.byDriveId ?? {};
   const hasUpdates = (d: Drive) => (suggestions[d.id]?.fill ?? 0) > 0;
   // The status filter lives in the URL (/drives?status=retired) so it can be linked to.
@@ -218,13 +260,18 @@ export function DrivesPage() {
                 <Text size="sm" c="dimmed">
                   {[d.model, d.driveType, formatBytes(d.capacityBytes)].filter(Boolean).join(' · ')}
                 </Text>
-                <Text size="sm">{whereOf(d)}</Text>
+                <span className="drive-card-bottom">
+                  <Text component="span" size="sm">
+                    {whereOf(d)}
+                  </Text>
+                  {d.status === 'installed' ? <HealthMark status={healthOf(d)} /> : null}
+                </span>
               </button>
             ))}
           </div>
         ) : (
           <section className="card" aria-label="Drives">
-            <Table.ScrollContainer minWidth={560}>
+            <Table.ScrollContainer minWidth={680}>
               <Table verticalSpacing="xs" horizontalSpacing="sm">
                 <Table.Thead>
                   <Table.Tr>
@@ -233,6 +280,7 @@ export function DrivesPage() {
                     <Table.Th>Capacity</Table.Th>
                     <Table.Th>Status</Table.Th>
                     <Table.Th>Where</Table.Th>
+                    <Table.Th>Health</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
@@ -259,6 +307,9 @@ export function DrivesPage() {
                         {hasUpdates(d) ? <UpdatesFlag /> : null}
                       </Table.Td>
                       <Table.Td>{whereOf(d)}</Table.Td>
+                      <Table.Td>
+                        {d.status === 'installed' ? <HealthMark status={healthOf(d)} /> : '—'}
+                      </Table.Td>
                     </Table.Tr>
                   ))}
                 </Table.Tbody>

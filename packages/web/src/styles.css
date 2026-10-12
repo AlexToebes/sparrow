@@ -1311,3 +1311,99 @@ body {
 .pool-history-list {
   margin-top: 10px;
 }
+
+/* Phone cards for the spares shelf and the retired-drive import (no sideways scrolling). */
+.shelf-cards,
+.retired-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.shelf-card,
+.retired-card {
+  background: var(--sp-card);
+  border: 1px solid var(--sp-line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.shelf-card-top,
+.shelf-card-bottom,
+.retired-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.retired-card-top {
+  justify-content: flex-start;
+}
+.shelf-serial,
+.retired-serial {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.shelf-card-meta,
+.shelf-card-where {
+  font-size: 14px;
+  color: var(--sp-dim);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.retired-card-health {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.wrap-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.health-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.health-mark[data-state='ok'] {
+  color: var(--sp-ok);
+}
+.health-mark[data-state='warning'],
+.health-mark[data-state='missing'] {
+  color: var(--sp-warn);
+}
+.health-mark[data-state='failed'] {
+  color: var(--sp-fail);
+}
+.health-mark[data-state='unknown'],
+.health-mark[data-state='stale'] {
+  color: var(--sp-dim);
+}
+.drive-card-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.stale-badge {
+  max-width: 100%;
+}
+@media (max-width: 48em) {
+  .page-title-row {
+    flex-wrap: wrap;
+  }
+  .title-actions {
+    flex-wrap: wrap;
+  }
+}

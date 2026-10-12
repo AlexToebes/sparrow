@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Badge, Button, Text } from '@mantine/core';
-import type { Drive } from '@sparrow/shared';
+import type { Drive, SlotStatus } from '@sparrow/shared';
 import { useDriveAction } from '../api/driveMutations';
 import { useDrivePools } from '../api/hooks';
 import { formatBytes, formatRelative } from '../lib/format';
@@ -16,6 +16,18 @@ import { MoveDialog } from './MoveDialog';
 import { RetireDialog } from './RetireDialog';
 import { StateIcon, poolColor } from './SlotTile';
 import { SuggestedUpdates } from './SuggestedUpdates';
+
+/** R18: what the health box says. A drive the provider never reported says so once, not three times. */
+function healthLine(status: SlotStatus): string {
+  const temp = status.temperatureC !== null ? `, ${status.temperatureC} °C` : '';
+  if (status.lastReportedAt === null) return 'The provider has never reported this drive.';
+  const seen = formatRelative(status.lastReportedAt);
+  const known =
+    status.health === 'unknown'
+      ? 'The provider has no health data for it'
+      : `Last known: ${HEALTH_WORD[status.health]}`;
+  return `${known}. Reported ${seen}${temp}.`;
+}
 
 function Row({ label, value }: { label: string; value: string | null }) {
   return (
@@ -128,7 +140,12 @@ export function DriveDetail({ drive, view = null, where = null, historyTab }: Dr
       </div>
 
       {view?.state === 'missing' && status?.flag && drive.status === 'installed' ? (
-        <MissingDrivePanel drive={drive} reason={status.flag.reason} where={where} />
+        <MissingDrivePanel
+          drive={drive}
+          reason={status.flag.reason}
+          where={where}
+          neverReported={status.lastReportedAt === null}
+        />
       ) : null}
       <dl className="facts">
         <Row
@@ -196,14 +213,7 @@ export function DriveDetail({ drive, view = null, where = null, historyTab }: Dr
           <strong>
             <StateIcon state={view.state} size={14} /> {view.word}
           </strong>
-          <div>
-            {status
-              ? `Last known: ${HEALTH_WORD[view.health]}. Reported ${formatRelative(status.lastReportedAt)}${
-                  status.temperatureC !== null ? `, ${status.temperatureC} °C` : ''
-                }.`
-              : 'No health data from a provider.'}
-            {view.note && view.state === 'missing' ? ` ${view.note}.` : ''}
-          </div>
+          <div>{status ? healthLine(status) : 'No health data from a provider.'}</div>
           {status?.detailUrl ? (
             <a href={status.detailUrl} target="_blank" rel="noopener noreferrer">
               Open in provider

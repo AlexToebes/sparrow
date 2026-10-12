@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useMediaQuery } from '@mantine/hooks';
 import { Badge, Button, Checkbox, Select, Table, Text, TextInput } from '@mantine/core';
 import { RETIREMENT_REASONS, type RetiredCandidate, type RetirementReason } from '@sparrow/shared';
 import { useImportRetired } from '../api/inboxMutations';
@@ -27,6 +28,7 @@ interface Row {
  * needs its own reason (no default); the health shown is a hint only and is never applied.
  */
 export function ImportRetiredPanel({ candidates }: { candidates: RetiredCandidate[] }) {
+  const phone = useMediaQuery('(max-width: 48em)') ?? false;
   const importer = useImportRetired();
   const [rows, setRows] = useState<Record<string, Row>>({});
   const [bulk, setBulk] = useState<RetirementReason | null>(null);
@@ -50,6 +52,67 @@ export function ImportRetiredPanel({ candidates }: { candidates: RetiredCandidat
     // R63, R60: the prefilled last-reported day, or null when the user cleared it (not recorded).
     date: rowOf(c).date === '' ? null : rowOf(c).date,
   }));
+
+  const facts = (c: RetiredCandidate) =>
+    [c.model, c.driveType, formatBytes(c.capacityBytes)].filter(Boolean).join(' · ') || '—';
+  const healthBadge = (c: RetiredCandidate) => (
+    <Badge variant="outline" color={stateColor(c.healthHint)}>
+      <span className="badge-icon">
+        <StateIcon state={c.healthHint} size={12} />
+      </span>{' '}
+      {HEALTH_WORD[c.healthHint]}
+    </Badge>
+  );
+  const reasonSelect = (c: RetiredCandidate, row: Row) => (
+    <Select
+      aria-label={`Reason for ${c.serial}`}
+      placeholder="Choose a reason"
+      data={REASON_DATA}
+      value={row.reason}
+      onChange={(v) => patch(c, { reason: v as RetirementReason | null })}
+      allowDeselect={false}
+    />
+  );
+  const dateField = (c: RetiredCandidate, row: Row) => (
+    <>
+      <TextInput
+        aria-label={`Date for ${c.serial}`}
+        type="date"
+        value={row.date}
+        max={todayLocal()}
+        placeholder="not recorded"
+        onChange={(e) => patch(c, { date: e.currentTarget.value })}
+        error={retirementDateError(row.date)}
+        rightSectionWidth={64}
+        rightSection={
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            color="gray"
+            aria-label={`Clear date for ${c.serial}`}
+            disabled={row.date === ''}
+            onClick={() => patch(c, { date: '' })}
+          >
+            Clear
+          </Button>
+        }
+      />
+      {row.date === '' ? (
+        <Text size="xs" c="dimmed">
+          Not recorded
+        </Text>
+      ) : null}
+    </>
+  );
+  const selectAll = (checked: boolean) =>
+    setRows((r) =>
+      Object.fromEntries(
+        candidates.map((c) => [
+          c.observationKey,
+          { ...(r[c.observationKey] ?? rowOf(c)), selected: checked },
+        ]),
+      ),
+    );
 
   return (
     <section aria-label="Import retired drives">
@@ -77,108 +140,88 @@ export function ImportRetiredPanel({ candidates }: { candidates: RetiredCandidat
           Apply reason to selected
         </Button>
       </div>
-      <Table.ScrollContainer minWidth={760}>
-        <Table verticalSpacing="xs" horizontalSpacing="sm">
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>
-                <Checkbox
-                  aria-label="Select all"
-                  checked={allSelected && candidates.length > 0}
-                  indeterminate={selected.length > 0 && !allSelected}
-                  onChange={(e) =>
-                    setRows((r) =>
-                      Object.fromEntries(
-                        candidates.map((c) => [
-                          c.observationKey,
-                          {
-                            ...(r[c.observationKey] ?? rowOf(c)),
-                            selected: e.currentTarget.checked,
-                          },
-                        ]),
-                      ),
-                    )
-                  }
-                />
-              </Table.Th>
-              <Table.Th>Serial</Table.Th>
-              <Table.Th>Drive</Table.Th>
-              <Table.Th>Last known health (hint)</Table.Th>
-              <Table.Th>Reason</Table.Th>
-              <Table.Th>Retirement date (optional)</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
+      {phone ? (
+        <>
+          <Checkbox
+            mb="xs"
+            label="Select all"
+            checked={allSelected && candidates.length > 0}
+            indeterminate={selected.length > 0 && !allSelected}
+            onChange={(e) => selectAll(e.currentTarget.checked)}
+          />
+          <ul className="retired-cards" aria-label="Retired drive candidates">
             {candidates.map((c) => {
               const row = rowOf(c);
               return (
-                <Table.Tr key={c.observationKey}>
-                  <Table.Td>
+                <li key={c.observationKey} className="retired-card">
+                  <div className="retired-card-top">
                     <Checkbox
                       aria-label={`Select ${c.serial}`}
                       checked={row.selected}
                       onChange={(e) => patch(c, { selected: e.currentTarget.checked })}
                     />
-                  </Table.Td>
-                  <Table.Td className="mono">{c.serial}</Table.Td>
-                  <Table.Td>
-                    {[c.model, c.driveType, formatBytes(c.capacityBytes)]
-                      .filter(Boolean)
-                      .join(' · ') || '—'}
-                  </Table.Td>
-                  <Table.Td>
-                    <Badge variant="outline" color={stateColor(c.healthHint)}>
-                      <span className="badge-icon">
-                        <StateIcon state={c.healthHint} size={12} />
-                      </span>{' '}
-                      {HEALTH_WORD[c.healthHint]}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <Select
-                      aria-label={`Reason for ${c.serial}`}
-                      placeholder="Choose a reason"
-                      data={REASON_DATA}
-                      value={row.reason}
-                      onChange={(v) => patch(c, { reason: v as RetirementReason | null })}
-                      allowDeselect={false}
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <TextInput
-                      aria-label={`Date for ${c.serial}`}
-                      type="date"
-                      value={row.date}
-                      max={todayLocal()}
-                      placeholder="not recorded"
-                      onChange={(e) => patch(c, { date: e.currentTarget.value })}
-                      error={retirementDateError(row.date)}
-                      rightSectionWidth={64}
-                      rightSection={
-                        <Button
-                          size="compact-xs"
-                          variant="subtle"
-                          color="gray"
-                          aria-label={`Clear date for ${c.serial}`}
-                          disabled={row.date === ''}
-                          onClick={() => patch(c, { date: '' })}
-                        >
-                          Clear
-                        </Button>
-                      }
-                    />
-                    {row.date === '' ? (
-                      <Text size="xs" c="dimmed">
-                        Not recorded
-                      </Text>
-                    ) : null}
-                  </Table.Td>
-                </Table.Tr>
+                    <span className="mono retired-serial">{c.serial}</span>
+                  </div>
+                  <Text size="sm" c="dimmed">
+                    {facts(c)}
+                  </Text>
+                  <div className="retired-card-health">
+                    <Text size="xs" c="dimmed">
+                      Last known health (hint)
+                    </Text>
+                    {healthBadge(c)}
+                  </div>
+                  {reasonSelect(c, row)}
+                  <div>{dateField(c, row)}</div>
+                </li>
               );
             })}
-          </Table.Tbody>
-        </Table>
-      </Table.ScrollContainer>
+          </ul>
+        </>
+      ) : (
+        <Table.ScrollContainer minWidth={760}>
+          <Table verticalSpacing="xs" horizontalSpacing="sm">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>
+                  <Checkbox
+                    aria-label="Select all"
+                    checked={allSelected && candidates.length > 0}
+                    indeterminate={selected.length > 0 && !allSelected}
+                    onChange={(e) => selectAll(e.currentTarget.checked)}
+                  />
+                </Table.Th>
+                <Table.Th>Serial</Table.Th>
+                <Table.Th>Drive</Table.Th>
+                <Table.Th>Last known health (hint)</Table.Th>
+                <Table.Th>Reason</Table.Th>
+                <Table.Th>Retirement date (optional)</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {candidates.map((c) => {
+                const row = rowOf(c);
+                return (
+                  <Table.Tr key={c.observationKey}>
+                    <Table.Td>
+                      <Checkbox
+                        aria-label={`Select ${c.serial}`}
+                        checked={row.selected}
+                        onChange={(e) => patch(c, { selected: e.currentTarget.checked })}
+                      />
+                    </Table.Td>
+                    <Table.Td className="mono">{c.serial}</Table.Td>
+                    <Table.Td>{facts(c)}</Table.Td>
+                    <Table.Td>{healthBadge(c)}</Table.Td>
+                    <Table.Td>{reasonSelect(c, row)}</Table.Td>
+                    <Table.Td>{dateField(c, row)}</Table.Td>
+                  </Table.Tr>
+                );
+              })}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+      )}
       <div className="dialog-actions">
         {selected.length > 0 && missingReasons > 0 ? (
           <Text size="sm" c="dimmed" role="status">
