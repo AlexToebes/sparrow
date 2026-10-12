@@ -209,6 +209,7 @@ export function SlotPicker({
                     <div
                       className="pick-tile"
                       data-state={view.state}
+                      data-stale={view.stale ? 'true' : undefined}
                       data-selected={selected ? 'true' : undefined}
                       data-dim={selected ? undefined : 'true'}
                       aria-current={selected ? 'true' : undefined}
@@ -235,6 +236,7 @@ export function SlotPicker({
                     }}
                     className="pick-tile"
                     data-state={view.state}
+                    data-stale={view.stale ? 'true' : undefined}
                     data-selected={selected ? 'true' : undefined}
                     onClick={() => onChange?.(slot.id)}
                     onKeyDown={(e) => onKeyDown(e, item)}

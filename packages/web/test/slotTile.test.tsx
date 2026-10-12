@@ -78,9 +78,24 @@ describe('SlotTile states (R18, D8)', () => {
         NOW,
       ),
     );
-    expect(screen.getByRole('button')).toHaveAttribute('data-state', 'stale');
-    expect(screen.getByText('Stale')).toBeInTheDocument();
-    expect(screen.getByText('Healthy, seen 3 d ago')).toBeInTheDocument();
+    expect(screen.getByRole('button')).toHaveAttribute('data-state', 'ok');
+    expect(screen.getByRole('button')).toHaveAttribute('data-stale', 'true');
+    expect(screen.getByText('Healthy')).toBeInTheDocument();
+    expect(screen.getByText('Stale, seen 3 d ago')).toBeInTheDocument();
+  });
+
+  it('F1/R18: a stale failed drive keeps its Failed state and word, with stale on top', () => {
+    tile(
+      buildSlotView(
+        slot,
+        drive,
+        status({ health: 'failed', stale: true, lastReportedAt: '2026-10-07T12:00:00.000Z' }),
+        NOW,
+      ),
+    );
+    expect(screen.getByRole('button')).toHaveAttribute('data-state', 'failed');
+    expect(screen.getByText('Failed')).toBeInTheDocument();
+    expect(screen.getByText('Stale, seen 3 d ago')).toBeInTheDocument();
   });
 
   it('without provider data an occupied slot reads as unknown', () => {

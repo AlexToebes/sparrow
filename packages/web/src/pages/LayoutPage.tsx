@@ -17,10 +17,10 @@ import { FlipIcon, BoxIcon, InboxIcon } from '../components/icons';
 import { SlotDetail } from '../components/SlotDetail';
 import { SlotTile, StateIcon, poolColor } from '../components/SlotTile';
 import { SparesShelf } from '../components/SparesShelf';
-import { displayDimensions } from '../lib/grid';
+import { formatGridSize } from '../lib/grid';
 import { buildSlotView, type SlotView } from '../lib/health';
 import { formatRelative } from '../lib/format';
-import { collectProblems, summarySentence } from '../lib/summary';
+import { chipLabel, collectProblems, summarySentence } from '../lib/summary';
 import { useNow } from '../lib/useNow';
 
 function FlipButton({ grid }: { grid: LayoutGrid }) {
@@ -35,11 +35,7 @@ function FlipButton({ grid }: { grid: LayoutGrid }) {
       ),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.layout }),
   });
-  const next = displayDimensions(
-    grid.rows,
-    grid.columns,
-    grid.orientation === 'landscape' ? 'portrait' : 'landscape',
-  );
+  const nextOrientation = grid.orientation === 'landscape' ? 'portrait' : 'landscape';
   return (
     <Button
       variant="subtle"
@@ -49,7 +45,7 @@ function FlipButton({ grid }: { grid: LayoutGrid }) {
       loading={flip.isPending}
       onClick={() => flip.mutate()}
     >
-      Flip to {next.columns} × {next.rows}
+      Flip to {formatGridSize(grid.rows, grid.columns, nextOrientation)}
     </Button>
   );
 }
@@ -120,13 +116,19 @@ export function LayoutPage() {
 
   const allViews = [...views.values()];
   const providerStale = status.data?.providerStale ?? false;
+  const gridNameBySlot = new Map<string, string>();
+  for (const e of layout.data.enclosures)
+    for (const g of e.grids) for (const s of g.slots) gridNameBySlot.set(s.id, g.name);
   const problems = collectProblems(
     allViews,
     providerStale,
     (v) => `stale ${formatRelative(v.status?.lastReportedAt, now).replace(' ago', '')}`,
+    (v) => chipLabel(v.label, gridNameBySlot.get(v.slotId)),
   );
   const occupied = allViews.filter((v) => v.state !== 'empty');
-  const healthy = occupied.filter((v) => v.state === 'ok').length;
+  const healthy = occupied.filter((v) => v.state === 'ok' && !v.stale).length;
+  const lastKnownHealthy = occupied.filter((v) => v.state === 'ok' && v.stale).length;
+  const anyStale = providerStale || occupied.some((v) => v.stale);
   const hasHealthData = occupied.some((v) => v.health !== 'unknown');
   const inboxCount = inbox.data?.count ?? 0;
   const spareCount = spares.data?.length ?? 0;
@@ -141,16 +143,21 @@ export function LayoutPage() {
 
   return (
     <>
-      <h2 className="summary">{summarySentence(problems.length, hasHealthData)}</h2>
+      <h2 className="summary">{summarySentence(problems.length, hasHealthData, anyStale)}</h2>
       {inboxCount > 0 ? (
         <Text c="dimmed" className="summary-sub">
           {inboxCount} newly discovered {inboxCount === 1 ? 'drive is' : 'drives are'} waiting.
         </Text>
       ) : null}
       <div className="chips" aria-label="Problems and counts">
-        {hasHealthData ? (
+        {hasHealthData && healthy > 0 ? (
           <span className="chip" data-kind="ok">
             <strong>{healthy}</strong> healthy
+          </span>
+        ) : null}
+        {lastKnownHealthy > 0 ? (
+          <span className="chip" data-kind="ok" data-stale="true">
+            <strong>{lastKnownHealthy}</strong> healthy, last known
           </span>
         ) : null}
         {problems.map((p) => (
@@ -159,6 +166,7 @@ export function LayoutPage() {
             type="button"
             className="chip chip-button"
             data-kind={p.kind}
+            data-stale={p.lastKnown ? 'true' : undefined}
             onClick={() => setSelectedId(p.slotId)}
           >
             <StateIcon state={p.kind} size={14} />
@@ -190,7 +198,6 @@ export function LayoutPage() {
           ) : null}
           <div className="grids">
             {enc.grids.map((grid) => {
-              const dims = displayDimensions(grid.rows, grid.columns, grid.orientation);
               const filled = grid.slots.filter((s) => s.driveId !== null).length;
               const poolsHere = new Map<string, ReturnType<typeof drivePools.get>>();
               for (const s of grid.slots) {
@@ -203,7 +210,8 @@ export function LayoutPage() {
                     <h2 className="card-title">{grid.name}</h2>
                     <div className="card-meta">
                       <Text size="sm" c="dimmed">
-                        {dims.columns} × {dims.rows} · {filled} of {grid.slots.length} occupied
+                        {formatGridSize(grid.rows, grid.columns, grid.orientation)} · {filled} of{' '}
+                        {grid.slots.length} occupied
                       </Text>
                       <FlipButton grid={grid} />
                     </div>

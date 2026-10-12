@@ -5,6 +5,7 @@ import { useLayoutMutations } from '../api/settings';
 import { useLayout } from '../api/hooks';
 import { ApiErrorAlert } from './ApiErrorAlert';
 import { BayGrid } from './BayGrid';
+import { formatGridSize } from '../lib/grid';
 import { GridForm } from './GridForm';
 
 type Mutations = ReturnType<typeof useLayoutMutations>;
@@ -220,8 +221,8 @@ function GridEditor({ grid, m }: { grid: LayoutGrid; m: Mutations }) {
           <strong>{grid.name}</strong>
           <span className="dim">
             {' '}
-            {grid.rows} x {grid.columns} · {grid.orientation} · {occupied} of {grid.slots.length}{' '}
-            occupied
+            {formatGridSize(grid.rows, grid.columns, grid.orientation)} · {grid.orientation} ·{' '}
+            {occupied} of {grid.slots.length} occupied
           </span>
         </div>
         <Group gap="xs">

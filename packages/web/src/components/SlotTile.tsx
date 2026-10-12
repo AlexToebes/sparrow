@@ -15,7 +15,14 @@ import {
 export const POOL_COLORS = ['grape', 'teal', 'orange', 'cyan', 'pink', 'lime'] as const;
 export const poolColor = (index: number) => POOL_COLORS[index % POOL_COLORS.length];
 
-export function StateIcon({ state, size = 16 }: { state: SlotView['state']; size?: number }) {
+/** `stale` is only used for the "stale" problem chip; tiles keep their last known health icon. */
+export function StateIcon({
+  state,
+  size = 16,
+}: {
+  state: SlotView['state'] | 'stale';
+  size?: number;
+}) {
   switch (state) {
     case 'ok':
       return <CheckCircleIcon size={size} />;
@@ -57,6 +64,7 @@ export function SlotTile({ view, pool, selected, onSelect }: SlotTileProps) {
       type="button"
       className="tile"
       data-state={view.state}
+      data-stale={view.stale ? 'true' : undefined}
       data-selected={selected ? 'true' : undefined}
       aria-label={summary}
       aria-pressed={selected ?? false}
@@ -75,7 +83,12 @@ export function SlotTile({ view, pool, selected, onSelect }: SlotTileProps) {
             <PlusIcon size={12} /> Assign
           </span>
         ) : null}
-        {view.note ? <span className="tile-note">{view.note}</span> : null}
+        {view.note ? (
+          <span className="tile-note">
+            {view.stale ? <ClockIcon size={11} /> : null}
+            {view.note}
+          </span>
+        ) : null}
         {drive?.capacityBytes != null ? (
           <span className="tile-meta">{formatBytes(drive.capacityBytes)}</span>
         ) : null}
