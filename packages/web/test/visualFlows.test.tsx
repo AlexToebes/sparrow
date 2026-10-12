@@ -498,7 +498,7 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     const dlg = await openMove();
     await userEvent.click(await card(dlg, /Another bay/));
     await nextStep(dlg);
-    expect(within(dlg).getByText(/Step 2 of 4 · Which bay\?/)).toBeInTheDocument();
+    expect(within(dlg).getByText(/Step 2 · Which bay\?/)).toBeInTheDocument();
     const current = within(dlg).getByRole('radio', {
       name: 'Front bays, Bay 3, current bay, occupied by CCC2',
     });
@@ -506,9 +506,9 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     expect(within(current).getByText('Current')).toBeInTheDocument();
     expect(within(dlg).getByRole('button', { name: 'Next' })).toBeDisabled();
     await pickSlot(within(dlg), /Bay 2, empty/);
-    expect(within(dlg).getByText(/Step 2 of 4 · Which bay\?/)).toBeInTheDocument();
+    expect(within(dlg).getByText(/Step 2 · Which bay\?/)).toBeInTheDocument();
     await nextStep(dlg);
-    expect(within(dlg).getByText(/Step 3 of 4 · What goes into this bay\?/)).toBeInTheDocument();
+    expect(within(dlg).getByText(/Step 3 · What goes into this bay\?/)).toBeInTheDocument();
     await userEvent.click(await card(dlg, 'Leave it empty'));
     await nextStep(dlg);
     expect(dlg.querySelector('.step-content')).toHaveTextContent(
@@ -528,12 +528,14 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     await userEvent.click(await card(dlg, /Another bay/));
     await nextStep(dlg);
     await pickSlot(within(dlg), /Bay 1, occupied by AAA0/);
-    expect(within(dlg).getByText(/Step 2 of 5 · Which bay\?/)).toBeInTheDocument();
+    expect(within(dlg).getByText(/Step 2 · Which bay\?/)).toBeInTheDocument();
     await nextStep(dlg);
     expect(
-      within(dlg).getByText(/Step 3 of 5 · What happens to the drive in that bay\?/),
+      within(dlg).getByText(/Step 3 · What happens to the drive in that bay\?/),
     ).toBeInTheDocument();
     expect(within(dlg).getAllByText(/AAA0/).length).toBeGreaterThan(0);
+    // F14: the occupant sentence names the grid too.
+    expect(dlg.querySelector('.step-content')).toHaveTextContent(/is in Front bays, Bay 1\./);
     await userEvent.click(await card(dlg, /^Retire/));
     expect(within(dlg).getByRole('button', { name: 'Next' })).toBeDisabled();
     await userEvent.click(field(within(dlg), /^Reason/));
@@ -636,6 +638,8 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     const options = within(dlg).getAllByRole('radio');
     expect(options[0]).toHaveTextContent(/^Swap — put AAA0 into /);
     await userEvent.click(options[0]!);
+    // F14: once swapping, the count is known and stays 4 through the confirm step.
+    expect(within(dlg).getByText(/Step 3 of 4 · What happens to the drive/)).toBeInTheDocument();
     await nextStep(dlg);
     expect(within(dlg).queryByText(/What goes into this bay\?/)).not.toBeInTheDocument();
     expect(within(dlg).getByText(/Step 4 of 4 · Confirm/)).toBeInTheDocument();

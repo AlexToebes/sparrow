@@ -88,7 +88,7 @@ afterEach(() => vi.restoreAllMocks());
 
 const exportFile = JSON.stringify({
   format: 'sparrow-export',
-  schemaVersion: 1,
+  schemaVersion: 3,
   data: {
     drives: [{}, {}, {}],
     enclosures: [{}],
@@ -144,9 +144,8 @@ describe('R43, R44: import UI', () => {
     expect(calls.some((c) => c.url === '/api/import')).toBe(false);
   });
 
-  it('R43: shows the API message for a newer schema version', async () => {
-    const message =
-      'This export was made by a newer Sparrow (schema 2); this version supports up to 1.';
+  it('R43: shows the API message when the server refuses the file contents', async () => {
+    const message = 'The export file is inconsistent: slot s9 belongs to no grid.';
     mock({
       'POST /api/import': () => ({ status: 400, body: { error: { code: 'invalid', message } } }),
     });
@@ -154,6 +153,41 @@ describe('R43, R44: import UI', () => {
     const user = await pickFile(exportFile);
     await user.click(await screen.findByRole('button', { name: 'Replace all data' }));
     expect(await screen.findByText(message)).toBeVisible();
+  });
+
+  it('R43: an old or newer export version is refused before the confirm step, with no request', async () => {
+    mock();
+    renderApp(<App />, '/settings');
+    await pickFile(exportFile.replace('"schemaVersion":3', '"schemaVersion":1'));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/old export \(version 1\)/);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await pickFile(exportFile.replace('"schemaVersion":3', '"schemaVersion":9'), 'new.json');
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(/newer Sparrow \(export version 9\)/),
+    );
+    await pickFile('{"hello":1}', 'other.json');
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(/not a Sparrow export file/),
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(calls.some((c) => c.url === '/api/import')).toBe(false);
+  });
+
+  it('R43: the import result is shown above the buttons, and the backup path may wrap', async () => {
+    mock({
+      'POST /api/import': () => ({
+        body: { backupPath: '/data/exports/pre-import.json', counts: { drives: 3 } },
+      }),
+    });
+    renderApp(<App />, '/settings');
+    const user = await pickFile(exportFile);
+    await user.click(await screen.findByRole('button', { name: 'Replace all data' }));
+    const status = await screen.findByRole('status');
+    const exportButton = screen.getByRole('link', { name: 'Export data' });
+    expect(
+      status.compareDocumentPosition(exportButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(within(status).getByText('/data/exports/pre-import.json')).toHaveClass('wrap-anywhere');
   });
 });
 

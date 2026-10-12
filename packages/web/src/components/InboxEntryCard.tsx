@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { Alert, Badge, Button, Modal, Select, Text } from '@mantine/core';
+import { Alert, Badge, Button, Modal, Text } from '@mantine/core';
 import type { InboxEntry } from '@sparrow/shared';
 import { useCreateFromObservation, useLinkObservation } from '../api/inboxMutations';
-import { useDrives } from '../api/hooks';
+import { useDrives, useSlotStatus } from '../api/hooks';
 import { formatBytes, formatRelative } from '../lib/format';
 import { HEALTH_WORD } from '../lib/health';
+import { isObservationStale } from '../lib/observationAge';
 import { AssignDialog } from './AssignDialog';
 import { stateColor } from './DriveDetail';
 import { StateIcon } from './SlotTile';
+import { SparePicker } from './SparePicker';
 import { driveLabel } from './RetireFields';
 
 type Step = null | { kind: 'pick' } | { kind: 'link'; driveId: string } | { kind: 'create' };
@@ -18,22 +20,34 @@ export function InboxEntryCard({ entry }: { entry: InboxEntry }) {
   const serial = o.serial ?? '';
   const [step, setStep] = useState<Step>(null);
   const spares = useDrives('spare');
+  const staleAfterHours = useSlotStatus().data?.staleAfterHours;
+  const stale = isObservationStale(o.lastReportedAt, staleAfterHours);
   const link = useLinkObservation(entry.observationKey);
   const create = useCreateFromObservation(entry.observationKey);
   const [pick, setPick] = useState<string | null>(suggestion?.id ?? null);
   const close = () => setStep(null);
+  const noSpares = spares.isSuccess && spares.data.length === 0;
   const facts = [o.model, o.driveType, formatBytes(o.capacityBytes)].filter(Boolean).join(' · ');
 
   return (
     <article className="card inbox-card" aria-label={`Discovered drive ${serial}`}>
       <div className="card-head">
         <h2 className="card-title mono">{serial}</h2>
-        <Badge variant="light" color={stateColor(o.health)}>
-          <span className="badge-icon">
-            <StateIcon state={o.health} size={12} />
-          </span>{' '}
-          {HEALTH_WORD[o.health]}
-        </Badge>
+        {stale ? (
+          <Badge variant="outline" color="gray" className="stale-badge">
+            <span className="badge-icon">
+              <StateIcon state="stale" size={12} />
+            </span>{' '}
+            Stale · last known {HEALTH_WORD[o.health]}
+          </Badge>
+        ) : (
+          <Badge variant="light" color={stateColor(o.health)}>
+            <span className="badge-icon">
+              <StateIcon state={o.health} size={12} />
+            </span>{' '}
+            {HEALTH_WORD[o.health]}
+          </Badge>
+        )}
       </div>
       <Text c="dimmed" size="sm">
         {facts || 'No model or capacity reported'}
@@ -61,27 +75,37 @@ export function InboxEntryCard({ entry }: { entry: InboxEntry }) {
       <div className="detail-actions">
         <Button
           size="compact-md"
-          variant={suggestion ? 'default' : 'filled'}
+          variant={suggestion || noSpares ? 'default' : 'filled'}
+          disabled={noSpares}
           onClick={() => setStep({ kind: 'pick' })}
         >
           Link to a spare
         </Button>
-        <Button size="compact-md" variant="default" onClick={() => setStep({ kind: 'create' })}>
+        <Button
+          size="compact-md"
+          variant={noSpares && !suggestion ? 'filled' : 'default'}
+          onClick={() => setStep({ kind: 'create' })}
+        >
           Create new record
         </Button>
       </div>
+      {noSpares ? (
+        <Text size="sm" c="dimmed" mt="xs">
+          There are no spares on the shelf to link, so create a new record for this drive.
+        </Text>
+      ) : null}
 
       {step?.kind === 'pick' ? (
         <Modal opened onClose={close} title={`Link ${serial} to a spare`} centered>
-          <Select
-            label="Spare"
-            description="Spares only. The drive record keeps its history and gains the reported details."
-            placeholder="Choose a spare"
-            searchable
-            data={(spares.data ?? []).map((d) => ({ value: d.id, label: driveLabel(d) }))}
+          <Text size="sm" c="dimmed" mb="xs">
+            Spares only. The drive record keeps its history and gains the reported details.
+          </Text>
+          <SparePicker
+            spares={spares.data ?? []}
             value={pick}
             onChange={setPick}
-            nothingFoundMessage="No spares"
+            loading={spares.isPending}
+            label="Spare"
           />
           <div className="dialog-actions">
             <Button variant="default" onClick={close}>
