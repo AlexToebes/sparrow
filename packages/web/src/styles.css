@@ -389,8 +389,10 @@ body {
 .tile[data-state='missing'] .tile-word {
   color: var(--sp-warn);
 }
-.tile[data-state='stale'] {
-  background: repeating-linear-gradient(
+/* Stale keeps the last known health color and icon; the hatching sits on top (R18, R47). */
+.tile[data-stale='true'],
+.chip[data-stale='true'] {
+  background-image: repeating-linear-gradient(
     -45deg,
     var(--sp-hatch),
     var(--sp-hatch) 6px,
@@ -398,8 +400,20 @@ body {
     transparent 12px
   );
 }
+.tile-note {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.tile-note-short {
+  display: none;
+}
+.tile-note svg {
+  flex: none;
+  margin-top: 2px;
+}
 
-/* Phone: tighter tiles, serial hidden (it is in the detail sheet) */
+/* Phone: tighter tiles; the serial stays, on one line with an ellipsis */
 @media (max-width: 48em) {
   .page {
     padding: 16px 16px 24px;
@@ -419,7 +433,19 @@ body {
     padding: 8px;
   }
   .tile-serial {
+    font-size: 10px;
+  }
+  .tile-note {
+    font-size: 11px;
+    align-items: center;
+  }
+  /* Narrow tiles: clock icon + "3 d"; hatching and the banner already say stale. */
+  .tile[data-stale='true'] .tile-note-full {
     display: none;
+  }
+  .tile[data-stale='true'] .tile-note-short {
+    display: inline;
+    white-space: nowrap;
   }
   .tile-word {
     font-size: 13px;
@@ -836,8 +862,8 @@ body {
   border-style: dashed;
   border-color: var(--sp-warn);
 }
-.pick-tile[data-state='stale'] {
-  background: repeating-linear-gradient(
+.pick-tile[data-stale='true'] {
+  background-image: repeating-linear-gradient(
     -45deg,
     var(--sp-hatch),
     var(--sp-hatch) 6px,

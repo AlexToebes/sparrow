@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { formatGridSize } from '../src/lib/grid';
 import { formatBytes, formatDuration, formatRelative } from '../src/lib/format';
 
 describe('formatBytes (D4 decimal units)', () => {
@@ -30,5 +31,20 @@ describe('relative time and durations', () => {
   it('formats spans', () => {
     expect(formatDuration(28 * 86_400_000)).toBe('28 d');
     expect(formatDuration(580 * 86_400_000)).toBe('1 y 7 mo');
+  });
+});
+
+describe('formatGridSize (F11)', () => {
+  it('writes columns × rows as drawn, with the × sign', () => {
+    expect(formatGridSize(2, 4, 'landscape')).toBe('4 × 2');
+    expect(formatGridSize(2, 4, 'portrait')).toBe('2 × 4');
+  });
+});
+
+describe('summarySentence with stale data (F1, R18, R47)', () => {
+  it('never says healthy while data is stale', async () => {
+    const { summarySentence } = await import('../src/lib/summary');
+    expect(summarySentence(0, true, true)).not.toMatch(/healthy/i);
+    expect(summarySentence(0, true, false)).toBe('Everything is healthy');
   });
 });

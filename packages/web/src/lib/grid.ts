@@ -29,3 +29,13 @@ export function displayDimensions(
 ): { rows: number; columns: number } {
   return orientation === 'portrait' ? { rows: columns, columns: rows } : { rows, columns };
 }
+
+/** "4 × 2": columns × rows as drawn (orientation applied). The one way grid sizes are written. */
+export function formatGridSize(
+  rows: number,
+  columns: number,
+  orientation: GridOrientation,
+): string {
+  const d = displayDimensions(rows, columns, orientation);
+  return `${d.columns} × ${d.rows}`;
+}

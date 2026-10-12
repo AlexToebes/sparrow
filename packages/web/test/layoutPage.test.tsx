@@ -8,7 +8,9 @@ import { makeDrive, makeSlot, mockApi, renderApp } from './utils';
 const T = '2026-01-01T00:00:00.000Z';
 const recent = new Date(Date.now() - 2 * 60_000).toISOString();
 
-function fixtures(over: { providerStale?: boolean } = {}) {
+const threeDaysAgo = new Date(Date.now() - 3 * 24 * 3_600_000).toISOString();
+
+function fixtures(over: { providerStale?: boolean; allStale?: boolean } = {}) {
   const slots = [
     makeSlot({ id: 's0', position: 0, label: 'Bay 1', driveId: 'd0' }),
     makeSlot({ id: 's1', position: 1, label: 'Bay 2', driveId: 'd1' }),
@@ -70,14 +72,20 @@ function fixtures(over: { providerStale?: boolean } = {}) {
     },
     '/api/status': {
       providerId: 'scrutiny',
-      providerStale: over.providerStale ?? false,
+      providerStale: over.providerStale ?? over.allStale ?? false,
       staleAfterHours: 36,
       lastSuccessAt: recent,
-      slots: [
-        st('s0', 'd0'),
-        st('s1', 'd1', { health: 'failed' }),
-        st('s2', 'd2', { flag: { kind: 'missing', reason: 'not-reported' } }),
-      ],
+      slots: over.allStale
+        ? [
+            st('s0', 'd0', { stale: true, lastReportedAt: threeDaysAgo }),
+            st('s1', 'd1', { stale: true, lastReportedAt: threeDaysAgo, health: 'failed' }),
+            st('s2', 'd2', { stale: true, lastReportedAt: threeDaysAgo, health: 'warning' }),
+          ]
+        : [
+            st('s0', 'd0'),
+            st('s1', 'd1', { health: 'failed' }),
+            st('s2', 'd2', { flag: { kind: 'missing', reason: 'not-reported' } }),
+          ],
     },
     '/api/pools': [
       {
@@ -176,5 +184,37 @@ describe('Layout page (R4, R15, R18, R47)', () => {
     fixtures({ providerStale: true });
     renderApp(<App />);
     expect(await screen.findByText('Scrutiny data is out of date')).toBeInTheDocument();
+  });
+
+  it('F1/R18/R47: with all data stale, last-known failed and warning drives are still counted and never called healthy', async () => {
+    fixtures({ allStale: true });
+    renderApp(<App />);
+    expect(await screen.findByText('Two things need a look')).toBeInTheDocument();
+    expect(screen.queryByText(/Everything is healthy/)).not.toBeInTheDocument();
+    const chips = screen.getByLabelText('Problems and counts');
+    expect(within(chips).getByText('Bay 2 failed, last known')).toBeInTheDocument();
+    expect(within(chips).getByText('Bay 3 warning, last known')).toBeInTheDocument();
+    expect(within(chips).getByText('healthy, last known')).toBeInTheDocument();
+    expect(within(chips).queryByText('healthy')).not.toBeInTheDocument();
+    // The tiles keep their health state, word and icon; stale is added on top.
+    const tile = screen.getByRole('button', { name: /^Bay 2, Failed, Stale, seen 3 d ago/ });
+    expect(tile).toHaveAttribute('data-state', 'failed');
+    expect(tile).toHaveAttribute('data-stale', 'true');
+    expect(within(tile).getByText('Failed')).toBeInTheDocument();
+    expect(within(tile).getByText('Stale, seen 3 d ago')).toBeInTheDocument();
+  });
+
+  it('F2/R47: the stale banner dates the newest report, not the last successful poll', async () => {
+    fixtures({ allStale: true });
+    renderApp(<App />);
+    const banner = await screen.findByRole('alert');
+    expect(banner).toHaveTextContent('Nothing new has been reported since 3 d ago.');
+    expect(banner).not.toHaveTextContent('just now');
+  });
+
+  it('F5: a bay labelled only with a number names its grid in the chip', async () => {
+    const { chipLabel } = await import('../src/lib/summary');
+    expect(chipLabel('3', 'Front bays')).toBe('Front bays 3');
+    expect(chipLabel('Bay 3', 'Front bays')).toBe('Bay 3');
   });
 });

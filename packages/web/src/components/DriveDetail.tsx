@@ -85,6 +85,7 @@ export function DriveDetail({ drive, view = null, where = null, historyTab }: Dr
                 <StateIcon state={view.state} size={12} />
               </span>{' '}
               {view.word}
+              {view.stale ? ', stale' : ''}
             </Badge>
           </>
         ) : null}
@@ -195,6 +196,7 @@ export function DriveDetail({ drive, view = null, where = null, historyTab }: Dr
         <div className="health-box" data-state={view.state}>
           <strong>
             <StateIcon state={view.state} size={14} /> {view.word}
+            {view.stale ? ', stale' : ''}
           </strong>
           <div>
             {status
