@@ -93,11 +93,11 @@ function PoolCard({
       {members.length > 0 ? (
         <ul className="pool-members" aria-label={`${pool.name} members`}>
           {members.map((m) => (
-            <li key={m.membershipId}>
+            <li key={m.driveId}>
               <button type="button" className="pool-member" onClick={() => onOpenDrive(m.driveId)}>
                 <span className="mono pool-member-serial">{m.serial}</span>
                 <span className="dim">{formatBytes(m.capacityBytes) || '—'}</span>
-                <span>{m.slotLabel ?? 'Not installed'}</span>
+                <span>{m.slotLabel}</span>
                 <Badge variant="light" color={m.role === 'data' ? 'teal' : 'indigo'}>
                   {m.role === 'data' ? 'Data' : 'Hot spare'}
                 </Badge>

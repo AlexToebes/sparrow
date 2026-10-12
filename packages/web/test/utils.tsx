@@ -50,6 +50,8 @@ export function makeDrive(over: Partial<Drive> & { id: string; serial: string })
     retirementDate: null,
     retirementNote: null,
     installedOn: null,
+    poolId: null,
+    poolRole: null,
     createdAt: T,
     updatedAt: T,
     ...over,

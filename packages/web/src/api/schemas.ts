@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { idSchema, poolSchema, timestampSchema, membershipRoleSchema } from '@sparrow/shared';
+import {
+  dateSchema,
+  idSchema,
+  poolSchema,
+  timestampSchema,
+  membershipRoleSchema,
+} from '@sparrow/shared';
 
 // Response shapes that shared does not define. They mirror the server routes; keep them in step.
 
@@ -24,17 +30,18 @@ export const poolSummarySchema = poolSchema.extend({
 });
 export type PoolSummary = z.infer<typeof poolSummarySchema>;
 
-/** GET /api/pools/:id (core getPool). Members are the open memberships. */
+/** GET /api/pools/:id (core getPool). Members are the drives installed in a bay with this pool (R29). */
 export const poolDetailSchema = poolSummarySchema.extend({
   members: z.array(
     z.object({
-      membershipId: idSchema,
       driveId: idSchema,
       serial: z.string(),
       capacityBytes: z.number().nullable(),
       role: membershipRoleSchema,
-      startedAt: timestampSchema,
-      slotLabel: z.string().nullable(),
+      /** R68: null = not recorded. */
+      installedOn: dateSchema.nullable(),
+      slotId: idSchema,
+      slotLabel: z.string(),
     }),
   ),
 });

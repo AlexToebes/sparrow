@@ -1,8 +1,8 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import {
+  activitySchema,
   driveSchema,
-  eventSchema,
   driveSuggestionsResponseSchema,
   inboxResponseSchema,
   layoutSchema,
@@ -15,14 +15,14 @@ import { apiGet } from './client';
 import { poolDetailSchema, poolSummarySchema, providerStatusSchema } from './schemas';
 
 const drivesSchema = z.array(driveSchema);
-const eventsSchema = z.array(eventSchema);
+const activitiesSchema = z.array(activitySchema);
 const poolsSchema = z.array(poolSummarySchema);
 
 export const queryKeys = {
   layout: ['layout'] as const,
   drives: (status?: DriveStatus) => ['drives', status ?? 'all'] as const,
   slotHistory: (id: string) => ['slots', id, 'history'] as const,
-  driveEvents: (id: string) => ['drives', id, 'events'] as const,
+  driveHistory: (id: string) => ['drives', id, 'history'] as const,
   inbox: ['inbox'] as const,
   providerStatus: ['provider-status'] as const,
   slotStatus: ['status'] as const,
@@ -40,11 +40,11 @@ export const useDrives = (status?: DriveStatus) =>
     queryFn: () => apiGet(status ? `/api/drives?status=${status}` : '/api/drives', drivesSchema),
   });
 
-/** Newest first, as the server returns them. */
-export const useDriveEvents = (driveId: string | null) =>
+/** R14: the activities with an event for the drive, each with all its events, newest first. */
+export const useDriveHistory = (driveId: string | null) =>
   useQuery({
-    queryKey: queryKeys.driveEvents(driveId ?? ''),
-    queryFn: () => apiGet(`/api/drives/${driveId}/events`, eventsSchema),
+    queryKey: queryKeys.driveHistory(driveId ?? ''),
+    queryFn: () => apiGet(`/api/drives/${driveId}/history`, activitiesSchema),
     enabled: driveId !== null,
   });
 
@@ -56,11 +56,11 @@ export const useSlotHistory = (slotId: string | null) =>
     enabled: slotId !== null,
   });
 
-/** The pool's history (its record and its members joining, leaving, changing role), newest first. */
+/** The pool's history: activities with an event on it (its record, members joining, leaving, role changes), newest first. */
 export const usePoolHistory = (poolId: string, enabled: boolean) =>
   useQuery({
     queryKey: queryKeys.poolHistory(poolId),
-    queryFn: () => apiGet(`/api/pools/${poolId}/history`, eventsSchema),
+    queryFn: () => apiGet(`/api/pools/${poolId}/history`, activitiesSchema),
     enabled,
   });
 

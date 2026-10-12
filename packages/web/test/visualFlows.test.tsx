@@ -4,7 +4,7 @@ import userEvent from './user';
 import { App } from '../src/App';
 import { makeDrive } from './utils';
 import { errorResponse, fixtureData, posts, setupServer } from './server';
-import { bay, drive, makeEvent } from './events';
+import { act, ev } from './activities';
 import { next, pickSlot, renderApp } from './utils';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -684,13 +684,10 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
 describe('Spare and retired history (owner request)', () => {
   it('a spares-shelf row opens the drive drawer with its History; Assign stays separate', async () => {
     setupServer({
-      'GET /api/drives/d9/events': [
-        makeEvent(
-          'drive-created',
-          '2026-03-01T09:00:00.000Z',
-          {},
-          { drives: [drive('d9', 'SPARE9')] },
-        ),
+      'GET /api/drives/d9/history': [
+        act('drive-added', '2026-03-01T09:00:00.000Z', null, [
+          ev('drive-created', { drive: ['d9', 'SPARE9'] }),
+        ]),
       ],
     });
     renderApp(<App />);
@@ -734,39 +731,36 @@ describe('Spare and retired history (owner request)', () => {
 
 describe('Life story shows removal dates (R69)', () => {
   it('R69: a backdated removal and an unrecorded one render with their markers', async () => {
-    const d0 = [drive('d0', 'AAA0')];
-    const from = [bay('s0', 'from', 'Bay 1', 'Front bays')];
-    const to = [bay('s0', 'to', 'Bay 1', 'Front bays')];
-    const at = '2026-10-11T09:00:00.000Z';
+    const d0: [string, string] = ['d0', 'AAA0'];
+    const slot: [string, string, string] = ['s0', 'Bay 1', 'Front bays'];
+    const out = (at: string, on: string | null) =>
+      act('removed', at, on, [
+        ev('drive-uninstalled', {
+          drive: d0,
+          slot,
+          payload: { installedOn: null, poolRole: null },
+        }),
+      ]);
+    const into = (at: string, on: string) =>
+      act('assigned', at, on, [
+        ev('drive-installed', { drive: d0, slot, payload: { poolRole: null } }),
+      ]);
     setupServer({
-      'GET /api/drives/d0/events': [
-        makeEvent('drive-removed', at, { removedOn: null }, { drives: d0, slots: from }),
-        makeEvent(
-          'drive-installed',
-          '2026-06-01T09:00:00.000Z',
-          { installedOn: '2026-06-01' },
-          { drives: d0, slots: to },
-        ),
-        makeEvent(
-          'drive-removed',
-          '2026-05-20T09:00:00.000Z',
-          { removedOn: '2026-05-01' },
-          { drives: d0, slots: from },
-        ),
-        makeEvent(
-          'drive-installed',
-          '2025-01-01T09:00:00.000Z',
-          { installedOn: '2025-01-01' },
-          { drives: d0, slots: to },
-        ),
-        makeEvent('drive-created', '2024-12-01T09:00:00.000Z', {}, { drives: d0 }),
+      'GET /api/drives/d0/history': [
+        out('2026-10-11T09:00:00.000Z', null),
+        into('2026-06-01T09:00:00.000Z', '2026-06-01'),
+        out('2026-05-20T09:00:00.000Z', '2026-05-01'),
+        into('2025-01-01T09:00:00.000Z', '2025-01-01'),
+        act('drive-added', '2024-12-01T09:00:00.000Z', null, [ev('drive-created', { drive: d0 })]),
       ],
     });
     renderApp(<App />);
     const panel = await openSlotPanel(/^Bay 1, /);
     const story = await within(panel).findByRole('region', { name: 'Life story' });
     expect(
-      await within(story).findByText('Removed from Front bays, Bay 1 (removal date not recorded)'),
+      await within(story).findByText(
+        /Removed from Front bays, Bay 1 \(removal date not recorded\)/,
+      ),
     ).toBeInTheDocument();
     expect(within(story).getByText('2026-05-01')).toBeInTheDocument();
     expect(within(story).getByText(/recorded 2026-05-20/)).toBeInTheDocument();

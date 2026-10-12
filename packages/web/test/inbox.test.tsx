@@ -106,8 +106,7 @@ function setup(extra: Record<string, Handler> = {}, inbox: Record<string, unknow
     },
     'GET /api/slots/s0/assignment-defaults': { poolId: 'p1', role: 'data', previousDriveId: null },
     'GET /api/slots/s1/assignment-defaults': { poolId: 'p1', role: 'data', previousDriveId: null },
-    'GET /api/drives/d0/events': [],
-    'GET /api/drives/d0/memberships': [],
+    'GET /api/drives/d0/history': [],
     ...extra,
   };
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
@@ -471,35 +470,20 @@ describe('Missing drive (R27)', () => {
 });
 
 describe('Pools (R29, R36)', () => {
-  it('R36: an installed drive can join a pool, with history listed', async () => {
+  it('R36: an installed drive can join a pool (the pool is a property of its installation)', async () => {
     const calls = setup({
-      'GET /api/drives/d0/memberships': [
-        {
-          id: 'm0',
-          driveId: 'd0',
-          poolId: 'p1',
-          role: 'data',
-          source: 'manual',
-          startedAt: '2025-01-01T00:00:00.000Z',
-          endedAt: '2025-06-01T00:00:00.000Z',
-          createdAt: T,
-        },
-      ],
       'POST /api/drives/d0/membership': {
-        id: 'm1',
         driveId: 'd0',
+        slotId: 's0',
         poolId: 'p1',
-        role: 'hot-spare',
-        source: 'manual',
-        startedAt: T,
-        endedAt: null,
-        createdAt: T,
+        poolRole: 'hot-spare',
+        installedOn: null,
       },
     });
     renderApp(<App />, '/drives');
     await userEvent.click(await screen.findByText('AAA0'));
     const sec = await screen.findByRole('region', { name: 'Pool membership' });
-    expect(await within(sec).findByText(/2025-01-01 to 2025-06-01/)).toBeInTheDocument();
+    expect(await within(sec).findByText('Not in a pool.')).toBeInTheDocument();
     await pick(within(sec), 'Pool', /tank/);
     await pick(within(sec), 'Role', 'Hot spare');
     await userEvent.click(within(sec).getByRole('button', { name: 'Join pool' }));

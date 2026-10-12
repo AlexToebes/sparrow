@@ -71,7 +71,6 @@ export function useInvalidateAll() {
         ['status'],
         ['inbox'],
         ['pools'],
-        ['memberships'],
         ['assignment-defaults'],
       ].map((queryKey) => qc.invalidateQueries({ queryKey })),
     );

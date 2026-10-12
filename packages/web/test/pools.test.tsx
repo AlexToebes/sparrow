@@ -4,7 +4,7 @@ import userEvent from './user';
 import { App } from '../src/App';
 import { sizeCheckText } from '../src/lib/poolSize';
 import { errorResponse, posts, setupServer, T } from './server';
-import { drive, makeEvent } from './events';
+import { act, ev } from './activities';
 import { renderApp } from './utils';
 
 const pool = (id: string, name: string, over: Record<string, unknown> = {}) => ({
@@ -20,12 +20,12 @@ const pool = (id: string, name: string, over: Record<string, unknown> = {}) => (
 });
 
 const member = (driveId: string, serial: string, over: Record<string, unknown> = {}) => ({
-  membershipId: `m-${driveId}`,
   driveId,
   serial,
   capacityBytes: 4e12,
   role: 'data',
-  startedAt: T,
+  installedOn: null,
+  slotId: `s-${driveId}`,
   slotLabel: 'Bay 1',
   ...over,
 });
@@ -57,34 +57,36 @@ describe('sizeCheckText (R34)', () => {
   });
 });
 
-describe('Pool history on the card (events linked to the pool)', () => {
-  const poolLink = [{ poolId: 'p1', poolName: 'tank' }];
+describe('Pool history on the card (activities with an event on the pool)', () => {
+  const pool1: [string, string] = ['p1', 'tank'];
+  // As the API returns them: newest first by seq.
   const history = [
-    makeEvent(
-      'pool-left',
-      '2026-10-11T09:00:00.000Z',
-      { role: 'data' },
-      { drives: [drive('d0', 'AAA0')], pools: poolLink },
-    ),
-    makeEvent(
-      'pool-updated',
-      '2026-10-10T09:00:00.000Z',
-      { name: 'tank', changes: { name: { from: 'old', to: 'tank' } } },
-      { drives: [], pools: poolLink },
-    ),
-    makeEvent(
-      'pool-role-changed',
-      '2026-10-09T09:00:00.000Z',
-      { from: 'data', to: 'hot-spare' },
-      { drives: [drive('d2', 'CCC2')], pools: poolLink },
-    ),
-    makeEvent(
-      'pool-joined',
-      '2026-10-08T09:00:00.000Z',
-      { role: 'data', startedAt: '2022-04-05T00:00:00.000Z' },
-      { drives: [drive('d0', 'AAA0')], pools: poolLink },
-    ),
-    makeEvent('pool-created', '2026-10-07T09:00:00.000Z', {}, { drives: [], pools: poolLink }),
+    act('pool-left', '2026-10-11T09:00:00.000Z', null, [
+      ev('pool-left', { drive: ['d0', 'AAA0'], pool: pool1, payload: { poolRole: 'data' } }),
+    ]),
+    act('pool-edited', '2026-10-10T09:00:00.000Z', null, [
+      ev('pool-updated', {
+        pool: pool1,
+        payload: { changes: { name: { from: 'old', to: 'tank' } } },
+      }),
+    ]),
+    act('pool-role-changed', '2026-10-09T09:00:00.000Z', null, [
+      ev('pool-role-changed', {
+        drive: ['d2', 'CCC2'],
+        pool: pool1,
+        payload: { from: 'data', to: 'hot-spare' },
+      }),
+    ]),
+    // Recorded after the pool was created, but the user dated it years back (F12).
+    act('pool-joined', '2026-10-08T09:00:00.000Z', '2022-04-05', [
+      ev('pool-joined', {
+        drive: ['d0', 'AAA0'],
+        slot: ['s0', 'Bay 1'],
+        pool: pool1,
+        payload: { poolRole: 'data' },
+      }),
+    ]),
+    act('pool-edited', '2026-10-07T09:00:00.000Z', null, [ev('pool-created', { pool: pool1 })]),
   ];
 
   it('is collapsed by default and loads the history only when opened', async () => {
@@ -96,23 +98,24 @@ describe('Pool history on the card (events linked to the pool)', () => {
     expect(calls.some((c) => c.url.includes('/api/pools/p1/history'))).toBe(false);
   });
 
-  it('lists the pool events newest first with members named from the drive links', async () => {
+  it('lists the pool events sorted by the displayed day, with members named from the drive and the bay from the copied label', async () => {
     twoPools({ 'GET /api/pools/p1/history': history });
     renderApp(<App />, '/pools');
     const tank = await screen.findByRole('region', { name: 'tank' });
     await userEvent.click(within(tank).getByText('History'));
     const list = await within(tank).findByRole('list', { name: 'tank history list' });
     const items = within(list).getAllByRole('listitem');
+    // The join was dated 2022-04-05 by the user, so it is listed as the oldest, after the pool's creation.
     expect(items.map((i) => i.querySelector('.story-title')!.textContent)).toEqual([
-      'AAA0 left',
+      'AAA0 left the pool',
       'Renamed from old to tank',
       'CCC2 changed role',
-      'AAA0 joined as data',
       'Pool created',
+      'AAA0 joined in Bay 1 as data',
     ]);
     expect(items[2]).toHaveTextContent('data → hot spare');
-    // A start date the user gave is shown as typed.
-    expect(items[3]).toHaveTextContent('2022-04-05');
+    // A date the user gave is shown as typed.
+    expect(items[4]).toHaveTextContent('2022-04-05');
   });
 
   it('says so when a pool has no history yet', async () => {
@@ -214,7 +217,11 @@ describe('Pools page (R34, R76)', () => {
       'GET /api/pools': [pool('p1', 'tank')],
       'GET /api/pools/p1': { ...pool('p1', 'tank'), members: [] },
       'DELETE /api/pools/p1': () =>
-        errorResponse(409, 'conflict', 'Pool p1 has membership history and cannot be deleted'),
+        errorResponse(
+          409,
+          'conflict',
+          'Pool p1 still has drives installed in it and cannot be deleted',
+        ),
     });
     renderApp(<App />, '/pools');
     await userEvent.click(await screen.findByRole('button', { name: 'Delete tank' }));

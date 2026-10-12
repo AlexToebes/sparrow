@@ -3,13 +3,7 @@ import { Alert, Button, Select, Text } from '@mantine/core';
 import type { Drive, MembershipRole } from '@sparrow/shared';
 import { ApiError } from '../api/client';
 import { usePools } from '../api/hooks';
-import {
-  useChangeMembership,
-  useJoinPool,
-  useLeavePool,
-  useMemberships,
-} from '../api/poolMutations';
-import { formatDate } from '../lib/format';
+import { useChangeMembership, useJoinPool, useLeavePool } from '../api/poolMutations';
 import { ConfirmDialog } from './ConfirmDialog';
 
 const ROLE_DATA = [
@@ -19,11 +13,11 @@ const ROLE_DATA = [
 const ROLE_WORD: Record<MembershipRole, string> = { data: 'data', 'hot-spare': 'hot spare' };
 
 /**
- * Pool membership of an installed drive (R36): join, change pool, change role, leave, and the history.
+ * Pool membership of an installed drive (R29, R36): join, change pool, change role, leave. The pool and
+ * role are properties of the drive's installation; what happened before is in the History section.
  * Joining needs an installed drive; the server refuses otherwise.
  */
 export function MembershipSection({ drive }: { drive: Drive }) {
-  const memberships = useMemberships(drive.id);
   const pools = usePools();
   const join = useJoinPool(drive.id);
   const change = useChangeMembership(drive.id);
@@ -33,8 +27,10 @@ export function MembershipSection({ drive }: { drive: Drive }) {
   const [leaving, setLeaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const history = memberships.data ?? [];
-  const open = history.find((m) => m.endedAt === null) ?? null;
+  const open =
+    drive.poolId !== null && drive.poolRole !== null
+      ? { poolId: drive.poolId, role: drive.poolRole }
+      : null;
   const poolName = (id: string) => pools.data?.find((p) => p.id === id)?.name ?? id;
   const poolId = poolPick ?? open?.poolId ?? null;
   const role = rolePick ?? open?.role ?? 'data';
@@ -66,9 +62,7 @@ export function MembershipSection({ drive }: { drive: Drive }) {
     <section aria-label="Pool membership">
       <h3 className="section-title">Pool</h3>
       <Text size="sm" c="dimmed" mb="xs">
-        {open
-          ? `In ${poolName(open.poolId)} as ${ROLE_WORD[open.role]} since ${formatDate(open.startedAt)}.`
-          : 'Not in a pool.'}
+        {open ? `In ${poolName(open.poolId)} as ${ROLE_WORD[open.role]}.` : 'Not in a pool.'}
       </Text>
       <div className="inline-form">
         <Select
@@ -108,21 +102,6 @@ export function MembershipSection({ drive }: { drive: Drive }) {
           {error}
         </Alert>
       ) : null}
-      {history.length > 0 ? (
-        <>
-          <Text size="sm" fw={600} mt="sm">
-            Membership history
-          </Text>
-          <ul className="membership-list" aria-label="Membership history">
-            {history.map((m) => (
-              <li key={m.id}>
-                {poolName(m.poolId)} · {ROLE_WORD[m.role]} · {formatDate(m.startedAt)} to{' '}
-                {m.endedAt ? formatDate(m.endedAt) : 'now'}
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
       {leaving ? (
         <ConfirmDialog
           title="Leave pool"
@@ -133,8 +112,8 @@ export function MembershipSection({ drive }: { drive: Drive }) {
         >
           <Text>
             Take <strong className="mono">{drive.serial}</strong> out of{' '}
-            {open ? poolName(open.poolId) : 'its pool'}? The drive stays in its slot; the membership
-            is kept in the history.
+            {open ? poolName(open.poolId) : 'its pool'}? The drive stays in its slot; the history
+            keeps the change.
           </Text>
         </ConfirmDialog>
       ) : null}

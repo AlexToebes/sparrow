@@ -1,13 +1,13 @@
 import { Skeleton, Text } from '@mantine/core';
 import { Link } from 'react-router';
-import { useDriveEvents } from '../api/hooks';
+import { useDriveHistory } from '../api/hooks';
 import { formatDuration } from '../lib/format';
 import { buildStory, summarizeStory } from '../lib/lifeStory';
 import { StateIcon } from './SlotTile';
 
 /** The drive's history as a vertical timeline, oldest first (UI_DESIGN, from E). The "History" heading belongs to HistorySection. */
 export function LifeStory({ driveId }: { driveId: string }) {
-  const { data, isPending, isError } = useDriveEvents(driveId);
+  const { data, isPending, isError } = useDriveHistory(driveId);
   if (isPending) return <Skeleton height={80} />;
   if (isError) return <Text c="red">Could not load the history.</Text>;
   if (data.length === 0) return <Text c="dimmed">No history yet.</Text>;

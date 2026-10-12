@@ -10,7 +10,7 @@ interface FileCounts {
   grids: number;
   slots: number;
   pools: number;
-  events: number;
+  activities: number;
 }
 
 const COUNT_LABELS: [keyof FileCounts, string][] = [
@@ -19,7 +19,7 @@ const COUNT_LABELS: [keyof FileCounts, string][] = [
   ['grids', 'grids'],
   ['slots', 'slots'],
   ['pools', 'pools'],
-  ['events', 'events'],
+  ['activities', 'activities'],
 ];
 
 const plural = (n: number, word: string) =>
@@ -43,7 +43,7 @@ function countsOf(file: unknown): FileCounts {
     grids: n('grids'),
     slots: n('slots'),
     pools: n('pools'),
-    events: n('events'),
+    activities: n('activities'),
   };
 }
 
@@ -69,7 +69,7 @@ export function BackupSection() {
             0,
           ),
           pools: 0,
-          events: 0,
+          activities: 0,
         }
       : null;
 

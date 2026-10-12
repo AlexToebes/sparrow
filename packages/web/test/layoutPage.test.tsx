@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import userEvent from './user';
 import { App } from '../src/App';
-import { bay, drive, makeEvent } from './events';
+import { act, ev } from './activities';
 import { makeDrive, makeSlot, mockApi, renderApp } from './utils';
 
 const T = '2026-01-01T00:00:00.000Z';
@@ -102,24 +102,27 @@ function fixtures(over: { providerStale?: boolean } = {}) {
       sizeCheck: null,
       members: [
         {
-          membershipId: 'm1',
           driveId: 'd0',
           serial: 'AAA0',
           role: 'data',
           capacityBytes: null,
-          startedAt: T,
+          installedOn: null,
+          slotId: 's0',
           slotLabel: 'Bay 1',
         },
       ],
     },
-    '/api/drives/d1/events': [
-      makeEvent(
-        'drive-installed',
-        '2026-02-01T00:00:00.000Z',
-        {},
-        { drives: [drive('d1', 'BBB1')], slots: [bay('s1', 'to', 'Bay 2', 'Front bays')] },
-      ),
-      makeEvent('drive-created', '2026-01-01T00:00:00.000Z', {}, { drives: [drive('d1', 'BBB1')] }),
+    '/api/drives/d1/history': [
+      act('assigned', '2026-02-01T00:00:00.000Z', '2026-02-01', [
+        ev('drive-installed', {
+          drive: ['d1', 'BBB1'],
+          slot: ['s1', 'Bay 2', 'Front bays'],
+          payload: { poolRole: null },
+        }),
+      ]),
+      act('drive-added', '2026-01-01T00:00:00.000Z', null, [
+        ev('drive-created', { drive: ['d1', 'BBB1'] }),
+      ]),
     ],
   });
 }

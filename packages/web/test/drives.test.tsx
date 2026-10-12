@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from './user';
 import { App } from '../src/App';
-import { bay, drive, makeEvent } from './events';
+import { act, ev } from './activities';
 import { makeDrive, makeSlot, next, pickSlot, renderApp } from './utils';
 
 const T = '2026-01-01T00:00:00.000Z';
@@ -103,14 +103,15 @@ function setup(extra: Record<string, unknown | ((body: unknown) => Response)> = 
       previousDriveId: 'dx',
     },
     'GET /api/slots/s0/assignment-defaults': { poolId: 'p1', role: 'data', previousDriveId: 'd0' },
-    'GET /api/drives/d0/events': [],
-    'GET /api/drives/d7/events': [
-      makeEvent(
-        'pool-joined',
-        '2025-01-01T00:00:00.000Z',
-        { role: 'hot-spare' },
-        { drives: [drive('d7', 'OLD7')], pools: [{ poolId: 'p1', poolName: 'tank' }] },
-      ),
+    'GET /api/drives/d0/history': [],
+    'GET /api/drives/d7/history': [
+      act('pool-joined', '2025-01-01T00:00:00.000Z', null, [
+        ev('pool-joined', {
+          drive: ['d7', 'OLD7'],
+          pool: ['p1', 'tank'],
+          payload: { poolRole: 'hot-spare' },
+        }),
+      ]),
     ],
     'POST /api/drives': drives[1],
     'POST /api/slots/s1/assign': { drive: drives[1] },
@@ -619,13 +620,14 @@ describe('Installation date on the drive detail (R68)', () => {
 
   it('shows "not recorded" with a Set date action, and Clear date sends null', async () => {
     const calls = setup({
-      'GET /api/drives/d0/events': [
-        makeEvent(
-          'drive-installed',
-          '2026-10-11T09:00:00.000Z',
-          { installedOn: null },
-          { drives: [drive('d0', 'AAA0')], slots: [bay('s0', 'to', 'Bay 1')] },
-        ),
+      'GET /api/drives/d0/history': [
+        act('assigned', '2026-10-11T09:00:00.000Z', null, [
+          ev('drive-installed', {
+            drive: ['d0', 'AAA0'],
+            slot: ['s0', 'Bay 1'],
+            payload: { poolRole: null },
+          }),
+        ]),
       ],
       'GET /api/drives': [makeDrive({ id: 'd0', serial: 'AAA0', slotId: 's0', installedOn: null })],
       'PATCH /api/drives/d0': makeDrive({

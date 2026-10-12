@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Skeleton, Text } from '@mantine/core';
 import { usePoolHistory } from '../api/hooks';
-import { describePoolEvent } from '../lib/poolHistory';
+import { poolHistoryItems } from '../lib/poolHistory';
 
 /** A collapsed "History" list on a pool card: record changes and members joining, leaving, changing role. */
 export function PoolHistory({ poolId, poolName }: { poolId: string; poolName: string }) {
   const [open, setOpen] = useState(false);
   const history = usePoolHistory(poolId, open);
+  const items = history.isSuccess ? poolHistoryItems(history.data, poolId) : [];
   return (
     <details
       className="pool-history"
@@ -19,26 +20,23 @@ export function PoolHistory({ poolId, poolName }: { poolId: string; poolName: st
           Could not load the history.
         </Text>
       ) : null}
-      {open && history.isSuccess && history.data.length === 0 ? (
+      {open && history.isSuccess && items.length === 0 ? (
         <Text c="dimmed" size="sm" mt="xs">
           No history yet.
         </Text>
       ) : null}
-      {open && history.isSuccess && history.data.length > 0 ? (
+      {open && history.isSuccess && items.length > 0 ? (
         <ol className="story pool-history-list" aria-label={`${poolName} history list`}>
-          {history.data.map((e) => {
-            const item = describePoolEvent(e);
-            return (
-              <li key={item.id} className="story-item" data-kind={e.type}>
-                <span className="story-dot" aria-hidden="true" />
-                <div className="story-head">
-                  <span className="mono story-date">{item.date}</span>
-                </div>
-                <div className="story-title">{item.title}</div>
-                {item.detail ? <div className="story-detail">{item.detail}</div> : null}
-              </li>
-            );
-          })}
+          {items.map((item) => (
+            <li key={item.id} className="story-item">
+              <span className="story-dot" aria-hidden="true" />
+              <div className="story-head">
+                <span className="mono story-date">{item.date}</span>
+              </div>
+              <div className="story-title">{item.title}</div>
+              {item.detail ? <div className="story-detail">{item.detail}</div> : null}
+            </li>
+          ))}
         </ol>
       ) : null}
     </details>

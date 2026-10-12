@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import userEvent from './user';
 import { App } from '../src/App';
-import { bay, drive, makeEvent } from './events';
+import { act, ev } from './activities';
 import { renderApp } from './utils';
 import { setupServer } from './server';
 
@@ -171,13 +171,14 @@ describe('Slot history (R74)', () => {
 
   it('R74: a life-story "Slot history" link opens that bay on its slot history', async () => {
     setupServer({
-      'GET /api/drives/d2/events': [
-        makeEvent(
-          'drive-installed',
-          T,
-          { installedOn: '2022-08-19' },
-          { drives: [drive('d2', 'CCC2')], slots: [bay('s2', 'to', 'Bay 3', 'Front bays')] },
-        ),
+      'GET /api/drives/d2/history': [
+        act('assigned', T, '2022-08-19', [
+          ev('drive-installed', {
+            drive: ['d2', 'CCC2'],
+            slot: ['s2', 'Bay 3', 'Front bays'],
+            payload: { poolRole: null },
+          }),
+        ]),
       ],
       'GET /api/slots/s2/history': history('s2', 'Bay 3'),
     });

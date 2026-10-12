@@ -1,29 +1,25 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import { LifeStory } from '../src/components/LifeStory';
-import { makeEvent } from './events';
+import { act, ev } from './activities';
 import { renderApp } from './utils';
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('life story health entries (R20)', () => {
   it('R20: shows each health entry as an icon plus text, never colour alone', async () => {
-    const events = [
-      makeEvent('health-changed', '2026-03-06T00:00:00.000Z', {
-        from: 'ok',
-        to: 'warning',
-        reportedAt: '2026-03-06T00:00:00.000Z',
-      }),
-      makeEvent('health-changed', '2026-03-05T00:00:00.000Z', {
-        from: null,
-        to: 'ok',
-        reportedAt: '2026-03-05T00:00:00.000Z',
-      }),
+    const poll = (at: string, from: string | null, to: string) =>
+      act('health-polled', at, null, [
+        ev('health-changed', { drive: ['d1', 'ZL1'], payload: { from, to, reportedAt: at } }),
+      ]);
+    const activities = [
+      poll('2026-03-06T00:00:00.000Z', 'ok', 'warning'),
+      poll('2026-03-05T00:00:00.000Z', null, 'ok'),
     ];
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) =>
-        Response.json(String(url).includes('/events') ? events : [], { status: 200 }),
+        Response.json(String(url).includes('/history') ? activities : [], { status: 200 }),
       ),
     );
     renderApp(<LifeStory driveId="d1" />);

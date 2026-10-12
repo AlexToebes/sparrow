@@ -4,7 +4,7 @@ import userEvent from './user';
 import { App } from '../src/App';
 import { buildStory } from '../src/lib/lifeStory';
 import { errorResponse, posts, setupServer } from './server';
-import { makeEvent } from './events';
+import { act, ev } from './activities';
 import { makeDrive, renderApp } from './utils';
 
 const provider = {
@@ -38,7 +38,7 @@ const driveSetup = (extra: Parameters<typeof setupServer>[0] = {}) =>
       byDriveId: { d0: { fill: 2, differs: 1, fillFields: ['model', 'capacityBytes'] } },
     },
     'GET /api/drives/d0/suggestions': { suggestions: [model, fill, differs] },
-    'GET /api/drives/d0/events': [],
+    'GET /api/drives/d0/history': [],
     ...extra,
   });
 
@@ -190,19 +190,27 @@ describe('Suggested updates (R72)', () => {
   it('R72: the life story reads "Details updated from the provider: model, capacity"', () => {
     const story = buildStory(
       [
-        makeEvent('drive-updated', '2026-03-01T10:00:00.000Z', {
-          source: 'provider',
-          changes: { model: { from: null, to: 'M' }, capacityBytes: { from: null, to: 1 } },
-        }),
+        act('suggestions-applied', '2026-03-01T10:00:00.000Z', null, [
+          ev('drive-updated', {
+            drive: ['d1', 'ZL1'],
+            payload: {
+              source: 'provider',
+              changes: { model: { from: null, to: 'M' }, capacityBytes: { from: null, to: 1 } },
+            },
+          }),
+        ]),
       ],
       'd1',
     );
     expect(story[0]!.title).toBe('Details updated from the provider: model, capacity');
     const manual = buildStory(
       [
-        makeEvent('drive-updated', '2026-03-01T10:00:00.000Z', {
-          changes: { model: { from: null, to: 'M' } },
-        }),
+        act('drive-edited', '2026-03-01T10:00:00.000Z', null, [
+          ev('drive-updated', {
+            drive: ['d1', 'ZL1'],
+            payload: { changes: { model: { from: null, to: 'M' } } },
+          }),
+        ]),
       ],
       'd1',
     );
@@ -257,11 +265,18 @@ describe('Suggested updates (R72)', () => {
     const at = '2026-03-01T10:00:00.000Z';
     const story = buildStory(
       [
-        makeEvent('suggestion-dismissed', '2026-03-02T10:00:00.000Z', {
-          field: 'model',
-          value: null,
-        }),
-        makeEvent('suggestion-dismissed', at, { field: 'model', value: 'WDC WD80EFZX' }),
+        act('suggestions-restored', '2026-03-02T10:00:00.000Z', null, [
+          ev('suggestion-dismissed', {
+            drive: ['d1', 'ZL1'],
+            payload: { field: 'model', value: null },
+          }),
+        ]),
+        act('suggestions-dismissed', at, null, [
+          ev('suggestion-dismissed', {
+            drive: ['d1', 'ZL1'],
+            payload: { field: 'model', value: 'WDC WD80EFZX' },
+          }),
+        ]),
       ],
       'd1',
     );

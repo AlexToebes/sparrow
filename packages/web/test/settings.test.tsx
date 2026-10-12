@@ -95,7 +95,7 @@ const exportFile = JSON.stringify({
     grids: [{}],
     slots: [{}, {}],
     pools: [],
-    events: [],
+    activities: [],
   },
 });
 
@@ -112,7 +112,7 @@ describe('R43, R44: import UI', () => {
       'POST /api/import': () => ({
         body: {
           backupPath: '/data/exports/pre-import.json',
-          counts: { drives: 3, enclosures: 1, grids: 1, slots: 2, pools: 0, events: 0 },
+          counts: { drives: 3, enclosures: 1, grids: 1, slots: 2, pools: 0, activities: 0 },
         },
       }),
     });
