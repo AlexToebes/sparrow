@@ -30,9 +30,9 @@ Do not add a dependency that is not in this table without a stated reason in the
 1. **Ports and adapters.** `packages/server/src/core` never imports from `packages/server/src/providers/*` (except the registry in `providers/index.ts`, which is wired in `main.ts` only). Enforce with an ESLint `no-restricted-imports` rule.
 2. **No provider vocabulary in the core.** Scrutiny field names (`device_status`, `risk_category`, `collector_date`, and so on), enums and IDs appear only inside `providers/scrutiny/`. The DB schema, API, UI and export never contain them (R53). The rule is about Scrutiny's raw field names: the normalized observation's `wwn` (Appendix A) is a drive identifier and is stored on drive records for the R2 fallback match.
 3. **Links are computed, never stored.** Match observations to drive records by normalized serial on every read (R2, R26, R54). Never store a provider ID. Never match on `sdX`.
-4. **The app owns its records.** Layout, drives, pools, memberships and events live in SQLite and keep working when the provider is down or `none` (R32).
-5. **Flag, never auto-change.** Missing or stale drives are flagged only. Status changes happen through an explicit user action and write an event (R10, R27).
-6. **Every state change writes an event (with its drive/slot/pool links) in the same transaction** as the change (R14, R33). One real action is one event: link every drive, slot and pool it involves instead of writing several events, and never pair events in readers.
+4. **The app owns its records.** Layout, drives, installations, pools and the activity log live in SQLite and keep working when the provider is down or `none` (R32).
+5. **Flag, never auto-change.** Missing or stale drives are flagged only. Status changes happen through an explicit user action and write an activity (R10, R27).
+6. **Every state change writes ONE activity, made of atomic events, in the same transaction as the change** (R14, R33). An activity is one user (or system) action; each event is one fact about at most one drive, one slot and one pool, and carries enough to apply and undo it. Write history only through `recordActivity`; composite helpers return event descriptors and the top-level action records one activity. Readers group events by activity, never pair across activities. The one exception is importing retired drives, one activity per item (R63). Tables hold the situation as it currently is; history lives only in the log.
 7. **No hard deletes of drives** (D5). Retire instead.
 8. **Timestamps** are stored as UTC ISO strings and displayed in the browser's local time (D3). **Capacities** are decimal units (D4).
 9. **No authentication** (N1). Do not add any.
@@ -51,7 +51,7 @@ Do not add a dependency that is not in this table without a stated reason in the
 ├── pnpm-lock.yaml
 ├── .github/workflows/build.yml
 └── packages/
-    ├── shared/                   # zod schemas + inferred types (drive, slot, pool, event, observation, export)
+    ├── shared/                   # zod schemas + inferred types (drive, installation, slot, pool, activity, observation, export)
     ├── server/
     │   ├── src/
     │   │   ├── core/             # domain services, no provider imports

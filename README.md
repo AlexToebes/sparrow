@@ -7,7 +7,7 @@
 A small self-hosted web app, run as one Docker container on your NAS, that:
 
 - shows **where each drive physically sits**, using named grids of slots (for example "Front bays" as a 4x2 grid, "Internal SSDs", "Boot");
-- tracks your **cold spares** and every drive's lifecycle: spare, installed, retired (failed, replaced or other), with purchase and warranty info and a per-drive event log;
+- tracks your **cold spares** and every drive's lifecycle: spare, installed, retired (failed, replaced or other), with purchase and warranty info and a per-drive history (a log of activities, each made of atomic events);
 - optionally **enriches this with live health data** from a pluggable provider. [Scrutiny](https://github.com/Starosdev/scrutiny) is the first.
 
 The core works on its own. If the provider is unreachable, replaced or removed, your layout, drives and history stay fully usable.
@@ -54,7 +54,7 @@ docker compose up -d
 Notes:
 
 - **Data directory.** On a NAS, point the volume at a dataset or share (for example `/mnt/<pool>/apps/sparrow/data:/data`) and make sure the container user can write to it. The image runs as the non-root `node` user (uid and gid 1000), so a bind-mounted directory needs `chown 1000:1000 data` (or set `user:` in the compose file to the owner of the directory). On TrueNAS, if the dataset is owned by the `apps` user, set `user: "568:568"` instead. A named volume works without this. If the directory is not writable, the app exits at startup with a message naming the path and the uid it runs as.
-- **Upgrading from an early build.** The database migrations are a single baseline that was edited in place before the first release (most recently so that events link to all the drives, slots and pools they involve), so a database created by an earlier build cannot be upgraded. This build needs a fresh data directory again: delete the data directory's `app.db`, `app.db-wal` and `app.db-shm` before starting this version. Exports made by earlier builds use the old event format and cannot be imported into this one (they are rejected with a clear message), so there is no way to carry that data over.
+- **Upgrading from an early build.** The database migrations are a single baseline that was edited in place before the first release (most recently for the activity model: a drive installed in a bay is an installation row that carries its pool, and history is a log of activities made of atomic events), so a database created by an earlier build cannot be upgraded. This build needs a fresh data directory again: delete the data directory's `app.db`, `app.db-wal` and `app.db-shm` before starting this version. Exports made by earlier builds (schema version 1 or 2) use the old format and cannot be imported into this one (they are rejected with a clear message), so there is no way to carry that data over.
 - **Image access.** A newly published package on GitHub Container Registry may be private. If your NAS cannot pull it, set the package to public in its GitHub settings, or run `docker login ghcr.io` with a personal access token that has `read:packages`.
 - **No authentication.** The app has no login by design. Run it on a trusted LAN only, and do not expose it to the internet.
 
@@ -85,7 +85,7 @@ Switching providers means changing `PROVIDER` and restarting. Nothing needs re-l
 
 ## Backup and restore
 
-All app data lives in the SQLite file in `/data`. You can also use **Export** in the UI to download everything (layout, drives, pools, memberships, events) as one JSON file, and **Import** to restore it. Import replaces all existing data, asks for confirmation, and first saves an export of the current data.
+All app data lives in the SQLite file in `/data`. You can also use **Export** in the UI to download everything (layout, drives, installations, pools, the activity log) as one JSON file, and **Import** to restore it. Import replaces all existing data, asks for confirmation, and first saves an export of the current data.
 
 ## Images and CI
 
