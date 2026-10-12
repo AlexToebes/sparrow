@@ -14,7 +14,9 @@ export default defineConfig({
   preview: {
     proxy: { '/api': 'http://localhost:3000' },
   },
-  build: { outDir: 'dist', sourcemap: true },
+  // Source maps are off for production builds (they were 4 MB, over five times the bundle, and
+  // shipped in the image). SOURCEMAP=1 builds hidden maps for debugging a build locally.
+  build: { outDir: 'dist', sourcemap: process.env.SOURCEMAP === '1' ? 'hidden' : false },
   test: {
     environment: 'jsdom',
     setupFiles: ['./test/setup.ts'],
