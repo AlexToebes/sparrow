@@ -8,7 +8,8 @@ import { createLayoutService } from '../src/core/layout.js';
 import { moveDrive } from '../src/core/move.js';
 import { getSlotHistory } from '../src/core/slot-history.js';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
-import { eventSlots, slots as slotsTable } from '../src/db/schema.js';
+import { events, slots as slotsTable } from '../src/db/schema.js';
+import { updateDrive } from '../src/core/drives.js';
 import { eq } from 'drizzle-orm';
 
 let opened: OpenedDatabase;
@@ -41,7 +42,7 @@ function setup() {
 }
 
 describe('slot history (R74)', () => {
-  it('R74: pairs installs and removals, newest first, with each way out', () => {
+  it('R74: reads the occupancy from installed / uninstalled events, newest first, with each way out', () => {
     const { slots } = setup();
     const [a, b, c, d, e] = ['A', 'B', 'C', 'D', 'E'].map(spare) as [
       ReturnType<typeof spare>,
@@ -163,27 +164,27 @@ describe('slot history (R74)', () => {
     assignDrive(db(), {
       driveId: b.id,
       slotId: s0,
-      installedOn: '2023-01-01',
+      installedOn: '2023-01-02',
       occupant: { action: 'retire', reason: 'failed', date: '2023-01-02' },
     });
     assignDrive(db(), {
       driveId: c.id,
       slotId: s0,
-      installedOn: '2024-01-01',
+      installedOn: '2024-01-03',
       occupant: { action: 'spare', removedOn: '2024-01-03' },
     });
     assignDrive(db(), {
       driveId: d.id,
       slotId: s0,
-      installedOn: '2025-01-01',
+      installedOn: '2025-01-05',
       occupant: { action: 'rma', date: '2025-01-05' },
     });
     const e = getSlotHistory(db(), s0).entries;
     expect(e.map((x) => x.serial)).toEqual(['D', 'C', 'B', 'A']);
-    expect(e[0]).toMatchObject({ installedOn: '2025-01-01', outcome: null, replacedBy: null });
+    expect(e[0]).toMatchObject({ installedOn: '2025-01-05', outcome: null, replacedBy: null });
     expect(e[1]).toMatchObject({
       serial: 'C',
-      installedOn: '2024-01-01',
+      installedOn: '2024-01-03',
       removedOn: '2025-01-05',
       outcome: { kind: 'rma' },
       replacedBy: { driveId: d.id, serial: 'D', capacityBytes: 4e12 },
@@ -307,18 +308,48 @@ describe('slot history (R74)', () => {
       toLabel: 'Hot swap',
       toGridName: 'Rear',
     });
-    // The link rows outlive the slot (no foreign key), with the label and grid copied in.
-    const links = db().select().from(eventSlots).where(eq(eventSlots.slotId, rear.id)).all();
+    // The events outlive the slot (no foreign key), with the label and grid copied in.
+    const links = db().select().from(events).where(eq(events.slotId, rear.id)).all();
     expect(links.length).toBeGreaterThanOrEqual(3);
-    expect(links.every((l) => l.gridName === 'Rear' || l.slotLabel === 'Hot swap')).toBe(true);
+    expect(links.every((l) => l.gridName === 'Rear' && l.slotLabel === 'Hot swap')).toBe(true);
     expect(db().select().from(slotsTable).where(eq(slotsTable.id, rear.id)).all()).toEqual([]);
   });
 
-  it('R74: slot history reads the indexed link table, not the payload JSON', () => {
+  it('R74: slot history reads the indexed slot column, not the payload JSON', () => {
     const plan = opened.sqlite
-      .prepare('EXPLAIN QUERY PLAN SELECT event_id FROM event_slots WHERE slot_id = ?')
+      .prepare('EXPLAIN QUERY PLAN SELECT id FROM events WHERE slot_id = ?')
       .all('x') as { detail: string }[];
-    expect(plan.map((p) => p.detail).join(' ')).toMatch(/event_slots_slot_idx/);
+    expect(plan.map((p) => p.detail).join(' ')).toMatch(/events_slot_idx/);
+  });
+
+  it('R68, R74: a later edit of the installation date moves the stay in the slot history', () => {
+    const { slots } = setup();
+    const a = spare('A');
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]!, installedOn: '2022-01-01' });
+    updateDrive(db(), a.id, { installedOn: '2021-12-24' });
+    expect(getSlotHistory(db(), slots[0]!).entries[0]).toMatchObject({
+      serial: 'A',
+      installedOn: '2021-12-24',
+      outcome: null,
+    });
+    updateDrive(db(), a.id, { installedOn: null });
+    removeToSpares(db(), a.id, { removedOn: '2023-01-01' });
+    expect(getSlotHistory(db(), slots[0]!).entries[0]).toMatchObject({
+      installedOn: null,
+      removedOn: '2023-01-01',
+    });
+  });
+
+  it('R74: how it left comes only from the SAME activity: a later retirement does not rewrite an earlier removal', () => {
+    const { slots } = setup();
+    const a = spare('A');
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]!, installedOn: '2022-01-01' });
+    removeToSpares(db(), a.id, { removedOn: '2022-06-01' });
+    retireDrive(db(), a.id, { reason: 'failed', date: '2022-06-02' }); // a spare is retired later
+    expect(getSlotHistory(db(), slots[0]!).entries[0]).toMatchObject({
+      outcome: { kind: 'spares' },
+      removedOn: '2022-06-01',
+    });
   });
 
   it('R74: an empty bay has no entries; GET returns 404 for an unknown bay', async () => {

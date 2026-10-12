@@ -7,10 +7,8 @@ import {
   appMeta,
   drives,
   enclosures,
-  eventDrives,
-  events,
   grids,
-  memberships,
+  installations,
   pools,
   providerSnapshot,
   slots,
@@ -27,15 +25,8 @@ export type NewEnclosure = Omit<typeof enclosures.$inferInsert, Omitted>;
 export type NewGrid = Omit<typeof grids.$inferInsert, Omitted>;
 export type NewSlot = Omit<typeof slots.$inferInsert, Omitted>;
 export type NewDrive = Omit<typeof drives.$inferInsert, Omitted | 'serialNormalized'>;
+export type NewInstallation = typeof installations.$inferInsert;
 export type NewPool = Omit<typeof pools.$inferInsert, Omitted>;
-export type NewMembership = Omit<typeof memberships.$inferInsert, 'id' | 'createdAt'>;
-/** A bare event row, optionally linked to one drive as its subject. Services use core/events.ts instead. */
-export interface NewEvent {
-  type: typeof events.$inferInsert.type;
-  payload: Record<string, unknown>;
-  at?: string;
-  driveId?: string | null;
-}
 
 export interface NewSnapshot {
   providerId: string;
@@ -97,20 +88,13 @@ export function createRepositories(db: AppDb) {
         db.select().from(slots).where(eq(slots.gridId, gridId)).orderBy(asc(slots.position)).all(),
     },
     drives: {
+      /** A bare spare row for tests and tools; services write the activity log, this does not. */
       create(input: NewDrive) {
         const serial = input.serial.trim();
-        // R68: an installed row needs an installation date; default to today for direct inserts.
-        const installedOn =
-          input.installedOn === undefined
-            ? input.status === 'installed'
-              ? now().slice(0, 10)
-              : null
-            : input.installedOn;
         return db
           .insert(drives)
           .values({
             ...input,
-            installedOn,
             serial,
             serialNormalized: normalizeSerial(serial),
             ...stamp(),
@@ -120,6 +104,15 @@ export function createRepositories(db: AppDb) {
       },
       get: (id: string) => db.select().from(drives).where(eq(drives.id, id)).get(),
       list: () => db.select().from(drives).orderBy(asc(drives.serialNormalized)).all(),
+    },
+    installations: {
+      /** A bare installation row for tests and tools; services also write the activity that explains it. */
+      create(input: NewInstallation) {
+        return db.insert(installations).values(input).returning().get();
+      },
+      get: (driveId: string) =>
+        db.select().from(installations).where(eq(installations.driveId, driveId)).get(),
+      list: () => db.select().from(installations).all(),
     },
     pools: {
       create(input: NewPool) {
@@ -131,23 +124,6 @@ export function createRepositories(db: AppDb) {
       },
       get: (id: string) => db.select().from(pools).where(eq(pools.id, id)).get(),
       list: () => db.select().from(pools).orderBy(asc(pools.name)).all(),
-    },
-    memberships: {
-      create(input: NewMembership) {
-        return db
-          .insert(memberships)
-          .values({ ...input, id: randomUUID(), createdAt: now() })
-          .returning()
-          .get();
-      },
-      get: (id: string) => db.select().from(memberships).where(eq(memberships.id, id)).get(),
-      listByDrive: (driveId: string) =>
-        db
-          .select()
-          .from(memberships)
-          .where(eq(memberships.driveId, driveId))
-          .orderBy(asc(memberships.startedAt))
-          .all(),
     },
     meta: {
       get(key: string): string | null {
@@ -194,37 +170,6 @@ export function createRepositories(db: AppDb) {
       clear(): void {
         db.delete(providerSnapshot).where(eq(providerSnapshot.id, 1)).run();
       },
-    },
-    events: {
-      create(input: NewEvent) {
-        return db.transaction((tx) => {
-          const row = tx
-            .insert(events)
-            .values({
-              id: randomUUID(),
-              type: input.type,
-              payload: input.payload,
-              at: input.at ?? now(),
-            })
-            .returning()
-            .get();
-          if (input.driveId) {
-            tx.insert(eventDrives)
-              .values({ eventId: row.id, driveId: input.driveId, role: 'subject' })
-              .run();
-          }
-          return row;
-        });
-      },
-      get: (id: string) => db.select().from(events).where(eq(events.id, id)).get(),
-      listByDrive: (driveId: string) =>
-        db
-          .select({ id: events.id, type: events.type, at: events.at, payload: events.payload })
-          .from(events)
-          .innerJoin(eventDrives, eq(eventDrives.eventId, events.id))
-          .where(eq(eventDrives.driveId, driveId))
-          .orderBy(asc(events.at))
-          .all(),
     },
   };
 }

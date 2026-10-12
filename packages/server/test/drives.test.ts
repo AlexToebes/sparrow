@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ZodError } from 'zod';
 import * as drivesModule from '../src/core/drives.js';
 import { createDrive, getDrive, listDrives, updateDrive } from '../src/core/drives.js';
-import { listDriveEvents } from '../src/core/events.js';
 import { DomainError } from '../src/core/errors.js';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
-import { drives, events } from '../src/db/schema.js';
+import { activities, drives, events } from '../src/db/schema.js';
+import { activitiesOf, eventsOfDrive, lastActivity } from './activity-helpers.js';
 
 let opened: OpenedDatabase;
 beforeEach(() => {
@@ -15,6 +15,7 @@ afterEach(() => opened.sqlite.close());
 
 const db = () => opened.db;
 const eventCount = () => opened.db.select().from(events).all().length;
+const activityCount = () => opened.db.select().from(activities).all().length;
 const driveCount = () => opened.db.select().from(drives).all().length;
 
 /** Returns the error a call throws, so tests can assert on code and message. */
@@ -71,19 +72,29 @@ describe('spare creation (R3, R11, R21)', () => {
     expect(driveCount()).toBe(0);
   });
 
-  it('R14: creation writes one drive-created event whose payload holds the initial fields', () => {
+  it('R14: creation records one drive-added activity with one drive-created event holding the whole record', () => {
     const d = createDrive(db(), { serial: ' abc ', model: 'M' });
-    const evs = listDriveEvents(db(), d.id);
-    expect(evs).toHaveLength(1);
-    expect(evs[0]).toMatchObject({ type: 'drive-created' });
-    expect(evs[0]!.links).toEqual({
-      drives: [
-        { driveId: d.id, role: 'subject', serial: 'abc', capacityBytes: null, driveType: null },
-      ],
-      slots: [],
-      pools: [],
+    const [a, ...rest] = activitiesOf(db());
+    expect(rest).toEqual([]);
+    expect(a).toMatchObject({ kind: 'drive-added', occurredOn: null, note: null });
+    expect(a!.events).toHaveLength(1);
+    expect(a!.events[0]).toMatchObject({
+      type: 'drive-created',
+      driveId: d.id,
+      slotId: null,
+      poolId: null,
+      drive: { serial: 'abc', capacityBytes: null, driveType: null },
     });
-    expect(evs[0]!.payload).toMatchObject({ serial: 'abc', model: 'M', capacityBytes: null });
+    // The whole stored record, so the log can rebuild it.
+    expect(a!.events[0]!.payload).toMatchObject({
+      id: d.id,
+      serial: 'abc',
+      serialNormalized: 'ABC',
+      model: 'M',
+      capacityBytes: null,
+      retirementReason: null,
+    });
+    expect(a!.events[0]!.payload).not.toHaveProperty('status');
   });
 
   it('R13: status, slot and retirement fields cannot be set on create', () => {
@@ -92,6 +103,7 @@ describe('spare creation (R3, R11, R21)', () => {
     expect(() => createDrive(db(), { serial: 'A', retirementReason: 'failed' })).toThrow(ZodError);
     expect(driveCount()).toBe(0);
     expect(eventCount()).toBe(0);
+    expect(activityCount()).toBe(0);
   });
 
   it('R11: serial is required and trimmed', () => {
@@ -127,7 +139,6 @@ describe('duplicate serials (D6, R26)', () => {
           id: 'raw',
           serial: 'zz',
           serialNormalized: 'ZZ',
-          status: 'spare',
           createdAt: '2026-01-01T00:00:00.000Z',
           updatedAt: '2026-01-01T00:00:00.000Z',
         })
@@ -143,7 +154,7 @@ describe('duplicate serials (D6, R26)', () => {
     );
     expect(getDrive(db(), b.id)).toMatchObject({ serial: 'B2', model: 'orig' });
     expect(getDrive(db(), a.id).serial).toBe('A1');
-    expect(listDriveEvents(db(), b.id).map((e) => e.type)).toEqual(['drive-created']);
+    expect(eventsOfDrive(db(), b.id).map((e) => e.type)).toEqual(['drive-created']);
   });
 
   it("D6: re-submitting a drive's own serial in a different case is allowed", () => {
@@ -154,12 +165,13 @@ describe('duplicate serials (D6, R26)', () => {
 });
 
 describe('editing (R3, R14)', () => {
-  it('R14: edits write one drive-updated event listing only the fields that changed, as from/to', () => {
+  it('R14: an edit records one drive-edited activity with one drive-updated event listing only the fields that changed, as from/to', () => {
     const d = createDrive(db(), { serial: 'E1', model: 'old', notes: 'keep' });
     const updated = updateDrive(db(), d.id, { model: 'new', vendor: 'Acme', notes: 'keep' });
     expect(updated).toMatchObject({ model: 'new', vendor: 'Acme', notes: 'keep' });
 
-    const latest = listDriveEvents(db(), d.id)[0]!;
+    expect(lastActivity(db()).kind).toBe('drive-edited');
+    const latest = eventsOfDrive(db(), d.id)[0]!;
     expect(latest.type).toBe('drive-updated');
     expect(latest.payload).toEqual({
       changes: {
@@ -169,20 +181,22 @@ describe('editing (R3, R14)', () => {
     });
   });
 
-  it('R14: a no-op patch writes no event and leaves updatedAt alone', () => {
+  it('R14: a no-op patch writes no event or activity and leaves updatedAt alone', () => {
     const d = createDrive(db(), { serial: 'N1', model: 'same' });
     const before = eventCount();
+    const activitiesBefore = activityCount();
     const same = updateDrive(db(), d.id, { model: 'same', serial: 'N1' });
     expect(same).toEqual(d);
     expect(updateDrive(db(), d.id, {})).toEqual(d);
     expect(eventCount()).toBe(before);
+    expect(activityCount()).toBe(activitiesBefore);
   });
 
   it('R14: clearing a field to null is an edit and is logged', () => {
     const d = createDrive(db(), { serial: 'C1', model: 'gone' });
     updateDrive(db(), d.id, { model: null });
     expect(getDrive(db(), d.id).model).toBeNull();
-    expect(listDriveEvents(db(), d.id)[0]!.payload).toEqual({
+    expect(eventsOfDrive(db(), d.id)[0]!.payload).toEqual({
       changes: { model: { from: 'gone', to: null } },
     });
   });
@@ -191,7 +205,7 @@ describe('editing (R3, R14)', () => {
     const d = createDrive(db(), { serial: 'S-OLD' });
     updateDrive(db(), d.id, { serial: '  s-new ' });
     expect(getDrive(db(), d.id)).toMatchObject({ serial: 's-new', serialNormalized: 'S-NEW' });
-    expect(listDriveEvents(db(), d.id)[0]!.payload).toEqual({
+    expect(eventsOfDrive(db(), d.id)[0]!.payload).toEqual({
       changes: { serial: { from: 'S-OLD', to: 's-new' } },
     });
   });
@@ -203,9 +217,11 @@ describe('editing (R3, R14)', () => {
       "CREATE TRIGGER fail_events BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT, 'event write failed'); END;",
     );
     const eventsBefore = eventCount();
+    const activitiesBefore = activityCount();
     expect(() => updateDrive(db(), d.id, { model: 'after' })).toThrow(/event write failed/);
     expect(getDrive(db(), d.id)).toMatchObject({ model: 'before' });
     expect(eventCount()).toBe(eventsBefore);
+    expect(activityCount()).toBe(activitiesBefore);
   });
 
   it('R14: a failing create writes no drive row', () => {
@@ -214,6 +230,7 @@ describe('editing (R3, R14)', () => {
     );
     expect(() => createDrive(db(), { serial: 'NOPE' })).toThrow(/event write failed/);
     expect(driveCount()).toBe(0);
+    expect(activityCount()).toBe(0);
   });
 
   it('R13: status, slot and retirement fields are not editable (rejected, not ignored)', () => {
@@ -239,7 +256,7 @@ describe('WWN edit (R2, R14)', () => {
     const changed = updateDrive(db(), d.id, { wwn: '0xdef' });
     expect(changed.wwn).toBe('0xdef');
     expect(updateDrive(db(), d.id, { wwn: null }).wwn).toBeNull();
-    const changes = listDriveEvents(db(), d.id)
+    const changes = eventsOfDrive(db(), d.id)
       .filter((e) => e.type === 'drive-updated')
       .map((e) => e.payload.changes);
     expect(changes).toEqual([
@@ -300,9 +317,9 @@ describe('queries (R3)', () => {
     const d = createDrive(db(), { serial: 'O1', model: 'a' });
     updateDrive(db(), d.id, { model: 'b' });
     updateDrive(db(), d.id, { model: 'c' });
-    const types = listDriveEvents(db(), d.id).map((e) => e.type);
+    const types = eventsOfDrive(db(), d.id).map((e) => e.type);
     expect(types).toEqual(['drive-updated', 'drive-updated', 'drive-created']);
-    expect(listDriveEvents(db(), d.id)[0]!.payload).toEqual({
+    expect(eventsOfDrive(db(), d.id)[0]!.payload).toEqual({
       changes: { model: { from: 'b', to: 'c' } },
     });
   });
@@ -311,8 +328,8 @@ describe('queries (R3)', () => {
     const a = createDrive(db(), { serial: 'SC-A' });
     const b = createDrive(db(), { serial: 'SC-B' });
     updateDrive(db(), a.id, { model: 'x' });
-    expect(listDriveEvents(db(), a.id)).toHaveLength(2);
-    expect(listDriveEvents(db(), b.id)).toHaveLength(1);
+    expect(eventsOfDrive(db(), a.id)).toHaveLength(2);
+    expect(eventsOfDrive(db(), b.id)).toHaveLength(1);
   });
 
   it('R11: get of an unknown drive is not-found', () => {

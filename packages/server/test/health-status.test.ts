@@ -3,10 +3,10 @@ import type { Observation } from '@sparrow/shared';
 import { assignDrive, removeToSpares, retireDrive, sendForRma } from '../src/core/assignment.js';
 import { computeSlotStatus, type SlotStatusResult } from '../src/core/health-status.js';
 import { createDrive, listDrives } from '../src/core/drives.js';
-import { listDriveEvents } from '../src/core/events.js';
 import { createLayoutService } from '../src/core/layout.js';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
 import { createRepositories } from '../src/db/repositories.js';
+import { eventsOfDrive as listDriveEvents, lastActivity, shape } from './activity-helpers.js';
 import { events } from '../src/db/schema.js';
 
 // Stale and missing detection (R10, R27, R28, R47). Everything runs against a fixed `now`, and the
@@ -307,17 +307,18 @@ describe('R27: the three missing-drive outcomes clear the flag and log the outco
     return { slot: a!, driveId: driveA };
   }
 
-  it('back to spares: slot is freed, drive-removed is logged', () => {
+  it('back to spares: slot is freed, drive-uninstalled is logged', () => {
     const { slot, driveId } = flaggedSlot();
     removeToSpares(db(), driveId);
 
     expect(slotOf(status(), slot)).toBeUndefined();
     expect(listDrives(db(), { status: 'spare' }).map((d) => d.id)).toContain(driveId);
     expect(listDriveEvents(db(), driveId).map((e) => e.type)).toEqual([
-      'drive-removed',
+      'drive-uninstalled',
       'drive-installed',
       'drive-created',
     ]);
+    expect(lastActivity(db()).kind).toBe('removed');
   });
 
   it('retired: slot is freed, drive-retired with the reason is logged', () => {
@@ -325,10 +326,11 @@ describe('R27: the three missing-drive outcomes clear the flag and log the outco
     retireDrive(db(), driveId, { reason: 'failed', date: '2026-10-10' });
 
     expect(slotOf(status(), slot)).toBeUndefined();
-    const retired = listDriveEvents(db(), driveId)[0]!;
-    expect(retired.type).toBe('drive-retired');
-    expect(retired.payload).toMatchObject({ reason: 'failed', date: '2026-10-10' });
-    expect(retired.links.slots.map((l) => [l.slotId, l.role])).toEqual([[slot, 'from']]);
+    const act = lastActivity(db());
+    expect(act).toMatchObject({ kind: 'retired', occurredOn: '2026-10-10' });
+    expect(shape(act)).toEqual(['drive-uninstalled', 'drive-retired']);
+    expect(act.events[1]!.payload).toMatchObject({ reason: 'failed' });
+    expect(act.events[0]!.slotId).toBe(slot);
   });
 
   it('sent for RMA: retired as failed with ONE drive-sent-for-rma event', () => {
@@ -339,10 +341,12 @@ describe('R27: the three missing-drive outcomes clear the flag and log the outco
     const log = listDriveEvents(db(), driveId);
     expect(log.map((e) => e.type)).toEqual([
       'drive-sent-for-rma',
+      'drive-uninstalled',
       'drive-installed',
       'drive-created',
     ]);
-    expect(log[0]!.links.slots.map((l) => [l.slotId, l.role])).toEqual([[slot, 'from']]);
-    expect(log[0]!.payload).toMatchObject({ date: '2026-10-10', note: 'RMA #42' });
+    expect(log[1]!.slotId).toBe(slot);
+    expect(log[0]!.payload).toEqual({ note: 'RMA #42' });
+    expect(lastActivity(db())).toMatchObject({ kind: 'sent-for-rma', occurredOn: '2026-10-10' });
   });
 });

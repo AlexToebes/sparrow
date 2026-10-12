@@ -67,16 +67,16 @@ describe('R41, R42: export', () => {
     seedRealistic();
     const file = exportData(db(), new Date('2026-10-10T12:00:00.000Z'));
     expect(file.format).toBe('sparrow-export');
-    expect(file.schemaVersion).toBe(2);
+    expect(file.schemaVersion).toBe(3);
     expect(file.exportedAt).toBe('2026-10-10T12:00:00.000Z');
     expect(Object.keys(file.data).sort()).toEqual(
       [
+        'activities',
         'appMeta',
         'drives',
         'enclosures',
-        'events',
         'grids',
-        'memberships',
+        'installations',
         'pools',
         'slots',
       ].sort(),
@@ -84,17 +84,32 @@ describe('R41, R42: export', () => {
     expect(exportFileSchema.safeParse(file).success).toBe(true);
   });
 
-  it('R41: exports the drives, memberships and events created through the services', () => {
+  it('R41: exports the drives, installations and activities created through the services', () => {
     seedRealistic();
     const { data } = exportData(db());
     expect(data.drives.map((d) => d.serial).sort()).toEqual(['OLD-1', 'SP-9', 'new-1']);
+    // A drive row holds what the drive is: no status, bay or installation date.
     expect(data.drives.find((d) => d.serial === 'OLD-1')).toMatchObject({
-      status: 'retired',
-      slotId: null,
+      retirementReason: 'replaced',
+      retirementDate: '2026-09-01',
     });
-    expect(data.memberships.length).toBeGreaterThan(0);
-    expect(data.events.map((e) => e.type)).toContain('drive-retired');
+    expect(data.drives[0]).not.toHaveProperty('status');
+    expect(data.drives[0]).not.toHaveProperty('slotId');
+    // Only new-1 is installed now (SP-9 went to RMA, OLD-1 was retired).
+    expect(data.installations).toEqual([
+      expect.objectContaining({ slotId: expect.any(String), poolRole: 'hot-spare' }),
+    ]);
+    expect(data.activities.flatMap((a) => a.events.map((e) => e.type))).toContain('drive-retired');
     expect(data.appMeta.map((m) => m.key)).toContain('layout.seeded');
+  });
+
+  it('R41: the activities come in seq order, each with its events nested in order', () => {
+    seedRealistic();
+    const { data } = exportData(db());
+    expect(data.activities.map((a) => a.seq)).toEqual(data.activities.map((_, i) => i + 1));
+    for (const a of data.activities)
+      expect(a.events.map((e) => e.ord)).toEqual(a.events.map((_, i) => i));
+    expect(data.activities[0]!.kind).toBe('layout-updated'); // the first-run seed
   });
 
   it('R42: excludes the provider snapshot cache', () => {
@@ -146,28 +161,55 @@ describe('R43: round trip', () => {
     }
   });
 
-  it('R41, R43, R74: events keep their drive, slot and pool links through export and import', () => {
+  it('R41, R43, R74: events keep their drive, slot and pool columns and snapshots through export and import', () => {
     seedRealistic();
     const first = exportData(db());
-    const withLinks = first.data.events.filter(
-      (e) => e.links.drives.length + e.links.slots.length + e.links.pools.length > 0,
-    );
-    expect(withLinks.length).toBeGreaterThan(5);
-    // Every shape is present: a slot link with its copied label, a pool link with its name.
-    const retired = first.data.events.find((e) => e.type === 'drive-retired')!;
-    expect(retired.links.drives).toEqual([{ driveId: expect.any(String), role: 'subject' }]);
-    expect(retired.links.slots[0]).toMatchObject({
-      role: 'from',
+    const events = first.data.activities.flatMap((a) => a.events);
+    // Every shape is present: a slot with its copied label, a pool with its name.
+    const uninstalled = events.find((e) => e.type === 'drive-uninstalled')!;
+    expect(uninstalled).toMatchObject({
+      driveId: expect.any(String),
       slotLabel: '1',
       gridName: 'Front bays',
     });
-    const joined = first.data.events.find((e) => e.type === 'pool-joined')!;
-    expect(joined.links.pools).toEqual([{ poolId: expect.any(String), poolName: 'Mirror A' }]);
+    const installedInPool = events.find((e) => e.type === 'drive-installed' && e.poolId)!;
+    expect(installedInPool).toMatchObject({ poolId: expect.any(String), poolName: 'Mirror A' });
 
     const fresh = openDatabase(':memory:');
     try {
       importData(fresh.db, JSON.parse(JSON.stringify(first)), { backupDir });
-      expect(exportData(fresh.db).data.events).toEqual(first.data.events);
+      expect(exportData(fresh.db).data.activities).toEqual(first.data.activities);
+    } finally {
+      fresh.sqlite.close();
+    }
+  });
+
+  it('R43: import preserves seq, so the log keeps its order and new activities continue after it', () => {
+    seedRealistic();
+    const first = exportData(db());
+    const lastSeq = first.data.activities.at(-1)!.seq;
+    const fresh = openDatabase(':memory:');
+    try {
+      importData(fresh.db, JSON.parse(JSON.stringify(first)), { backupDir });
+      createDrive(fresh.db, { serial: 'AFTER-IMPORT' });
+      const after = exportData(fresh.db).data.activities;
+      expect(after.slice(0, -1)).toEqual(first.data.activities);
+      expect(after.at(-1)!.seq).toBe(lastSeq + 1);
+    } finally {
+      fresh.sqlite.close();
+    }
+  });
+
+  it('F20: serialNormalized is recomputed from the serial on import, not trusted', () => {
+    seedRealistic();
+    const file = JSON.parse(JSON.stringify(exportData(db()))) as ExportFile;
+    const drive = file.data.drives.find((d) => d.serial === 'new-1')!;
+    drive.serialNormalized = 'TAMPERED';
+    const fresh = openDatabase(':memory:');
+    try {
+      importData(fresh.db, file, { backupDir });
+      const imported = exportData(fresh.db).data.drives.find((d) => d.id === drive.id)!;
+      expect(imported.serialNormalized).toBe('NEW-1');
     } finally {
       fresh.sqlite.close();
     }
@@ -222,8 +264,9 @@ describe('R44: automatic backup', () => {
         slots: file.data.slots.length,
         drives: file.data.drives.length,
         pools: file.data.pools.length,
-        memberships: file.data.memberships.length,
-        events: file.data.events.length,
+        installations: file.data.installations.length,
+        activities: file.data.activities.length,
+        events: file.data.activities.reduce((n, a) => n + a.events.length, 0),
         appMeta: file.data.appMeta.length,
       });
     } finally {
@@ -302,58 +345,73 @@ describe('R43: failed imports leave data untouched', () => {
   it('rejects a newer schema version with a clear message', () => {
     seedRealistic();
     const before = exportData(db());
-    const file = { ...exportData(db()), schemaVersion: 3 };
+    const file = { ...exportData(db()), schemaVersion: 4 };
     const err = invalidFrom(() => importData(db(), file, { backupDir }));
     expect(err.code).toBe('invalid');
     expect(err.message).toBe(
-      'This export was made by a newer Sparrow (schema 3); this version supports up to 2.',
+      'This export was made by a newer Sparrow (schema 4); this version supports up to 3.',
     );
     expectUnchanged(before);
   });
 
-  it('R41, R43: a v1 export (events with a single driveId, no links) is rejected with a clear message and changes nothing', () => {
+  it('R41, R43: v1 and v2 exports (pre-release formats) are rejected with a clear message and change nothing', () => {
     seedRealistic();
     const before = exportData(db());
-    const v1 = JSON.parse(JSON.stringify(exportData(db()))) as {
-      schemaVersion: number;
-      data: { events: Record<string, unknown>[] };
-    };
-    v1.schemaVersion = 1;
-    v1.data.events = v1.data.events.map((e) => {
-      const old: Record<string, unknown> = { ...e, driveId: null };
-      delete old.links; // a v1 event has a single driveId and no links
-      return old;
-    });
-    const err = invalidFrom(() => importData(db(), v1, { backupDir }));
-    expect(err.code).toBe('invalid');
-    expect(err.message).toBe(
-      "This export was made by a pre-release build with an older event format and can't be imported; start fresh.",
-    );
+    for (const schemaVersion of [1, 2]) {
+      const old = { ...JSON.parse(JSON.stringify(exportData(db()))), schemaVersion };
+      const err = invalidFrom(() => importData(db(), old, { backupDir }));
+      expect(err.code).toBe('invalid');
+      expect(err.message).toBe(
+        "This export was made by a pre-release build with an older format (before the activity log) and can't be imported; start fresh.",
+      );
+    }
     expectUnchanged(before);
     expect(() => readdirSync(backupDir)).toThrow();
   });
 
-  it('R43: an event link to a drive that is not in the file is rejected; links to missing slots and pools are fine', () => {
+  it('R43: an event on a drive that is not in the file is rejected; events on missing slots and pools are fine', () => {
     seedRealistic();
     const before = exportData(db());
     const file = JSON.parse(JSON.stringify(exportData(db()))) as ExportFile;
-    const ev = file.data.events.find((e) => e.type === 'drive-retired')!;
-    ev.links.slots[0]!.slotId = 'a-deleted-slot';
-    const joined = file.data.events.find((e) => e.type === 'pool-joined')!;
-    joined.links.pools[0]!.poolId = 'a-deleted-pool';
+    const events = file.data.activities.flatMap((a) => a.events);
+    const gone = events.find((e) => e.type === 'drive-uninstalled')!;
+    gone.slotId = 'a-deleted-slot';
+    const joined = events.find((e) => e.type === 'drive-installed' && e.poolId)!;
+    joined.poolId = 'a-deleted-pool';
     const fresh = openDatabase(':memory:');
     try {
       importData(fresh.db, file, { backupDir });
-      expect(
-        exportData(fresh.db).data.events.find((e) => e.id === ev.id)!.links.slots[0]!.slotId,
-      ).toBe('a-deleted-slot');
+      const imported = exportData(fresh.db).data.activities.flatMap((a) => a.events);
+      expect(imported.find((e) => e.id === gone.id)!.slotId).toBe('a-deleted-slot');
     } finally {
       fresh.sqlite.close();
     }
-    ev.links.drives[0]!.driveId = 'no-such-drive';
+    gone.driveId = 'no-such-drive';
     const err = invalidFrom(() => importData(db(), file, { backupDir }));
     expect(err.code).toBe('invalid');
     expect(JSON.stringify(err.details)).toContain('no-such-drive');
+    expectUnchanged(before);
+  });
+
+  it('D7: two drives in one bay, or an installation of a missing drive, bay or pool, is rejected', () => {
+    seedRealistic();
+    const before = exportData(db());
+    const base = JSON.parse(JSON.stringify(exportData(db()))) as ExportFile;
+    const extra = base.data.drives.find((d) => d.serial === 'new-1')!;
+    const other = base.data.drives.find((d) => d.serial === 'SP-9')!;
+
+    const twice = JSON.parse(JSON.stringify(base)) as ExportFile;
+    twice.data.installations.push({ ...twice.data.installations[0]!, driveId: other.id });
+    expect(invalidFrom(() => importData(db(), twice, { backupDir })).details).toEqual([
+      expect.stringContaining('holds two drives'),
+    ]);
+
+    const missing = JSON.parse(JSON.stringify(base)) as ExportFile;
+    missing.data.installations[0] = { ...missing.data.installations[0]!, poolId: 'no-pool' };
+    expect(
+      JSON.stringify(invalidFrom(() => importData(db(), missing, { backupDir })).details),
+    ).toContain('no-pool');
+    void extra;
     expectUnchanged(before);
   });
 
@@ -361,7 +419,7 @@ describe('R43: failed imports leave data untouched', () => {
     seedRealistic();
     const before = exportData(db());
     const file = exportData(db());
-    file.data.drives[0] = { ...file.data.drives[0]!, status: 'bogus' as 'spare' };
+    file.data.drives[0] = { ...file.data.drives[0]!, driveType: 'Tape' as 'HDD' };
     const err = invalidFrom(() => importData(db(), file, { backupDir }));
     expect(err.code).toBe('invalid');
     expect(Array.isArray(err.details)).toBe(true);
@@ -381,20 +439,6 @@ describe('R43: failed imports leave data untouched', () => {
     expect(() => readdirSync(backupDir)).toThrow();
   });
 
-  it('R60: an older export that still has replacedByDriveId imports fine and drops the field', () => {
-    seedRealistic();
-    const file = exportData(db());
-    const old = JSON.parse(JSON.stringify(file)) as {
-      data: { drives: Record<string, unknown>[] };
-    };
-    old.data.drives[0]!.replacedByDriveId = 'ghost-id-not-in-file';
-    old.data.drives[1]!.replacedByDriveId = null;
-    importData(db(), old, { backupDir });
-    const after = exportData(db());
-    expect(after.data.drives).toHaveLength(file.data.drives.length);
-    for (const d of after.data.drives) expect(d).not.toHaveProperty('replacedByDriveId');
-  });
-
   it('rolls back everything when the database rejects a row mid-insert (duplicate serial)', () => {
     seedRealistic();
     const before = exportData(db());
@@ -402,18 +446,14 @@ describe('R43: failed imports leave data untouched', () => {
     const dup = { ...file.data.drives[0]! };
     dup.id = 'dup-drive-id';
     dup.serial = 'old-1';
-    dup.serialNormalized = 'OLD-1';
     file.data.drives.push(dup);
-    file.data.events = [];
-    file.data.memberships = [];
+    file.data.activities = [];
+    file.data.installations = [];
     file.data.drives = file.data.drives.map((d) => ({
       ...d,
-      slotId: null,
-      status: 'spare' as const,
       retirementReason: null,
       retirementDate: null,
       retirementNote: null,
-      installedOn: null,
     }));
 
     const err = invalidFrom(() => importData(db(), file, { backupDir }));

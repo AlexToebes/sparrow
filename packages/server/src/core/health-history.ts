@@ -1,13 +1,17 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Health, Observation } from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
-import { eventDrives, events } from '../db/schema.js';
+import {
+  listDriveEventsOfType,
+  recordActivity,
+  type DbTransaction,
+  type EventInput,
+} from './activities.js';
 import { listDrives } from './drives.js';
-import { recordEvent, type DbTransaction } from './events.js';
 import { matchObservations } from './matching.js';
 
-// R20: health changes written to the drive's event log. Runs after each successful poll. It only
-// appends events: it never changes a drive's status or anything else (R10, flag never auto-change).
+// R20: health changes written to the log. Runs after each successful poll and records ONE
+// `health-polled` activity with a health-changed event per changed drive (none if nothing changed). It
+// only appends history: it never changes a drive's status or anything else (R10, flag never auto-change).
 
 /** Payload of a `health-changed` event. `from` is null for the first report. */
 export interface HealthChangedPayload {
@@ -19,15 +23,7 @@ export interface HealthChangedPayload {
 
 /** The `to` of the drive's latest health-changed event, or undefined when it has none. */
 function lastRecordedHealth(tx: DbTransaction, driveId: string): Health | undefined {
-  const row = tx
-    .select({ payload: events.payload })
-    .from(events)
-    .innerJoin(eventDrives, eq(eventDrives.eventId, events.id))
-    .where(and(eq(eventDrives.driveId, driveId), eq(events.type, 'health-changed')))
-    .orderBy(desc(events.at), desc(sql`"events".rowid`))
-    .limit(1)
-    .get();
-  const to = row?.payload.to;
+  const to = listDriveEventsOfType(tx, driveId, 'health-changed')[0]?.payload.to;
   return typeof to === 'string' ? (to as Health) : undefined;
 }
 
@@ -44,7 +40,7 @@ export function recordHealthChanges(
 ): number {
   const { matchedByDriveId } = matchObservations(listDrives(db), observations);
   return db.transaction((tx) => {
-    let written = 0;
+    const evs: EventInput[] = [];
     for (const { drive, observation } of matchedByDriveId.values()) {
       if (observation.state === 'decommissioned') continue;
       const previous = lastRecordedHealth(tx, drive.id);
@@ -54,14 +50,9 @@ export function recordHealthChanges(
         to: observation.health,
         reportedAt: observation.lastReportedAt,
       };
-      recordEvent(tx, {
-        type: 'health-changed',
-        at,
-        drives: [{ id: drive.id }],
-        payload: { ...payload },
-      });
-      written++;
+      evs.push({ type: 'health-changed', driveId: drive.id, payload: { ...payload } });
     }
-    return written;
+    if (evs.length > 0) recordActivity(tx, { kind: 'health-polled', recordedAt: at, events: evs });
+    return evs.length;
   });
 }

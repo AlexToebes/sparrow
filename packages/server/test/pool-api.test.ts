@@ -94,18 +94,22 @@ describe('pool API (R30, R29, R33, R36)', () => {
     expect((await call('PATCH', `/api/pools/${a.id}`, {})).statusCode).toBe(400);
   });
 
-  it('DELETE /api/pools/:id removes an unused pool (204) and refuses one with history (409)', async () => {
+  it('DELETE /api/pools/:id removes an unused pool (204) and refuses one a drive is installed in (409)', async () => {
     const unused = (await call('POST', '/api/pools', { name: 'unused' })).json() as { id: string };
     expect((await call('DELETE', `/api/pools/${unused.id}`)).statusCode).toBe(204);
 
     const used = (await call('POST', '/api/pools', { name: 'used' })).json() as { id: string };
     const { driveId } = installed('B', used.id);
-    await call('DELETE', `/api/drives/${driveId}/membership`);
     expect((await call('DELETE', `/api/pools/${used.id}`)).statusCode).toBe(409);
     expect((await call('GET', `/api/pools/${used.id}`)).statusCode).toBe(200);
+    // Once nothing references it, the pool can go; its history stays readable by id.
+    await call('DELETE', `/api/drives/${driveId}/membership`);
+    expect((await call('DELETE', `/api/pools/${used.id}`)).statusCode).toBe(204);
+    const history = await call('GET', `/api/pools/${used.id}/history`);
+    expect(history.statusCode).toBe(404); // the pool record is gone, so the route cannot vouch for it
   });
 
-  it('membership routes: join, change, history and leave', async () => {
+  it('membership routes: join, change, leave, and the pool history with whole activities', async () => {
     const a = (await call('POST', '/api/pools', { name: 'a' })).json() as { id: string };
     const b = (await call('POST', '/api/pools', { name: 'b' })).json() as { id: string };
     const { driveId } = installed('C');
@@ -115,33 +119,36 @@ describe('pool API (R30, R29, R33, R36)', () => {
       role: 'hot-spare',
     });
     expect(join.statusCode).toBe(201);
-    expect(join.json()).toMatchObject({ poolId: a.id, role: 'hot-spare', source: 'manual' });
+    expect(join.json()).toMatchObject({ driveId, poolId: a.id, poolRole: 'hot-spare' });
 
     const again = await call('POST', `/api/drives/${driveId}/membership`, { poolId: b.id });
     expect(again.statusCode).toBe(409);
 
     const role = await call('PATCH', `/api/drives/${driveId}/membership`, { role: 'data' });
     expect(role.statusCode).toBe(200);
-    expect(role.json()).toMatchObject({ poolId: a.id, role: 'data', endedAt: null });
+    expect(role.json()).toMatchObject({ poolId: a.id, poolRole: 'data' });
 
     const move = await call('PATCH', `/api/drives/${driveId}/membership`, { poolId: b.id });
-    expect(move.json()).toMatchObject({ poolId: b.id, role: 'data' });
+    expect(move.json()).toMatchObject({ poolId: b.id, poolRole: 'data' });
 
-    const history = (await call('GET', `/api/drives/${driveId}/memberships`)).json() as {
-      poolId: string;
-      endedAt: string | null;
+    const history = (await call('GET', `/api/pools/${a.id}/history`)).json() as {
+      kind: string;
+      events: { type: string }[];
     }[];
-    expect(history.map((m) => m.poolId)).toEqual([b.id, a.id]);
-    expect(history[1]!.endedAt).not.toBeNull();
+    expect(history.map((h) => h.kind)).toEqual([
+      'pool-changed',
+      'pool-role-changed',
+      'pool-joined',
+      'pool-edited',
+    ]);
+    expect(history[0]!.events.map((e) => e.type)).toEqual(['pool-left', 'pool-joined']);
 
     const leave = await call('DELETE', `/api/drives/${driveId}/membership`, {});
     expect(leave.statusCode).toBe(200);
-    expect(leave.json()).toMatchObject({ poolId: b.id });
-    expect(leave.json().endedAt).not.toBeNull();
+    expect(leave.json()).toMatchObject({ driveId, poolId: null, poolRole: null });
     expect((await call('DELETE', `/api/drives/${driveId}/membership`)).statusCode).toBe(409);
-    expect(
-      ((await call('GET', `/api/drives/${driveId}/memberships`)).json() as unknown[]).length,
-    ).toBe(2);
+    // The membership list endpoint is gone: history is in the activity log.
+    expect((await call('GET', `/api/drives/${driveId}/memberships`)).statusCode).toBe(404);
   });
 
   it('R33: joining a spare is 409, and unknown drives are 404 on membership routes', async () => {
@@ -150,7 +157,6 @@ describe('pool API (R30, R29, R33, R36)', () => {
     expect(
       (await call('POST', `/api/drives/${spare.id}/membership`, { poolId: pool.id })).statusCode,
     ).toBe(409);
-    expect((await call('GET', '/api/drives/nope/memberships')).statusCode).toBe(404);
     expect(
       (await call('POST', '/api/drives/nope/membership', { poolId: pool.id })).statusCode,
     ).toBe(404);

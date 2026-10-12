@@ -49,16 +49,16 @@ describe('R43, R44: POST /api/import', () => {
     createDrive(opened.db, { serial: 'BEFORE' });
     const incoming = {
       format: 'sparrow-export',
-      schemaVersion: 2,
+      schemaVersion: 3,
       exportedAt: '2026-10-10T00:00:00.000Z',
       data: {
         enclosures: [],
         grids: [],
         slots: [],
         drives: [],
+        installations: [],
         pools: [],
-        memberships: [],
-        events: [],
+        activities: [],
         appMeta: [],
       },
     };
@@ -66,7 +66,7 @@ describe('R43, R44: POST /api/import', () => {
     const res = await app.inject({ method: 'POST', url: '/api/import', payload: incoming });
     expect(res.statusCode).toBe(200);
     const body = res.json() as { backupPath: string; counts: Record<string, number> };
-    expect(body.counts).toMatchObject({ drives: 0, enclosures: 0, events: 0 });
+    expect(body.counts).toMatchObject({ drives: 0, enclosures: 0, activities: 0, events: 0 });
     expect(body.backupPath.startsWith(backupDir)).toBe(true);
     expect(readdirSync(backupDir)).toEqual([path.basename(body.backupPath)]);
 
@@ -87,14 +87,14 @@ describe('R43, R44: POST /api/import', () => {
 
   it('returns 400 for an export made by a newer version, and changes nothing', async () => {
     createDrive(opened.db, { serial: 'KEEP' });
-    const file = { ...((await exportJson()) as object), schemaVersion: 3 };
+    const file = { ...((await exportJson()) as object), schemaVersion: 4 };
     const res = await app.inject({ method: 'POST', url: '/api/import', payload: file });
     expect(res.statusCode).toBe(400);
     expect(res.json()).toEqual({
       error: {
         code: 'invalid',
         message:
-          'This export was made by a newer Sparrow (schema 3); this version supports up to 2.',
+          'This export was made by a newer Sparrow (schema 4); this version supports up to 3.',
       },
     });
     expect(

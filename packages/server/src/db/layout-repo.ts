@@ -1,6 +1,6 @@
-import { asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { asc, eq, inArray, sql } from 'drizzle-orm';
 import type { AppDb } from './client.js';
-import { appMeta, drives, enclosures, grids, slots } from './schema.js';
+import { appMeta, enclosures, grids, installations, slots } from './schema.js';
 
 // Layout persistence. Used inside service transactions (core/layout.ts), so every
 // function takes the transaction handle. Business rules live in the service.
@@ -93,17 +93,14 @@ export const deleteSlots = (tx: Tx, ids: string[]): void => {
   if (ids.length > 0) tx.delete(slots).where(inArray(slots.id, ids)).run();
 };
 
-/** Occupied slots (drives.slot_id) among the given slot IDs, or among all slots when omitted. */
+/** Occupied slots (an installation exists) among the given slot IDs, or among all slots when omitted. */
 export const occupants = (tx: Tx, slotIds?: string[]): { slotId: string; driveId: string }[] => {
   if (slotIds !== undefined && slotIds.length === 0) return [];
-  const rows = tx
-    .select({ slotId: drives.slotId, driveId: drives.id })
-    .from(drives)
-    .where(slotIds === undefined ? isNotNull(drives.slotId) : inArray(drives.slotId, slotIds))
+  return tx
+    .select({ slotId: installations.slotId, driveId: installations.driveId })
+    .from(installations)
+    .where(slotIds === undefined ? undefined : inArray(installations.slotId, slotIds))
     .all();
-  return rows.flatMap((row) =>
-    row.slotId === null ? [] : [{ slotId: row.slotId, driveId: row.driveId }],
-  );
 };
 
 export const getMeta = (tx: Tx, key: string): string | null =>

@@ -6,8 +6,8 @@ import {
   leavePoolInputSchema,
   updatePoolInputSchema,
 } from '@sparrow/shared';
-import { listPoolEvents } from '../core/events.js';
-import { changeMembership, joinPool, leavePool, listMemberships } from '../core/memberships.js';
+import { listPoolActivities } from '../core/activities.js';
+import { changeMembership, joinPool, leavePool } from '../core/memberships.js';
 import { createPool, deletePool, getPool, listPools, updatePool } from '../core/pools.js';
 import type { AppDb } from '../db/client.js';
 
@@ -28,10 +28,11 @@ export const poolRoutes: FastifyPluginAsync<{ db: AppDb }> = async (app, opts) =
 
   app.get<{ Params: IdParams }>('/api/pools/:id', async (req) => getPool(db, req.params.id));
 
-  // The pool's history: its record changes and its members joining, leaving or changing role (newest first).
+  // The pool's history: activities with an event on the pool (its record changes and its members joining,
+  // leaving or changing role), each with all its events, newest first.
   app.get<{ Params: IdParams }>('/api/pools/:id/history', async (req) => {
     getPool(db, req.params.id); // 404 for an unknown pool
-    return listPoolEvents(db, req.params.id);
+    return listPoolActivities(db, req.params.id);
   });
 
   app.patch<{ Params: IdParams }>('/api/pools/:id', async (req) =>
@@ -43,10 +44,6 @@ export const poolRoutes: FastifyPluginAsync<{ db: AppDb }> = async (app, opts) =
     return reply.status(204).send();
   });
 
-  app.get<{ Params: IdParams }>('/api/drives/:id/memberships', async (req) =>
-    listMemberships(db, req.params.id),
-  );
-
   app.post<{ Params: IdParams }>('/api/drives/:id/membership', async (req, reply) => {
     const membership = joinPool(db, req.params.id, joinPoolInputSchema.parse(req.body));
     return reply.status(201).send(membership);
@@ -56,7 +53,7 @@ export const poolRoutes: FastifyPluginAsync<{ db: AppDb }> = async (app, opts) =
     changeMembership(db, req.params.id, changeMembershipInputSchema.parse(req.body)),
   );
 
-  // Ends the open membership. This is not a delete: the row stays as history (R29).
+  // Takes the drive out of its pool (R29). The installation stays; the activity log keeps the history.
   app.delete<{ Params: IdParams }>('/api/drives/:id/membership', async (req) =>
     leavePool(db, req.params.id, leavePoolInputSchema.parse(req.body ?? {})),
   );

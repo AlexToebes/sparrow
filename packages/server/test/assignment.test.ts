@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/api/app.js';
 import {
@@ -12,19 +11,18 @@ import {
 } from '../src/core/assignment.js';
 import { createDrive, getDrive } from '../src/core/drives.js';
 import { DomainError } from '../src/core/errors.js';
-import { listDriveEvents } from '../src/core/events.js';
 import { createLayoutService } from '../src/core/layout.js';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
+import { activities, drives, events, installations, pools } from '../src/db/schema.js';
 import {
-  drives,
-  eventDrives,
-  eventPools,
-  events,
-  eventSlots,
-  memberships,
-  pools,
-} from '../src/db/schema.js';
-import { driveLinks, poolLinks, slotLinks, subject } from './event-helpers.js';
+  activitiesOf,
+  byDrive,
+  countActivities,
+  eventsOfDrive,
+  lastActivity,
+  ofType,
+  shape,
+} from './activity-helpers.js';
 
 let opened: OpenedDatabase;
 beforeEach(() => {
@@ -59,11 +57,13 @@ function makePool(name: string): string {
 }
 
 const spare = (serial: string) => createDrive(db(), { serial });
-const types = (id: string) => listDriveEvents(db(), id).map((e) => e.type);
-const eventOf = (id: string, type: string) =>
-  listDriveEvents(db(), id).find((e) => e.type === type)!;
-const memberRows = (driveId: string) =>
-  db().select().from(memberships).where(eq(memberships.driveId, driveId)).all();
+const types = (id: string) => eventsOfDrive(db(), id).map((e) => e.type);
+const installationOf = (driveId: string) =>
+  db()
+    .select()
+    .from(installations)
+    .all()
+    .find((i) => i.driveId === driveId);
 
 function thrown(fn: () => unknown): DomainError {
   try {
@@ -76,52 +76,54 @@ function thrown(fn: () => unknown): DomainError {
 }
 
 describe('assign (R8, R35, D7)', () => {
-  it('R14, R74: spare -> installed in an empty slot is ONE drive-installed event linked to the drive and the slot (to)', () => {
+  it('R14: spare -> installed in an empty slot is ONE `assigned` activity with one drive-installed event', () => {
     const { slots } = setup();
     const d = spare('A');
+    const before = countActivities(db());
     const { drive, occupant } = assignDrive(db(), { driveId: d.id, slotId: slots[0]! });
     expect(occupant).toBeUndefined();
-    expect(drive).toMatchObject({ status: 'installed', slotId: slots[0] });
+    expect(drive).toMatchObject({ status: 'installed', slotId: slots[0], installedOn: TODAY() });
     expect(getDrive(db(), d.id)).toEqual(drive);
-    expect(types(d.id)).toEqual(['drive-installed', 'drive-created']);
-    const installed = eventOf(d.id, 'drive-installed');
-    expect(installed.payload).toEqual({ poolId: null, role: null, installedOn: TODAY() });
-    expect(driveLinks(installed)).toEqual(subject(d.id));
-    // The bay's label and grid are copied into the link, so they survive renames and deletion (R39).
-    expect(installed.links.slots).toEqual([
-      {
-        slotId: slots[0],
-        role: 'to',
-        slotLabel: 'Slot 1',
-        gridId: expect.any(String),
-        gridName: 'Front',
-      },
-    ]);
-    expect(installed.links.pools).toEqual([]);
-    expect(drive.installedOn).toBe(TODAY());
+    expect(countActivities(db())).toBe(before + 1);
+    const a = lastActivity(db());
+    // The activity's date IS the installation date (R68); the event repeats neither it nor the row.
+    expect(a).toMatchObject({ kind: 'assigned', occurredOn: TODAY(), note: null });
+    expect(shape(a)).toEqual(['drive-installed']);
+    const installed = a.events[0]!;
+    expect(installed.payload).toEqual({ poolRole: null });
+    expect(installed).toMatchObject({ driveId: d.id, slotId: slots[0], poolId: null });
+    // The bay's label and grid are copied into the event, so they survive renames and deletion (R39).
+    expect(installed).toMatchObject({ slotLabel: 'Slot 1', gridName: 'Front' });
+    expect(installed.poolName).toBeNull();
   });
 
-  it('R35: explicit pool creates a manual membership and pool-joined; role defaults to data', () => {
+  it('R35: an explicit pool is a property of the installation; role defaults to data; no pool event', () => {
     const { slots } = setup();
     const pool = makePool('tank');
     const d = spare('A');
     assignDrive(db(), { driveId: d.id, slotId: slots[0]!, poolId: pool });
-    const [m] = memberRows(d.id);
-    expect(m).toMatchObject({ poolId: pool, role: 'data', source: 'manual', endedAt: null });
-    expect(types(d.id)).toEqual(['drive-installed', 'pool-joined', 'drive-created']);
-    const joined = eventOf(d.id, 'pool-joined');
-    expect(joined.payload).toMatchObject({ role: 'data' });
-    expect(poolLinks(joined)).toEqual([pool]);
-    expect(driveLinks(joined)).toEqual(subject(d.id));
+    expect(installationOf(d.id)).toMatchObject({
+      slotId: slots[0],
+      poolId: pool,
+      poolRole: 'data',
+    });
+    expect(getDrive(db(), d.id)).toMatchObject({ poolId: pool, poolRole: 'data' });
+    // Installing sets the pool as part of drive-installed; pool-joined is only for an existing installation.
+    expect(types(d.id)).toEqual(['drive-installed', 'drive-created']);
+    const installed = ofType(lastActivity(db()), 'drive-installed')[0]!;
+    expect(installed).toMatchObject({ poolId: pool, poolName: 'tank' });
+    expect(installed.payload).toEqual({ poolRole: 'data' });
   });
 
   it('R8: a retired drive cannot be assigned', () => {
     const { slots } = setup();
     const d = spare('A');
     retireDrive(db(), d.id, { reason: 'failed' });
+    const before = countActivities(db());
     const err = thrown(() => assignDrive(db(), { driveId: d.id, slotId: slots[0]! }));
     expect(err.code).toBe('invalid');
     expect(err.message).toBe('Retired drives cannot be assigned');
+    expect(countActivities(db())).toBe(before);
   });
 
   it('D7: an installed drive cannot be assigned to a second slot', () => {
@@ -147,6 +149,18 @@ describe('assign (R8, R35, D7)', () => {
       thrown(() => assignDrive(db(), { driveId: d.id, slotId: slots[0]!, poolId: 'nope' })).code,
     ).toBe('not-found');
   });
+
+  it('R68: the activity date is the installation date; null is "not recorded"', () => {
+    const { slots } = setup();
+    const a = spare('A');
+    const b = spare('B');
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]!, installedOn: '2025-03-04' });
+    expect(lastActivity(db()).occurredOn).toBe('2025-03-04');
+    expect(getDrive(db(), a.id).installedOn).toBe('2025-03-04');
+    assignDrive(db(), { driveId: b.id, slotId: slots[1]!, installedOn: null });
+    expect(lastActivity(db()).occurredOn).toBeNull();
+    expect(getDrive(db(), b.id).installedOn).toBeNull();
+  });
 });
 
 describe('occupied slot (R37, R62)', () => {
@@ -155,18 +169,20 @@ describe('occupied slot (R37, R62)', () => {
     const a = spare('A');
     const b = spare('B');
     assignDrive(db(), { driveId: a.id, slotId: slots[0]! });
+    const before = countActivities(db());
     const err = thrown(() => assignDrive(db(), { driveId: b.id, slotId: slots[0]! }));
     expect(err.code).toBe('conflict');
     expect(err.details).toEqual({ occupant: { driveId: a.id, serial: 'A' } });
     expect(getDrive(db(), a.id).status).toBe('installed');
     expect(getDrive(db(), b.id).status).toBe('spare');
+    expect(countActivities(db())).toBe(before);
   });
 
-  it('R14, R74: occupant -> spare is ONE drive-replaced event (outgoing + incoming, slot at); no separate removed / installed', () => {
+  it('R14: occupant -> spare is ONE `replaced` activity: the outgoing is uninstalled, the incoming installed', () => {
     const { slots } = setup();
     const a = spare('A');
     const b = spare('B');
-    assignDrive(db(), { driveId: a.id, slotId: slots[0]! });
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]!, installedOn: '2025-01-01' });
     const res = assignDrive(db(), {
       driveId: b.id,
       slotId: slots[0]!,
@@ -174,29 +190,30 @@ describe('occupied slot (R37, R62)', () => {
     });
     expect(res.occupant).toMatchObject({ id: a.id, status: 'spare', slotId: null });
     expect(res.drive).toMatchObject({ id: b.id, status: 'installed', slotId: slots[0] });
-    expect(types(a.id)).toEqual(['drive-replaced', 'drive-installed', 'drive-created']);
-    expect(types(b.id)).toEqual(['drive-replaced', 'drive-created']);
-    const replaced = eventOf(b.id, 'drive-replaced');
-    expect(eventOf(a.id, 'drive-replaced').id).toBe(replaced.id);
-    expect(driveLinks(replaced)).toEqual([
-      { driveId: b.id, role: 'incoming' },
-      { driveId: a.id, role: 'outgoing' },
+    const act = lastActivity(db());
+    expect(act).toMatchObject({ kind: 'replaced', occurredOn: TODAY() });
+    expect(byDrive(act)).toEqual([
+      [a.id, 'drive-uninstalled'],
+      [b.id, 'drive-installed'],
     ]);
-    expect(slotLinks(replaced)).toEqual([{ slotId: slots[0], role: 'at' }]);
-    expect(replaced.payload).toMatchObject({
-      installedOn: TODAY(),
-      outgoing: { outcome: 'spares', date: TODAY(), installedOn: TODAY() },
-    });
+    // Both events are in the one activity, so each drive's history sees the whole replacement.
+    expect(types(a.id)).toEqual(['drive-uninstalled', 'drive-installed', 'drive-created']);
+    expect(types(b.id)).toEqual(['drive-installed', 'drive-created']);
+    // The uninstall carries what it deleted (the OLD installed-on, pool role); the removal day is the activity's.
+    expect(act.events[0]!.payload).toEqual({ installedOn: '2025-01-01', poolRole: null });
+    expect(act.events[0]).toMatchObject({ slotId: slots[0], slotLabel: 'Slot 1' });
+    expect(act.events[1]).toMatchObject({ slotId: slots[0] });
   });
 
-  it("R62: occupant 'retire' keeps the user's reason and date", () => {
+  it("R62: occupant 'retire' keeps the user's reason and note; the date is the activity date", () => {
     const { slots } = setup();
     const a = spare('A');
     const b = spare('B');
-    assignDrive(db(), { driveId: a.id, slotId: slots[0]! });
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]!, installedOn: '2025-12-01' });
     const res = assignDrive(db(), {
       driveId: b.id,
       slotId: slots[0]!,
+      installedOn: '2026-01-02',
       occupant: { action: 'retire', reason: 'replaced', date: '2026-01-02', note: 'old' },
     });
     expect(res.occupant).toMatchObject({
@@ -206,10 +223,15 @@ describe('occupied slot (R37, R62)', () => {
       retirementDate: '2026-01-02',
       retirementNote: 'old',
     });
-    expect(types(a.id)).toEqual(['drive-replaced', 'drive-installed', 'drive-created']);
-    expect(eventOf(a.id, 'drive-replaced').payload).toMatchObject({
-      outgoing: { outcome: 'retired', reason: 'replaced', date: '2026-01-02', note: 'old' },
-    });
+    const act = lastActivity(db());
+    expect(act.occurredOn).toBe('2026-01-02');
+    expect(byDrive(act)).toEqual([
+      [a.id, 'drive-uninstalled'],
+      [a.id, 'drive-retired'],
+      [b.id, 'drive-installed'],
+    ]);
+    // The retirement date is the activity's, so the event carries only the reason and the note.
+    expect(act.events[1]!.payload).toEqual({ reason: 'replaced', note: 'old' });
     expect(getDrive(db(), b.id).status).toBe('installed');
   });
 
@@ -230,7 +252,7 @@ describe('occupied slot (R37, R62)', () => {
     expect(getDrive(db(), a.id).status).toBe('installed');
   });
 
-  it('R27, R74: occupant rma is the outgoing outcome of the one drive-replaced event', () => {
+  it('R27: occupant rma is a drive-sent-for-rma event next to the uninstall', () => {
     const { slots } = setup();
     const a = spare('A');
     const b = spare('B');
@@ -238,17 +260,98 @@ describe('occupied slot (R37, R62)', () => {
     const res = assignDrive(db(), {
       driveId: b.id,
       slotId: slots[0]!,
-      occupant: { action: 'rma', date: '2026-02-03' },
+      installedOn: '2026-02-03',
+      occupant: { action: 'rma' },
     });
     expect(res.occupant).toMatchObject({
       status: 'retired',
       retirementReason: 'failed',
       retirementDate: '2026-02-03',
     });
-    expect(types(a.id)).toEqual(['drive-replaced', 'drive-installed', 'drive-created']);
-    expect(eventOf(a.id, 'drive-replaced').payload).toMatchObject({
-      outgoing: { outcome: 'rma', date: '2026-02-03' },
+    const act = lastActivity(db());
+    expect(shape(act)).toEqual(['drive-uninstalled', 'drive-sent-for-rma', 'drive-installed']);
+    expect(act.events[1]!.payload).toEqual({ note: null });
+  });
+
+  it('R69, R73: a replacement is one act, so the occupant leaves on the installation day', () => {
+    const { slots } = setup();
+    const a = spare('A');
+    const b = spare('B');
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]!, installedOn: '2025-01-01' });
+    // Backdated install: with no occupant date given, the occupant leaves that same day, not today.
+    const res = assignDrive(db(), {
+      driveId: b.id,
+      slotId: slots[0]!,
+      installedOn: '2025-06-01',
+      occupant: { action: 'retire', reason: 'failed' },
     });
+    expect(res.occupant).toMatchObject({ retirementDate: '2025-06-01' });
+    expect(lastActivity(db()).occurredOn).toBe('2025-06-01');
+  });
+
+  it('R69, R73: a differing occupant date is a 400 and changes nothing', () => {
+    const { slots } = setup();
+    const a = spare('A');
+    const b = spare('B');
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]! });
+    const before = countActivities(db());
+    for (const occupant of [
+      { action: 'spare', removedOn: '2025-01-01' },
+      { action: 'spare', removedOn: null },
+      { action: 'retire', reason: 'failed', date: '2025-01-01' },
+      { action: 'rma', date: null },
+    ] as const) {
+      const err = thrown(() =>
+        assignDrive(db(), { driveId: b.id, slotId: slots[0]!, installedOn: TODAY(), occupant }),
+      );
+      expect(err.code).toBe('invalid');
+      expect(err.message).toMatch(/same day as the replacement/);
+    }
+    // The same day, explicitly, is fine.
+    assignDrive(db(), {
+      driveId: b.id,
+      slotId: slots[0]!,
+      installedOn: TODAY(),
+      occupant: { action: 'spare', removedOn: TODAY() },
+    });
+    expect(countActivities(db())).toBe(before + 1);
+    expect(getDrive(db(), a.id).status).toBe('spare');
+  });
+
+  it('R69: with the installation date not recorded the occupant removal is not recorded either', () => {
+    const { slots } = setup();
+    const a = spare('A');
+    const b = spare('B');
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]! });
+    assignDrive(db(), {
+      driveId: b.id,
+      slotId: slots[0]!,
+      installedOn: null,
+      occupant: { action: 'spare' },
+    });
+    const act = lastActivity(db());
+    expect(act.occurredOn).toBeNull();
+    expect(getDrive(db(), b.id).installedOn).toBeNull();
+  });
+
+  it("R69: the occupant can't leave before it went in (checked against its own installed-on)", () => {
+    const { slots } = setup();
+    const a = spare('A');
+    const b = spare('B');
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]!, installedOn: '2026-03-01' });
+    const before = countActivities(db());
+    const err = thrown(() =>
+      assignDrive(db(), {
+        driveId: b.id,
+        slotId: slots[0]!,
+        installedOn: '2026-02-01',
+        occupant: { action: 'spare' },
+      }),
+    );
+    expect(err.code).toBe('invalid');
+    expect(err.message).toMatch(/can't be removed before it was installed/);
+    expect(countActivities(db())).toBe(before);
+    expect(getDrive(db(), a.id).status).toBe('installed');
   });
 });
 
@@ -262,16 +365,16 @@ describe('pool and role defaults (R35)', () => {
     assignDrive(db(), {
       driveId: b.id,
       slotId: slots[0]!,
-      occupant: { action: 'retire', reason: 'replaced', date: '2026-01-02' },
+      occupant: { action: 'retire', reason: 'replaced' },
     });
-    expect(memberRows(a.id)[0]!.endedAt).not.toBeNull();
-    expect(types(a.id)).toContain('pool-left');
-    expect(memberRows(b.id)).toHaveLength(1);
-    expect(memberRows(b.id)[0]).toMatchObject({ poolId: pool, role: 'hot-spare', endedAt: null });
-    expect(eventOf(b.id, 'drive-replaced').payload).toMatchObject({
-      poolId: pool,
-      role: 'hot-spare',
-    });
+    // The outgoing drive leaves the pool with its installation: no pool-left event, the uninstall names the pool.
+    expect(installationOf(a.id)).toBeUndefined();
+    const act = lastActivity(db());
+    expect(shape(act)).not.toContain('pool-left');
+    expect(act.events[0]).toMatchObject({ type: 'drive-uninstalled', poolId: pool });
+    expect(act.events[0]!.payload).toMatchObject({ poolRole: 'hot-spare' });
+    expect(installationOf(b.id)).toMatchObject({ poolId: pool, poolRole: 'hot-spare' });
+    expect(ofType(act, 'drive-installed')[0]).toMatchObject({ poolId: pool, poolName: 'tank' });
   });
 
   it('defaults come from the last occupant of an emptied slot (getAssignmentDefaults)', () => {
@@ -295,7 +398,7 @@ describe('pool and role defaults (R35)', () => {
 
     const b = spare('B');
     assignDrive(db(), { driveId: b.id, slotId: slots[0]! });
-    expect(memberRows(b.id)[0]).toMatchObject({ poolId: pool, role: 'hot-spare' });
+    expect(installationOf(b.id)).toMatchObject({ poolId: pool, poolRole: 'hot-spare' });
   });
 
   it('explicit null pool means no pool even when the previous occupant had one', () => {
@@ -306,9 +409,8 @@ describe('pool and role defaults (R35)', () => {
     assignDrive(db(), { driveId: a.id, slotId: slots[0]!, poolId: pool });
     removeToSpares(db(), a.id);
     assignDrive(db(), { driveId: b.id, slotId: slots[0]!, poolId: null, role: 'hot-spare' });
-    expect(memberRows(b.id)).toHaveLength(0);
-    expect(types(b.id)).not.toContain('pool-joined');
-    expect(eventOf(b.id, 'drive-installed').payload).toMatchObject({ poolId: null, role: null });
+    expect(installationOf(b.id)).toMatchObject({ poolId: null, poolRole: null });
+    expect(ofType(lastActivity(db()), 'drive-installed')[0]).toMatchObject({ poolId: null });
   });
 
   it('explicit role overrides the previous role', () => {
@@ -319,12 +421,12 @@ describe('pool and role defaults (R35)', () => {
     assignDrive(db(), { driveId: a.id, slotId: slots[0]!, poolId: pool, role: 'hot-spare' });
     removeToSpares(db(), a.id);
     assignDrive(db(), { driveId: b.id, slotId: slots[0]!, role: 'data' });
-    expect(memberRows(b.id)[0]).toMatchObject({ poolId: pool, role: 'data' });
+    expect(installationOf(b.id)).toMatchObject({ poolId: pool, poolRole: 'data' });
   });
 });
 
 describe('previous occupant ordering (R35)', () => {
-  it('R35: the last occupant is the latest by insertion, whatever the event timestamps say', () => {
+  it('R35: the last occupant is the latest by log position (seq), whatever the timestamps say', () => {
     const { slots } = setup();
     const p1 = makePool('one');
     const p2 = makePool('two');
@@ -334,10 +436,9 @@ describe('previous occupant ordering (R35)', () => {
     removeToSpares(db(), a.id);
     assignDrive(db(), { driveId: b.id, slotId: slots[0]!, poolId: p2 });
     removeToSpares(db(), b.id);
-    opened.sqlite.exec(
-      `UPDATE events SET at = '2099-01-01T00:00:00.000Z'
-        WHERE id IN (SELECT event_id FROM event_drives WHERE drive_id = '${a.id}')`,
-    );
+    opened.sqlite.exec(`UPDATE activities SET recorded_at = '2099-01-01T00:00:00.000Z' WHERE seq = (
+      SELECT a.seq FROM activities a JOIN events e ON e.activity_id = a.id
+       WHERE e.drive_id = '${a.id}' AND e.type = 'drive-uninstalled')`);
     expect(getAssignmentDefaults(db(), slots[0]!)).toMatchObject({
       poolId: p2,
       previousDriveId: b.id,
@@ -357,26 +458,30 @@ describe('previous occupant ordering (R35)', () => {
 });
 
 describe('remove, retire, RMA, reinstate (R60, R61, R27)', () => {
-  it('R14, R74: installed -> spare clears the slot, ends the membership, logs pool-left and ONE drive-removed (slot from)', () => {
+  it('R14: installed -> spare is a `removed` activity with ONE drive-uninstalled event; the note is the activity note', () => {
     const { slots } = setup();
     const pool = makePool('tank');
     const a = spare('A');
     assignDrive(db(), { driveId: a.id, slotId: slots[0]!, poolId: pool });
     const out = removeToSpares(db(), a.id, { note: 'shelf' });
-    expect(out).toMatchObject({ status: 'spare', slotId: null });
-    expect(memberRows(a.id)[0]!.endedAt).not.toBeNull();
-    expect(types(a.id).slice(0, 2)).toEqual(['drive-removed', 'pool-left']);
-    const removed = eventOf(a.id, 'drive-removed');
-    expect(driveLinks(removed)).toEqual(subject(a.id));
-    expect(slotLinks(removed)).toEqual([{ slotId: slots[0], role: 'from' }]);
-    expect(poolLinks(eventOf(a.id, 'pool-left'))).toEqual([pool]);
-    expect(removed.payload).toEqual({
-      poolId: pool,
-      role: 'data',
-      installedOn: TODAY(),
-      removedOn: TODAY(), // R69: omitted removal date = today
-      note: 'shelf',
-    });
+    expect(out).toMatchObject({ status: 'spare', slotId: null, poolId: null });
+    expect(installationOf(a.id)).toBeUndefined();
+    const act = lastActivity(db());
+    expect(act).toMatchObject({ kind: 'removed', note: 'shelf', occurredOn: TODAY() }); // R69: omitted = today
+    expect(shape(act)).toEqual(['drive-uninstalled']);
+    expect(act.events[0]).toMatchObject({ driveId: a.id, slotId: slots[0], poolId: pool });
+    expect(act.events[0]!.payload).toEqual({ installedOn: TODAY(), poolRole: 'data' });
+  });
+
+  it('R69: the removal date is the activity date; null is not recorded', () => {
+    const { slots } = setup();
+    const a = spare('A');
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]!, installedOn: '2025-01-01' });
+    removeToSpares(db(), a.id, { removedOn: '2025-02-02' });
+    expect(lastActivity(db()).occurredOn).toBe('2025-02-02');
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]!, installedOn: '2025-03-01' });
+    removeToSpares(db(), a.id, { removedOn: null });
+    expect(lastActivity(db()).occurredOn).toBeNull();
   });
 
   it('remove on a spare or retired drive is a conflict', () => {
@@ -387,7 +492,7 @@ describe('remove, retire, RMA, reinstate (R60, R61, R27)', () => {
     expect(thrown(() => removeToSpares(db(), a.id)).code).toBe('conflict');
   });
 
-  it('R60: spare -> retired with default date today, reason and note', () => {
+  it('R60: spare -> retired is a `retired` activity dated today by default, with the reason and note', () => {
     setup();
     const a = spare('A');
     const r = retireDrive(db(), a.id, { reason: 'replaced', note: 'n' });
@@ -398,32 +503,24 @@ describe('remove, retire, RMA, reinstate (R60, R61, R27)', () => {
       retirementDate: TODAY(),
       retirementNote: 'n',
     });
-    const retired = eventOf(a.id, 'drive-retired');
-    expect(retired.payload).toMatchObject({ reason: 'replaced', date: TODAY(), note: 'n' });
-    expect(driveLinks(retired)).toEqual(subject(a.id));
-    expect(retired.links.slots).toEqual([]); // a spare has no bay to leave
+    const act = lastActivity(db());
+    expect(act).toMatchObject({ kind: 'retired', occurredOn: TODAY() });
+    expect(shape(act)).toEqual(['drive-retired']); // a spare has no bay to leave
+    expect(act.events[0]!.payload).toEqual({ reason: 'replaced', note: 'n' });
   });
 
-  it('R60, R74: installed -> retired frees the slot and ends the membership with ONE drive-retired event (slot from)', () => {
+  it('R60: installed -> retired is ONE `retired` activity: uninstalled, then drive-retired; the pool leaves with the installation', () => {
     const { slots } = setup();
     const pool = makePool('tank');
     const a = spare('A');
     assignDrive(db(), { driveId: a.id, slotId: slots[0]!, poolId: pool });
     const r = retireDrive(db(), a.id, { reason: 'failed', date: '2026-03-04' });
-    expect(r).toMatchObject({ status: 'retired', slotId: null });
-    expect(types(a.id)).toEqual([
-      'drive-retired',
-      'pool-left',
-      'drive-installed',
-      'pool-joined',
-      'drive-created',
-    ]);
-    expect(slotLinks(eventOf(a.id, 'drive-retired'))).toEqual([{ slotId: slots[0], role: 'from' }]);
-    expect(eventOf(a.id, 'drive-retired').payload).toMatchObject({
-      reason: 'failed',
-      date: '2026-03-04',
-    });
-    expect(memberRows(a.id)[0]!.endedAt).not.toBeNull();
+    expect(r).toMatchObject({ status: 'retired', slotId: null, retirementDate: '2026-03-04' });
+    const act = lastActivity(db());
+    expect(act).toMatchObject({ kind: 'retired', occurredOn: '2026-03-04' });
+    expect(shape(act)).toEqual(['drive-uninstalled', 'drive-retired']);
+    expect(act.events[0]).toMatchObject({ slotId: slots[0], poolId: pool });
+    expect(act.events[1]!.payload).toEqual({ reason: 'failed', note: null });
     // the freed slot can take another drive
     const b = spare('B');
     expect(assignDrive(db(), { driveId: b.id, slotId: slots[0]! }).drive.slotId).toBe(slots[0]);
@@ -436,7 +533,7 @@ describe('remove, retire, RMA, reinstate (R60, R61, R27)', () => {
     expect(thrown(() => retireDrive(db(), a.id, { reason: 'other' })).code).toBe('conflict');
   });
 
-  it('R27, R74: RMA from installed is ONE drive-sent-for-rma event (slot from) that retires the drive as failed', () => {
+  it('R27: RMA from installed is a `sent-for-rma` activity: uninstalled + ONE drive-sent-for-rma that retires the drive as failed', () => {
     const { slots } = setup();
     const a = spare('A');
     assignDrive(db(), { driveId: a.id, slotId: slots[0]! });
@@ -446,11 +543,10 @@ describe('remove, retire, RMA, reinstate (R60, R61, R27)', () => {
       retirementReason: 'failed',
       retirementDate: TODAY(),
     });
-    expect(types(a.id)).toEqual(['drive-sent-for-rma', 'drive-installed', 'drive-created']);
-    const rma = eventOf(a.id, 'drive-sent-for-rma');
-    expect(rma.payload).toMatchObject({ date: TODAY(), note: 'ticket 1' });
-    expect(driveLinks(rma)).toEqual(subject(a.id));
-    expect(slotLinks(rma)).toEqual([{ slotId: slots[0], role: 'from' }]);
+    const act = lastActivity(db());
+    expect(act).toMatchObject({ kind: 'sent-for-rma', occurredOn: TODAY() });
+    expect(shape(act)).toEqual(['drive-uninstalled', 'drive-sent-for-rma']);
+    expect(act.events[1]!.payload).toEqual({ note: 'ticket 1' });
   });
 
   it('R27: RMA from a spare works; from retired is a conflict', () => {
@@ -461,7 +557,7 @@ describe('remove, retire, RMA, reinstate (R60, R61, R27)', () => {
     expect(thrown(() => sendForRma(db(), a.id)).code).toBe('conflict');
   });
 
-  it('R61: retired -> spare clears retirement fields and keeps them in the event', () => {
+  it('R61: retired -> spare clears the retirement fields; the reinstated event holds what it cleared', () => {
     const slot = setup().slots[0]!;
     const a = spare('A');
     retireDrive(db(), a.id, {
@@ -477,14 +573,14 @@ describe('remove, retire, RMA, reinstate (R60, R61, R27)', () => {
       retirementDate: null,
       retirementNote: null,
     });
-    expect(eventOf(a.id, 'drive-reinstated').payload).toEqual({
+    const act = lastActivity(db());
+    expect(act).toMatchObject({ kind: 'reinstated', note: 'false alarm', occurredOn: null });
+    expect(act.events[0]!.payload).toEqual({
       previousReason: 'replaced',
       previousDate: '2026-01-02',
       previousNote: 'x',
-      note: 'false alarm',
     });
     expect(types(a.id)).toContain('drive-retired');
-    expect(driveLinks(eventOf(a.id, 'drive-reinstated'))).toEqual(subject(a.id));
     // reinstated drives can be assigned again
     expect(assignDrive(db(), { driveId: a.id, slotId: slot }).drive.status).toBe('installed');
   });
@@ -497,21 +593,21 @@ describe('remove, retire, RMA, reinstate (R60, R61, R27)', () => {
 });
 
 describe('invariants and atomicity (D7, R14)', () => {
-  it('D7: the database rejects two drives in one slot and a slot on a non-installed drive', () => {
+  it('D7: the database rejects a second drive in a bay and a second bay for a drive', () => {
     const { slots } = setup();
     const a = spare('A');
     const b = spare('B');
     assignDrive(db(), { driveId: a.id, slotId: slots[0]! });
     expect(() =>
       opened.sqlite
-        .prepare(
-          "UPDATE drives SET status='installed', installed_on='2026-01-01', slot_id=? WHERE id=?",
-        )
-        .run(slots[0], b.id),
+        .prepare('INSERT INTO installations (drive_id, slot_id) VALUES (?, ?)')
+        .run(b.id, slots[0]),
     ).toThrow(/UNIQUE/);
     expect(() =>
-      opened.sqlite.prepare('UPDATE drives SET slot_id=? WHERE id=?').run(slots[1], b.id),
-    ).toThrow(/CHECK/);
+      opened.sqlite
+        .prepare('INSERT INTO installations (drive_id, slot_id) VALUES (?, ?)')
+        .run(a.id, slots[1]),
+    ).toThrow(/UNIQUE|PRIMARY KEY/);
   });
 
   it('a failing event write mid-transaction leaves no partial state (assign with occupant)', () => {
@@ -521,50 +617,24 @@ describe('invariants and atomicity (D7, R14)', () => {
     const b = spare('B');
     assignDrive(db(), { driveId: a.id, slotId: slots[0]!, poolId: pool });
     const before = db().select().from(events).all().length;
-    const links = () => ({
-      drives: db().select().from(eventDrives).all().length,
-      slots: db().select().from(eventSlots).all().length,
-      pools: db().select().from(eventPools).all().length,
-    });
-    const linksBefore = links();
-    // Fails on the final drive-replaced event, after occupant and incoming rows were changed.
+    const activitiesBefore = db().select().from(activities).all().length;
+    // Fails on the final drive-installed event, after the occupant and incoming rows were changed.
     opened.sqlite.exec(
-      "CREATE TRIGGER fail_replaced BEFORE INSERT ON events WHEN NEW.type = 'drive-replaced' BEGIN SELECT RAISE(ABORT, 'event write failed'); END;",
+      "CREATE TRIGGER fail_installed BEFORE INSERT ON events WHEN NEW.type = 'drive-installed' BEGIN SELECT RAISE(ABORT, 'event write failed'); END;",
     );
     expect(() =>
       assignDrive(db(), {
         driveId: b.id,
         slotId: slots[0]!,
-        occupant: { action: 'retire', reason: 'replaced', date: '2026-01-02' },
+        occupant: { action: 'retire', reason: 'replaced' },
       }),
     ).toThrow(/event write failed/);
     expect(getDrive(db(), a.id)).toMatchObject({ status: 'installed', slotId: slots[0] });
     expect(getDrive(db(), b.id)).toMatchObject({ status: 'spare', slotId: null });
-    expect(memberRows(a.id)[0]!.endedAt).toBeNull();
-    expect(memberRows(b.id)).toHaveLength(0);
+    expect(installationOf(a.id)).toMatchObject({ poolId: pool });
+    expect(installationOf(b.id)).toBeUndefined();
     expect(db().select().from(events).all().length).toBe(before);
-    expect(links()).toEqual(linksBefore);
-  });
-
-  it('R14, R74: a failing LINK write rolls back the event, the change and the other links', () => {
-    const { slots } = setup();
-    const pool = makePool('tank');
-    const a = spare('A');
-    const b = spare('B');
-    assignDrive(db(), { driveId: a.id, slotId: slots[0]!, poolId: pool });
-    const eventsBefore = db().select().from(events).all().length;
-    const driveLinksBefore = db().select().from(eventDrives).all().length;
-    opened.sqlite.exec(
-      "CREATE TRIGGER fail_slot_link BEFORE INSERT ON event_slots BEGIN SELECT RAISE(ABORT, 'link write failed'); END;",
-    );
-    expect(() =>
-      assignDrive(db(), { driveId: b.id, slotId: slots[0]!, occupant: { action: 'spare' } }),
-    ).toThrow(/link write failed/);
-    expect(getDrive(db(), a.id)).toMatchObject({ status: 'installed', slotId: slots[0] });
-    expect(getDrive(db(), b.id)).toMatchObject({ status: 'spare', slotId: null });
-    expect(db().select().from(events).all()).toHaveLength(eventsBefore);
-    expect(db().select().from(eventDrives).all()).toHaveLength(driveLinksBefore);
-    expect(memberRows(a.id)[0]!.endedAt).toBeNull();
+    expect(db().select().from(activities).all().length).toBe(activitiesBefore);
   });
 
   it('a failing retire event rolls back the removal too', () => {
@@ -578,6 +648,17 @@ describe('invariants and atomicity (D7, R14)', () => {
     expect(getDrive(db(), a.id)).toMatchObject({ status: 'installed', slotId: slots[0] });
     expect(types(a.id)).toEqual(['drive-installed', 'drive-created']);
     expect(db().select().from(drives).all()).toHaveLength(1);
+  });
+
+  it('every activity gets the next seq and its events are numbered from 0', () => {
+    const { slots } = setup();
+    const a = spare('A');
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]! });
+    removeToSpares(db(), a.id);
+    const acts = activitiesOf(db());
+    expect(acts.map((x) => x.seq)).toEqual(acts.map((_, i) => i + 1));
+    for (const act of acts)
+      expect(act.events.map((e) => e.ord)).toEqual(act.events.map((_, i) => i));
   });
 });
 
@@ -631,7 +712,7 @@ describe('assignment API', () => {
       url: `/api/slots/${slots[0]}/assign`,
       payload: {
         driveId: b.id,
-        occupant: { action: 'retire', reason: 'replaced', date: '2026-01-02' },
+        occupant: { action: 'retire', reason: 'replaced' },
       },
     });
     expect(swap.statusCode).toBe(200);
@@ -639,6 +720,16 @@ describe('assignment API', () => {
       drive: { id: b.id },
       occupant: { id: a.id, status: 'retired' },
     });
+
+    const differing = await app.inject({
+      method: 'POST',
+      url: `/api/slots/${slots[0]}/assign`,
+      payload: {
+        driveId: a.id,
+        occupant: { action: 'spare', removedOn: '2020-01-01' },
+      },
+    });
+    expect(differing.statusCode).toBe(400);
   });
 
   it('defaults, remove, retire, rma and reinstate routes', async () => {

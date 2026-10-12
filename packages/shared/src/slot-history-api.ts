@@ -2,8 +2,9 @@ import { z } from 'zod';
 import { dateSchema, idSchema, timestampSchema } from './common.js';
 import { driveTypeSchema } from './enums.js';
 
-// Response shape for GET /api/slots/:id/history (R74). Computed on every read from the events linked
-// to the slot (event_slots), never stored. Entries are newest first.
+// Response shape for GET /api/slots/:id/history (R74). Computed on every read from the drive-installed /
+// drive-uninstalled events of the slot (and the other events of the same activity), never stored.
+// Entries are newest first.
 
 /** How a drive left the bay. `null` on the entry means it is still there. */
 export const slotHistoryOutcomeSchema = z.discriminatedUnion('kind', [
@@ -28,7 +29,7 @@ export const slotHistoryOutcomeSchema = z.discriminatedUnion('kind', [
 ]);
 export type SlotHistoryOutcome = z.infer<typeof slotHistoryOutcomeSchema>;
 
-/** The drive that took the bay when this one left it (a replacement, drive-replaced). */
+/** The drive that took the bay when this one left it (a replacement). */
 export const slotHistoryReplacedBySchema = z.object({
   driveId: idSchema,
   serial: z.string(),

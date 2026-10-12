@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/api/app.js';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
+import { recordActivity } from '../src/core/activities.js';
 import { createRepositories, type Repositories } from '../src/db/repositories.js';
 
 let opened: OpenedDatabase;
@@ -30,7 +31,7 @@ function seedSlots(n = 2) {
   return { enclosure, grid, slots: slotList };
 }
 
-const spare = (serial: string) => repo.drives.create({ serial, status: 'spare' });
+const spare = (serial: string) => repo.drives.create({ serial });
 
 describe('record creation (R11, R29, R30, R39, R14)', () => {
   it('R39: creates enclosure, grid and slots with generated ids and UTC timestamps', () => {
@@ -59,28 +60,45 @@ describe('record creation (R11, R29, R30, R39, R14)', () => {
     expect(() => repo.pools.create({ name: '', layoutLabel: null })).toThrow(/CHECK/);
   });
 
-  it('R29: creates a membership', () => {
+  it('R29: creates an installation holding the pool and role', () => {
+    const { slots } = seedSlots(1);
     const d = spare('M1');
     const p = repo.pools.create({ name: 'tank', layoutLabel: null });
-    const m = repo.memberships.create({
+    const i = repo.installations.create({
       driveId: d.id,
+      slotId: slots[0]!.id,
       poolId: p.id,
-      role: 'data',
-      source: 'manual',
-      startedAt: '2026-01-01T00:00:00.000Z',
-      endedAt: null,
+      poolRole: 'data',
+      installedOn: '2026-01-01',
     });
-    expect(repo.memberships.get(m.id)).toEqual(m);
-    expect(repo.memberships.listByDrive(d.id)).toHaveLength(1);
+    expect(repo.installations.get(d.id)).toEqual(i);
+    expect(repo.installations.list()).toHaveLength(1);
   });
 
-  it('R14: creates an event with a JSON payload', () => {
+  it('R14: records an activity with ordered events and a JSON payload', () => {
     const d = spare('E1');
-    const e = repo.events.create({ driveId: d.id, type: 'drive-created', payload: { a: 1 } });
-    expect(repo.events.get(e.id)?.payload).toEqual({ a: 1 });
-    expect(repo.events.listByDrive(d.id)).toHaveLength(1);
+    const stored = opened.db.transaction((tx) =>
+      recordActivity(tx, {
+        kind: 'drive-added',
+        events: [
+          { type: 'drive-created', driveId: d.id, payload: { a: 1 } },
+          { type: 'drive-updated', driveId: d.id, payload: { changes: {} } },
+        ],
+      }),
+    );
+    expect(stored.seq).toBe(1);
+    expect(stored.events.map((e) => [e.ord, e.type, e.driveId])).toEqual([
+      [0, 'drive-created', d.id],
+      [1, 'drive-updated', d.id],
+    ]);
+    expect(stored.events[0]!.payload).toEqual({ a: 1 });
     expect(() =>
-      repo.events.create({ driveId: d.id, type: 'bogus' as never, payload: {} }),
+      opened.db.transaction((tx) =>
+        recordActivity(tx, {
+          kind: 'drive-added',
+          events: [{ type: 'bogus' as never, driveId: d.id, payload: {} }],
+        }),
+      ),
     ).toThrow(/CHECK/);
   });
 
@@ -100,74 +118,107 @@ describe('constraints', () => {
     expect(() => spare(' abc ')).toThrow(/UNIQUE/);
   });
 
-  it('D7: rejects two drives in the same slot', () => {
-    const { slots } = seedSlots(1);
-    const slotId = slots[0]!.id;
-    repo.drives.create({ serial: 'A', status: 'installed', slotId });
-    expect(() => repo.drives.create({ serial: 'B', status: 'installed', slotId })).toThrow(
+  it('D7: a bay holds at most one drive and a drive sits in at most one bay', () => {
+    const { slots } = seedSlots(2);
+    const a = spare('A');
+    const b = spare('B');
+    repo.installations.create({ driveId: a.id, slotId: slots[0]!.id });
+    expect(() => repo.installations.create({ driveId: b.id, slotId: slots[0]!.id })).toThrow(
+      /UNIQUE/,
+    );
+    expect(() => repo.installations.create({ driveId: a.id, slotId: slots[1]!.id })).toThrow(
       /UNIQUE/,
     );
   });
 
-  it('D7/R11: installed requires a slot; a slot requires installed status', () => {
-    const { slots } = seedSlots(1);
-    expect(() => repo.drives.create({ serial: 'A', status: 'installed' })).toThrow(/CHECK/);
+  it('R29: pool and pool role are set together, and the role is a known one', () => {
+    const { slots } = seedSlots(2);
+    const p = repo.pools.create({ name: 'tank', layoutLabel: null });
+    const a = spare('A');
+    const b = spare('B');
     expect(() =>
-      repo.drives.create({ serial: 'B', status: 'spare', slotId: slots[0]!.id }),
+      repo.installations.create({ driveId: a.id, slotId: slots[0]!.id, poolId: p.id }),
+    ).toThrow(/CHECK/);
+    expect(() =>
+      repo.installations.create({ driveId: a.id, slotId: slots[0]!.id, poolRole: 'data' }),
+    ).toThrow(/CHECK/);
+    expect(() =>
+      repo.installations.create({
+        driveId: b.id,
+        slotId: slots[1]!.id,
+        poolId: p.id,
+        poolRole: 'cache' as never,
+      }),
     ).toThrow(/CHECK/);
   });
 
-  it('R13, R60: retired requires a reason; the date may be null (not recorded)', () => {
-    expect(() => repo.drives.create({ serial: 'A', status: 'retired' })).toThrow(/CHECK/);
-    expect(() =>
-      repo.drives.create({ serial: 'B', status: 'retired', retirementDate: '2026-01-02' }),
-    ).toThrow(/CHECK/);
+  it('D7: the installation needs a real drive and a real bay', () => {
+    const { slots } = seedSlots(1);
+    expect(() => repo.installations.create({ driveId: 'nope', slotId: slots[0]!.id })).toThrow(
+      /FOREIGN KEY/,
+    );
+    expect(() => repo.installations.create({ driveId: spare('A').id, slotId: 'nope' })).toThrow(
+      /FOREIGN KEY/,
+    );
+  });
+
+  it('D7: a retired drive cannot be installed (trigger in the baseline SQL)', () => {
+    const { slots } = seedSlots(1);
+    const d = repo.drives.create({ serial: 'R', retirementReason: 'failed' });
+    expect(() => repo.installations.create({ driveId: d.id, slotId: slots[0]!.id })).toThrow(
+      /retired drive cannot be installed/,
+    );
+  });
+
+  it('R13, R60: the retirement date and note need a reason; the date may be null (not recorded)', () => {
+    expect(() => repo.drives.create({ serial: 'B', retirementDate: '2026-01-02' })).toThrow(
+      /CHECK/,
+    );
+    expect(() => repo.drives.create({ serial: 'B1', retirementNote: 'x' })).toThrow(/CHECK/);
     expect(
-      repo.drives.create({ serial: 'B2', status: 'retired', retirementReason: 'failed' })
-        .retirementDate,
+      repo.drives.create({ serial: 'B2', retirementReason: 'failed' }).retirementDate,
     ).toBeNull();
     const ok = repo.drives.create({
       serial: 'C',
-      status: 'retired',
       retirementReason: 'failed',
       retirementDate: '2026-01-02',
     });
-    expect(ok.status).toBe('retired');
+    expect(ok.retirementReason).toBe('failed');
+  });
+
+  it('R13: the drive row has no status, bay or installation date (they are computed)', () => {
+    const columns = (
+      opened.sqlite.prepare("SELECT name FROM pragma_table_info('drives')").all() as {
+        name: string;
+      }[]
+    ).map((c) => c.name);
+    for (const gone of ['status', 'slot_id', 'installed_on']) expect(columns).not.toContain(gone);
+  });
+
+  it('R14: activities have a unique monotonic seq, and events are ordered within an activity', () => {
+    const d = spare('S1');
+    const write = () =>
+      opened.db.transaction((tx) =>
+        recordActivity(tx, {
+          kind: 'drive-added',
+          events: [{ type: 'drive-created', driveId: d.id, payload: {} }],
+        }),
+      );
+    expect([write().seq, write().seq, write().seq]).toEqual([1, 2, 3]);
+    expect(() =>
+      opened.sqlite.exec(
+        "INSERT INTO activities (id, seq, kind, recorded_at) VALUES ('dup', 2, 'drive-added', 't')",
+      ),
+    ).toThrow(/UNIQUE/);
+    expect(() =>
+      opened.sqlite.exec(
+        "INSERT INTO activities (id, seq, kind, recorded_at) VALUES ('bad', 9, 'exploded', 't')",
+      ),
+    ).toThrow(/CHECK/);
   });
 
   it('D5: drives expose no delete function', () => {
     expect(Object.keys(repo.drives).sort()).toEqual(['create', 'get', 'list']);
-  });
-
-  it('R29: second open membership for a drive is rejected; closed + open is fine', () => {
-    const d = spare('M1');
-    const p = repo.pools.create({ name: 'tank', layoutLabel: null });
-    const base = { driveId: d.id, poolId: p.id, role: 'data', source: 'manual' } as const;
-    repo.memberships.create({
-      ...base,
-      startedAt: '2026-01-01T00:00:00.000Z',
-      endedAt: '2026-02-01T00:00:00.000Z',
-    });
-    repo.memberships.create({ ...base, startedAt: '2026-02-01T00:00:00.000Z', endedAt: null });
-    expect(() =>
-      repo.memberships.create({ ...base, startedAt: '2026-03-01T00:00:00.000Z', endedAt: null }),
-    ).toThrow(/UNIQUE/);
-    expect(repo.memberships.listByDrive(d.id)).toHaveLength(2);
-  });
-
-  it('R29: membership cannot end before it starts', () => {
-    const d = spare('M1');
-    const p = repo.pools.create({ name: 'tank', layoutLabel: null });
-    expect(() =>
-      repo.memberships.create({
-        driveId: d.id,
-        poolId: p.id,
-        role: 'data',
-        source: 'manual',
-        startedAt: '2026-02-01T00:00:00.000Z',
-        endedAt: '2026-01-01T00:00:00.000Z',
-      }),
-    ).toThrow(/CHECK/);
   });
 
   it('R39: foreign keys are enforced (slot with unknown grid rejected)', () => {
@@ -206,13 +257,14 @@ describe('migrations (R16)', () => {
           'slots',
           'drives',
           'pools',
-          'memberships',
+          'installations',
+          'activities',
           'events',
           'app_meta',
           'provider_snapshot',
         ]),
       );
-      createRepositories(first.db).drives.create({ serial: 'KEEP', status: 'spare' });
+      createRepositories(first.db).drives.create({ serial: 'KEEP' });
       const count = () =>
         (
           first.sqlite.prepare('SELECT count(*) AS c FROM __drizzle_migrations').get() as {
@@ -254,15 +306,15 @@ describe('API (R67)', () => {
 });
 
 describe('optional retirement date in the baseline (R60)', () => {
-  it('R60: a fresh DB accepts a retired drive without a date, and still requires the reason', () => {
+  it('R60: a fresh DB accepts a retired drive without a date, and refuses a date without a reason', () => {
     const { sqlite } = openDatabase(':memory:');
     try {
       const ins = (id: string, reason: string | null, date: string | null) =>
         sqlite
           .prepare(
-            "INSERT INTO drives (id, serial, serial_normalized, status, retirement_reason, retirement_date, created_at, updated_at) VALUES (?,?,?,'retired',?,?,'t','t')",
+            'INSERT INTO drives (id, serial, serial_normalized, retirement_reason, retirement_date, created_at, updated_at) VALUES (?,?,?,?,?,?,?)',
           )
-          .run(id, id, id, reason, date);
+          .run(id, id, id, reason, date, 't', 't');
       ins('a', 'failed', null);
       expect(() => ins('b', null, '2026-01-01')).toThrow(/CHECK/);
       expect(sqlite.pragma('foreign_key_check')).toEqual([]);
@@ -275,8 +327,13 @@ describe('optional retirement date in the baseline (R60)', () => {
 describe('foundation for the next batch (R20, R34, R72)', () => {
   it('R20: a fresh DB accepts an event of type health-changed', () => {
     const d = spare('H1');
-    const e = repo.events.create({ driveId: d.id, type: 'health-changed', payload: { to: 'ok' } });
-    expect(repo.events.get(e.id)?.type).toBe('health-changed');
+    const a = opened.db.transaction((tx) =>
+      recordActivity(tx, {
+        kind: 'health-polled',
+        events: [{ type: 'health-changed', driveId: d.id, payload: { to: 'ok' } }],
+      }),
+    );
+    expect(a.events[0]!.type).toBe('health-changed');
   });
 
   it('R72: a fresh DB accepts a pool with expected_members 6 and round-trips it', () => {

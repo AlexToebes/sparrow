@@ -11,7 +11,7 @@ import type { AppDb } from '../db/client.js';
 import * as repo from '../db/layout-repo.js';
 import type { EnclosureRow, GridRow, SlotRow, Tx } from '../db/layout-repo.js';
 import { conflict, notFound } from './errors.js';
-import { recordEvent } from './events.js';
+import { recordActivity, type EventInput } from './activities.js';
 
 /** app_meta key that records the one-time seeding (R5). */
 export const LAYOUT_SEEDED_KEY = 'layout.seeded';
@@ -56,6 +56,17 @@ const makeSlots = (
     updatedAt: at,
   }));
 };
+
+/** A grid and its slots as one event payload: the whole record, so the log can rebuild or undo it. */
+const gridPayload = (grid: GridRow, slotRows: SlotRow[]): Record<string, unknown> => ({
+  ...grid,
+  slots: slotRows,
+});
+
+/** Records the one `layout-updated` activity of a layout action, if it changed anything. */
+function recordLayout(tx: Tx, events: EventInput[]): void {
+  if (events.length > 0) recordActivity(tx, { kind: 'layout-updated', events });
+}
 
 const positionsUpTo = (count: number) => Array.from({ length: count }, (_, i) => i);
 
@@ -155,10 +166,7 @@ export function createLayoutService(db: AppDb) {
       return run((tx) => {
         const row = makeEnclosure(input.name);
         repo.insertEnclosure(tx, row);
-        recordEvent(tx, {
-          type: 'enclosure-created',
-          payload: { enclosureId: row.id, name: row.name },
-        });
+        recordLayout(tx, [{ type: 'enclosure-created', payload: { ...row } }]);
         return row;
       });
     },
@@ -169,10 +177,12 @@ export function createLayoutService(db: AppDb) {
         const row = { ...before, name: input.name, updatedAt: nowIso() };
         repo.updateEnclosure(tx, row);
         if (before.name !== row.name) {
-          recordEvent(tx, {
-            type: 'enclosure-renamed',
-            payload: { enclosureId: id, name: row.name, from: before.name, to: row.name },
-          });
+          recordLayout(tx, [
+            {
+              type: 'enclosure-renamed',
+              payload: { enclosureId: id, from: before.name, to: row.name },
+            },
+          ]);
         }
         return row;
       });
@@ -195,10 +205,17 @@ export function createLayoutService(db: AppDb) {
         );
         for (const grid of gridRows) repo.deleteGrid(tx, grid.id);
         repo.deleteEnclosure(tx, id);
-        recordEvent(tx, {
-          type: 'enclosure-deleted',
-          payload: { enclosureId: id, name: enclosure.name, gridCount: gridRows.length },
-        });
+        // Each grid goes with its slots, then the enclosure: every deleted record is in the log.
+        recordLayout(tx, [
+          ...gridRows.map((grid): EventInput => ({
+            type: 'grid-deleted',
+            payload: gridPayload(
+              grid,
+              slotRows.filter((s) => s.gridId === grid.id),
+            ),
+          })),
+          { type: 'enclosure-deleted', payload: { ...enclosure } },
+        ]);
       });
     },
 
@@ -208,18 +225,9 @@ export function createLayoutService(db: AppDb) {
         assertGridNameFree(tx, enclosureId, input.name);
         const grid = makeGrid(enclosureId, input);
         repo.insertGrid(tx, grid);
-        repo.insertSlots(tx, makeSlots(grid.id, positionsUpTo(grid.rows * grid.columns)));
-        recordEvent(tx, {
-          type: 'grid-created',
-          payload: {
-            gridId: grid.id,
-            enclosureId,
-            name: grid.name,
-            rows: grid.rows,
-            columns: grid.columns,
-            orientation: grid.orientation,
-          },
-        });
+        const slotRows = makeSlots(grid.id, positionsUpTo(grid.rows * grid.columns));
+        repo.insertSlots(tx, slotRows);
+        recordLayout(tx, [{ type: 'grid-created', payload: gridPayload(grid, slotRows) }]);
         return grid;
       });
     },
@@ -259,7 +267,8 @@ export function createLayoutService(db: AppDb) {
         }
         const present = new Set(existing.map((s) => s.position));
         const missing = positionsUpTo(targetCount).filter((p) => !present.has(p));
-        repo.insertSlots(tx, makeSlots(id, missing));
+        const added = makeSlots(id, missing);
+        repo.insertSlots(tx, added);
 
         repo.updateGrid(tx, next);
         const changes: Record<string, { from: unknown; to: unknown }> = {};
@@ -269,10 +278,18 @@ export function createLayoutService(db: AppDb) {
           }
         }
         if (Object.keys(changes).length > 0) {
-          recordEvent(tx, {
-            type: 'grid-updated',
-            payload: { gridId: id, enclosureId: current.enclosureId, name: next.name, changes },
-          });
+          // Growing or shrinking adds or removes slots: those records are part of the change.
+          recordLayout(tx, [
+            {
+              type: 'grid-updated',
+              payload: {
+                gridId: id,
+                changes,
+                ...(added.length > 0 ? { slotsAdded: added } : {}),
+                ...(doomed.length > 0 ? { slotsRemoved: doomed } : {}),
+              },
+            },
+          ]);
         }
         return next;
       });
@@ -289,10 +306,7 @@ export function createLayoutService(db: AppDb) {
           slotRows.map((s) => s.id),
         );
         repo.deleteGrid(tx, id);
-        recordEvent(tx, {
-          type: 'grid-deleted',
-          payload: { gridId: id, enclosureId: grid.enclosureId, name: grid.name },
-        });
+        recordLayout(tx, [{ type: 'grid-deleted', payload: gridPayload(grid, slotRows) }]);
       });
     },
 
@@ -303,11 +317,13 @@ export function createLayoutService(db: AppDb) {
         repo.updateSlotLabel(tx, id, input.label, nowIso());
         const after = requireSlot(tx, id);
         if (before.label !== after.label) {
-          recordEvent(tx, {
-            type: 'slot-relabeled',
-            slots: [{ id, role: 'at' }],
-            payload: { from: before.label, to: after.label },
-          });
+          recordLayout(tx, [
+            {
+              type: 'slot-relabeled',
+              slotId: id,
+              payload: { from: before.label, to: after.label },
+            },
+          ]);
         }
         return after;
       });
@@ -348,6 +364,7 @@ export function seedInitialLayout(db: AppDb): boolean {
     if (repo.selectEnclosures(tx).length === 0) {
       const enclosure = makeEnclosure('NAS');
       repo.insertEnclosure(tx, enclosure);
+      const events: EventInput[] = [{ type: 'enclosure-created', payload: { ...enclosure } }];
       for (const spec of SEED_GRIDS) {
         const grid = makeGrid(enclosure.id, {
           name: spec.name,
@@ -356,11 +373,12 @@ export function seedInitialLayout(db: AppDb): boolean {
           orientation: 'landscape',
         });
         repo.insertGrid(tx, grid);
-        repo.insertSlots(
-          tx,
-          makeSlots(grid.id, positionsUpTo(grid.rows * grid.columns), spec.labels),
-        );
+        const slotRows = makeSlots(grid.id, positionsUpTo(grid.rows * grid.columns), spec.labels);
+        repo.insertSlots(tx, slotRows);
+        events.push({ type: 'grid-created', payload: gridPayload(grid, slotRows) });
       }
+      // No unlogged state change: the seed is ONE `layout-updated` activity (R75).
+      recordLayout(tx, events);
     }
 
     repo.setMeta(tx, LAYOUT_SEEDED_KEY, nowIso());

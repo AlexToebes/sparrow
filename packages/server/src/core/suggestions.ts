@@ -7,7 +7,7 @@ import type {
 } from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
 import { conflict } from './errors.js';
-import { listDriveEvents, recordEvent } from './events.js';
+import { listDriveEventsOfType, recordActivity } from './activities.js';
 import { getDrive, updateDrive } from './drives.js';
 import { getMatchState, type Match } from './matching.js';
 
@@ -71,8 +71,7 @@ export function suggestionsFor({ drive, observation }: Match): Suggestion[] {
  */
 function dismissedValues(db: AppDb, driveId: string): Map<SuggestionField, string | number> {
   const latest = new Map<SuggestionField, string | number | null>();
-  for (const e of listDriveEvents(db, driveId)) {
-    if (e.type !== 'suggestion-dismissed') continue;
+  for (const e of listDriveEventsOfType(db, driveId, 'suggestion-dismissed')) {
     const field = e.payload.field as SuggestionField;
     if (latest.has(field)) continue;
     const v = e.payload.value;
@@ -150,13 +149,14 @@ export function dismissSuggestions(
       if (!s) throw conflict(`The suggestion for ${field} no longer applies`, { field });
       return s;
     });
-    for (const s of picked) {
-      recordEvent(tx, {
-        type: 'suggestion-dismissed',
-        drives: [{ id: driveId }],
+    recordActivity(tx, {
+      kind: 'suggestions-dismissed',
+      events: picked.map((s) => ({
+        type: 'suggestion-dismissed' as const,
+        driveId,
         payload: { field: s.field, value: s.suggested },
-      });
-    }
+      })),
+    });
   });
 }
 
@@ -182,19 +182,20 @@ export function undismissSuggestions(
       }
       return field;
     });
-    for (const field of picked) {
-      recordEvent(tx, {
-        type: 'suggestion-dismissed',
-        drives: [{ id: driveId }],
+    recordActivity(tx, {
+      kind: 'suggestions-restored',
+      events: picked.map((field) => ({
+        type: 'suggestion-dismissed' as const,
+        driveId,
         payload: { field, value: null },
-      });
-    }
+      })),
+    });
   });
 }
 
 /**
  * POST /api/drives/:id/suggestions/apply. Applies the CURRENT suggested value of each field in one
- * transaction through updateDrive, which writes the single drive-updated event (R14) tagged
+ * transaction through updateDrive, which records the single `suggestions-applied` activity (R14) with one drive-updated event tagged
  * `source: 'provider'`. A field that is no longer suggested fails the whole call with a conflict.
  */
 export function applySuggestions(
@@ -214,6 +215,7 @@ export function applySuggestions(
       if (!suggestion) throw conflict(`The suggestion for ${field} no longer applies`, { field });
       patch[field] = suggestion.suggested;
     }
+    // updateDrive records the one `suggestions-applied` activity (a nested call is a savepoint).
     return updateDrive(inner, driveId, patch, { source: 'provider' });
   });
 }

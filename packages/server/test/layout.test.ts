@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { layoutSchema } from '@sparrow/shared';
-import { listRecentEvents } from '../src/core/events.js';
+import { recordActivity } from '../src/core/activities.js';
 import { buildApp } from '../src/api/app.js';
 import { createLayoutService, seedInitialLayout } from '../src/core/layout.js';
 import { DomainError } from '../src/core/errors.js';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
 import { createRepositories, type Repositories } from '../src/db/repositories.js';
+import { activitiesOf, countActivities, eventsOfDrive } from './activity-helpers.js';
 
 let opened: OpenedDatabase;
 let repo: Repositories;
@@ -42,15 +43,17 @@ function slotsOf(gridId: string) {
   return layout.enclosures.flatMap((e) => e.grids).find((g) => g.id === gridId)!.slots;
 }
 
-/** Puts a drive in a slot the way Step 3/7 will, written straight to the DB. */
+/** Puts a drive in a slot the way the assignment service does: an installation plus the event that says so. */
 function installDrive(slotId: string, serial = 'SN-1') {
-  const drive = repo.drives.create({ serial, status: 'installed', slotId });
-  const event = repo.events.create({
-    driveId: drive.id,
-    type: 'drive-installed',
-    payload: { slotId },
-  });
-  return { drive, event };
+  const drive = repo.drives.create({ serial });
+  repo.installations.create({ driveId: drive.id, slotId });
+  opened.db.transaction((tx) =>
+    recordActivity(tx, {
+      kind: 'assigned',
+      events: [{ type: 'drive-installed', driveId: drive.id, slotId, payload: { poolRole: null } }],
+    }),
+  );
+  return { drive };
 }
 
 describe('R4, R7: grid creation and layout read', () => {
@@ -72,11 +75,11 @@ describe('R4, R7: grid creation and layout read', () => {
 });
 
 describe('R39: renaming and relabeling never orphan an assignment', () => {
-  it('keeps slot IDs, the drive slot_id and its events after rename and relabel', () => {
+  it('keeps slot IDs, the installation and the drive events after rename and relabel', () => {
     const { layout, grid } = makeGrid(1, 2);
     const slot = slotsOf(grid.id)[0]!;
-    const { drive, event } = installDrive(slot.id);
-    const eventsBefore = repo.events.listByDrive(drive.id);
+    const { drive } = installDrive(slot.id);
+    const eventsBefore = eventsOfDrive(opened.db, drive.id);
 
     layout.updateGrid(grid.id, { name: 'Renamed bays' });
     layout.updateSlotLabel(slot.id, { label: 'Bay 1' });
@@ -85,9 +88,8 @@ describe('R39: renaming and relabeling never orphan an assignment', () => {
     expect(after.id).toBe(slot.id);
     expect(after.label).toBe('Bay 1');
     expect(after.driveId).toBe(drive.id);
-    expect(repo.drives.get(drive.id)?.slotId).toBe(slot.id);
-    expect(repo.events.listByDrive(drive.id)).toEqual(eventsBefore);
-    expect(repo.events.get(event.id)).toBeDefined();
+    expect(repo.installations.get(drive.id)?.slotId).toBe(slot.id);
+    expect(eventsOfDrive(opened.db, drive.id)).toEqual(eventsBefore);
     expect(service().getLayout().enclosures[0]!.grids[0]!.name).toBe('Renamed bays');
   });
 
@@ -156,12 +158,10 @@ describe('R40: blocked shrink and removal of occupied slots', () => {
     const { layout, grid } = makeGrid(1, 2);
     const { drive } = installDrive(slotsOf(grid.id)[1]!.id);
     expectCode(() => layout.deleteGrid(grid.id), 'conflict');
-    expect(repo.drives.get(drive.id)?.slotId).not.toBeNull();
+    expect(repo.installations.get(drive.id)).toBeDefined();
 
-    // Step 7 owns unassignment; free the slot directly so the grid can be removed.
-    opened.sqlite
-      .prepare('UPDATE drives SET slot_id = NULL, installed_on = NULL, status = ? WHERE id = ?')
-      .run('spare', drive.id);
+    // The assignment service owns removal; delete the installation directly so the grid can go.
+    opened.sqlite.prepare('DELETE FROM installations WHERE drive_id = ?').run(drive.id);
     layout.deleteGrid(grid.id);
     expect(service().getLayout().enclosures[0]!.grids).toHaveLength(0);
   });
@@ -312,11 +312,12 @@ describe('HTTP API (app.inject)', () => {
   });
 });
 
-describe('R75: layout changes write events with no drive', () => {
-  /** Oldest first, each with its links. */
-  const allEvents = () => listRecentEvents(opened.db, 1000).reverse();
+describe('R75: layout changes are activities with events that belong to no drive', () => {
+  /** Oldest first, each with its events. */
+  const allActivities = () => activitiesOf(opened.db);
+  const allEvents = () => allActivities().flatMap((a) => a.events);
 
-  it('records enclosure, grid and slot changes with their details', () => {
+  it('records enclosure, grid and slot changes, one layout-updated activity each, with full details', () => {
     const svc = createLayoutService(opened.db);
     const enc = svc.createEnclosure({ name: 'NAS' });
     svc.renameEnclosure(enc.id, { name: 'Vault' });
@@ -335,6 +336,9 @@ describe('R75: layout changes write events with no drive', () => {
     svc.deleteGrid(grid.id);
     svc.deleteEnclosure(enc.id);
 
+    const acts = allActivities();
+    expect(acts.map((a) => a.kind)).toEqual(Array(7).fill('layout-updated'));
+    expect(acts.map((a) => a.seq)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     const rows = allEvents();
     expect(rows.map((e) => e.type)).toEqual([
       'enclosure-created',
@@ -345,34 +349,45 @@ describe('R75: layout changes write events with no drive', () => {
       'grid-deleted',
       'enclosure-deleted',
     ]);
-    // Layout events involve no drive; only the relabel is linked to a bay (role `at`).
-    expect(rows.flatMap((e) => e.links.drives)).toEqual([]);
-    expect(rows.map((e) => e.links.slots.map((l) => l.role))).toEqual([
-      [],
-      [],
-      [],
-      [],
-      ['at'],
-      [],
-      [],
-    ]);
-    expect(rows.flatMap((e) => e.links.pools)).toEqual([]);
+    // Layout events involve no drive and no pool; only the relabel is linked to a bay.
+    expect(rows.map((e) => e.driveId)).toEqual(Array(7).fill(null));
+    expect(rows.map((e) => e.poolId)).toEqual(Array(7).fill(null));
+    expect(rows.map((e) => e.slotId)).toEqual([null, null, null, null, slot.id, null, null]);
     expect(rows[1]!.payload).toMatchObject({ enclosureId: enc.id, from: 'NAS', to: 'Vault' });
     expect(rows[3]!.payload).toMatchObject({
       gridId: grid.id,
-      enclosureId: enc.id,
       changes: { name: { from: 'Front', to: 'Bays' }, rows: { from: 1, to: 2 } },
     });
+    // Growing adds slots: the new records are part of the change.
+    expect((rows[3]!.payload.slotsAdded as unknown[]).length).toBe(2);
     expect(rows[4]!.payload).toEqual({ from: null, to: 'A1' });
-    // The link copies the bay's label (as relabeled) and its grid, so history survives a grid delete.
-    expect(rows[4]!.links.slots).toEqual([
-      { slotId: slot.id, role: 'at', slotLabel: 'A1', gridId: grid.id, gridName: 'Bays' },
-    ]);
-    expect(rows[5]!.payload).toMatchObject({ gridId: grid.id, name: 'Bays' });
-    expect(rows[6]!.payload).toMatchObject({ enclosureId: enc.id, name: 'Vault' });
+    // The event copies the bay's label (as relabeled) and its grid, so history survives a grid delete.
+    expect(rows[4]).toMatchObject({
+      slotId: slot.id,
+      slotLabel: 'A1',
+      gridId: grid.id,
+      gridName: 'Bays',
+    });
+    // Created and deleted things carry their whole record, a grid with its slots.
+    expect(rows[0]!.payload).toMatchObject({ id: enc.id, name: 'NAS' });
+    expect(rows[2]!.payload).toMatchObject({ id: grid.id, name: 'Front', rows: 1, columns: 2 });
+    expect((rows[2]!.payload.slots as unknown[]).length).toBe(2);
+    expect(rows[5]!.payload).toMatchObject({ id: grid.id, name: 'Bays' });
+    expect((rows[5]!.payload.slots as unknown[]).length).toBe(4);
+    expect(rows[6]!.payload).toMatchObject({ id: enc.id, name: 'Vault' });
   });
 
-  it('a refused change (occupied slot) writes no event', () => {
+  it('deleting an enclosure logs each grid with its slots, then the enclosure, in one activity', () => {
+    const { layout, enclosure, grid } = makeGrid(1, 2);
+    const before = countActivities(opened.db);
+    layout.deleteEnclosure(enclosure.id);
+    const acts = allActivities().slice(before);
+    expect(acts).toHaveLength(1);
+    expect(acts[0]!.events.map((e) => e.type)).toEqual(['grid-deleted', 'enclosure-deleted']);
+    expect(acts[0]!.events[0]!.payload).toMatchObject({ id: grid.id });
+  });
+
+  it('a refused change (occupied slot) writes no activity', () => {
     const svc = createLayoutService(opened.db);
     const enc = svc.createEnclosure({ name: 'NAS' });
     const grid = svc.createGrid(enc.id, {
@@ -383,15 +398,31 @@ describe('R75: layout changes write events with no drive', () => {
     });
     const slot = svc.getLayout().enclosures[0]!.grids[0]!.slots[1]!;
     installDrive(slot.id);
-    const before = allEvents().length;
+    const before = countActivities(opened.db);
     expect(() => svc.updateGrid(grid.id, { columns: 1 })).toThrow(DomainError);
     expect(() => svc.deleteGrid(grid.id)).toThrow(DomainError);
     expect(() => svc.deleteEnclosure(enc.id)).toThrow(DomainError);
-    expect(allEvents().length).toBe(before);
+    expect(countActivities(opened.db)).toBe(before);
   });
 
-  it('the first-run seed writes no events', () => {
+  it('the first-run seed is ONE layout-updated activity (no unlogged state change)', () => {
     seedInitialLayout(opened.db);
-    expect(allEvents()).toEqual([]);
+    const acts = allActivities();
+    expect(acts).toHaveLength(1);
+    expect(acts[0]!.kind).toBe('layout-updated');
+    expect(acts[0]!.events.map((e) => e.type)).toEqual([
+      'enclosure-created',
+      'grid-created',
+      'grid-created',
+      'grid-created',
+    ]);
+    expect(acts[0]!.events[1]!.payload).toMatchObject({ name: 'Front bays' });
+  });
+
+  it('seeding over an existing layout writes nothing', () => {
+    service().createEnclosure({ name: 'Mine' });
+    const before = countActivities(opened.db);
+    expect(seedInitialLayout(opened.db)).toBe(true);
+    expect(countActivities(opened.db)).toBe(before);
   });
 });

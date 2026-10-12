@@ -1,24 +1,13 @@
 import { sql, type SQL } from 'drizzle-orm';
+import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import {
-  check,
-  index,
-  integer,
-  primaryKey,
-  sqliteTable,
-  text,
-  uniqueIndex,
-} from 'drizzle-orm/sqlite-core';
-import {
+  ACTIVITY_KINDS,
   DRIVE_CONDITIONS,
-  DRIVE_LINK_ROLES,
-  DRIVE_STATUSES,
   DRIVE_TYPES,
   EVENT_TYPES,
   GRID_ORIENTATIONS,
   MEMBERSHIP_ROLES,
-  MEMBERSHIP_SOURCES,
   RETIREMENT_REASONS,
-  SLOT_LINK_ROLES,
 } from '@sparrow/shared';
 import type { Observation } from '@sparrow/shared';
 
@@ -80,6 +69,9 @@ export const slots = sqliteTable(
   ],
 );
 
+// A drive row holds what the drive IS: identity, specification, purchase and retirement. Where it
+// sits and in which pool is the installation (below), and the status is derived: retired iff there is
+// a retirement reason, else installed iff there is an installation, else spare (R13).
 export const drives = sqliteTable(
   'drives',
   {
@@ -99,35 +91,19 @@ export const drives = sqliteTable(
     warrantyExpiry: text('warranty_expiry'),
     vendor: text('vendor'),
     notes: text('notes'),
-    status: text('status', { enum: DRIVE_STATUSES }).notNull(),
-    slotId: text('slot_id').references(() => slots.id, { onDelete: 'restrict' }),
     retirementReason: text('retirement_reason', { enum: RETIREMENT_REASONS }),
     retirementDate: text('retirement_date'),
     retirementNote: text('retirement_note'),
-    // R68: calendar date (YYYY-MM-DD) the drive went into its slot; only while installed. NULL on an
-    // installed drive = "installation date not recorded".
-    installedOn: text('installed_on'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
   },
   (t) => [
     uniqueIndex('drives_serial_normalized_unique').on(t.serialNormalized), // D6
-    uniqueIndex('drives_slot_id_unique').on(t.slotId), // D7
-    check('drives_slot_only_when_installed', sql`${t.slotId} IS NULL OR ${t.status} = 'installed'`),
     check(
-      'drives_installed_needs_slot',
-      sql`${t.status} <> 'installed' OR ${t.slotId} IS NOT NULL`,
-    ),
-    check(
-      'drives_installed_on_only_when_installed',
-      sql`${t.installedOn} IS NULL OR ${t.status} = 'installed'`,
-    ),
-    check(
-      'drives_retired_needs_reason',
-      sql`${t.status} <> 'retired' OR ${t.retirementReason} IS NOT NULL`,
+      'drives_retirement_fields_need_reason',
+      sql`${t.retirementReason} IS NOT NULL OR (${t.retirementDate} IS NULL AND ${t.retirementNote} IS NULL)`,
     ),
     check('drives_drive_type_enum', inListOrNull('drive_type', DRIVE_TYPES)),
-    check('drives_status_enum', inList('status', DRIVE_STATUSES)),
     check('drives_condition_enum', inListOrNull('condition', DRIVE_CONDITIONS)),
     check('drives_retirement_reason_enum', inListOrNull('retirement_reason', RETIREMENT_REASONS)),
   ],
@@ -153,101 +129,83 @@ export const pools = sqliteTable(
   ],
 );
 
-export const memberships = sqliteTable(
-  'memberships',
+// R29, D7: a drive installed in a bay. The pool and the pool role are properties of this relationship.
+// The drive is the key and the bay is UNIQUE: a drive sits in at most one bay and a bay holds at most one
+// drive, so a drive is in at most one pool. Removing the drive deletes the row; the history lives in the activity
+// log. A retired drive may not be installed: the core refuses it, and a BEFORE INSERT trigger in the
+// baseline SQL backs that up (drizzle's snapshot does not track triggers).
+export const installations = sqliteTable(
+  'installations',
   {
-    id: text('id').primaryKey(),
     driveId: text('drive_id')
-      .notNull()
+      .primaryKey()
       .references(() => drives.id),
-    poolId: text('pool_id')
+    slotId: text('slot_id')
       .notNull()
-      .references(() => pools.id),
-    role: text('role', { enum: MEMBERSHIP_ROLES }).notNull(),
-    source: text('source', { enum: MEMBERSHIP_SOURCES }).notNull(),
-    startedAt: text('started_at').notNull(),
-    endedAt: text('ended_at'),
-    createdAt: text('created_at').notNull(),
+      .references(() => slots.id, { onDelete: 'restrict' }),
+    poolId: text('pool_id').references(() => pools.id),
+    poolRole: text('pool_role', { enum: MEMBERSHIP_ROLES }),
+    // R68: calendar date (YYYY-MM-DD) the drive went into the bay; NULL = "not recorded".
+    installedOn: text('installed_on'),
   },
   (t) => [
-    uniqueIndex('memberships_one_open_per_drive')
-      .on(t.driveId)
-      .where(sql`${t.endedAt} IS NULL`),
+    uniqueIndex('installations_slot_id_unique').on(t.slotId), // D7
+    index('installations_pool_idx').on(t.poolId),
     check(
-      'memberships_ended_after_started',
-      sql`${t.endedAt} IS NULL OR ${t.endedAt} >= ${t.startedAt}`,
+      'installations_pool_and_role_together',
+      sql`(${t.poolId} IS NULL) = (${t.poolRole} IS NULL)`,
     ),
-    check('memberships_role_enum', inList('role', MEMBERSHIP_ROLES)),
-    check('memberships_source_enum', inList('source', MEMBERSHIP_SOURCES)),
+    check('installations_pool_role_enum', inListOrNull('pool_role', MEMBERSHIP_ROLES)),
   ],
 );
 
-// One event per real action (R14). Which drives, slots and pools it involves lives in the link
-// tables below, not in the payload, so histories read through indexed joins.
+// R14: the history. An ACTIVITY is one user (or system) action; its EVENTS are the atomic facts that
+// happened together. `seq` is the monotonic position in the log: every ordering uses it, never the
+// timestamps. Activities are written only through core/activities.ts#recordActivity.
+export const activities = sqliteTable(
+  'activities',
+  {
+    id: text('id').primaryKey(),
+    seq: integer('seq').notNull(),
+    kind: text('kind', { enum: ACTIVITY_KINDS }).notNull(),
+    recordedAt: text('recorded_at').notNull(),
+    // The user's date for the action (installation, removal, retirement); NULL = not recorded / n.a.
+    occurredOn: text('occurred_on'),
+    note: text('note'),
+  },
+  (t) => [
+    uniqueIndex('activities_seq_unique').on(t.seq),
+    check('activities_kind_enum', inList('kind', ACTIVITY_KINDS)),
+  ],
+);
+
+// One atomic fact about at most one drive, one slot and one pool. Drives are never deleted (D5), so
+// drive_id has a real foreign key. slot_id and pool_id have none: deleting a grid or an unused pool
+// must not erase history, so the bay's label and grid and the pool's name are copied here (R39).
 export const events = sqliteTable(
   'events',
   {
     id: text('id').primaryKey(),
+    activityId: text('activity_id')
+      .notNull()
+      .references(() => activities.id, { onDelete: 'cascade' }),
+    ord: integer('ord').notNull(),
     type: text('type', { enum: EVENT_TYPES }).notNull(),
-    at: text('at').notNull(),
+    driveId: text('drive_id').references(() => drives.id),
+    slotId: text('slot_id'),
+    slotLabel: text('slot_label'),
+    gridId: text('grid_id'),
+    gridName: text('grid_name'),
+    poolId: text('pool_id'),
+    poolName: text('pool_name'),
     payload: text('payload', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
   },
-  (t) => [index('events_at_idx').on(t.at), check('events_type_enum', inList('type', EVENT_TYPES))],
-);
-
-// Drives are never deleted (D5), so this link has a real foreign key.
-export const eventDrives = sqliteTable(
-  'event_drives',
-  {
-    eventId: text('event_id')
-      .notNull()
-      .references(() => events.id, { onDelete: 'cascade' }),
-    driveId: text('drive_id')
-      .notNull()
-      .references(() => drives.id),
-    role: text('role', { enum: DRIVE_LINK_ROLES }).notNull(),
-  },
   (t) => [
-    primaryKey({ columns: [t.eventId, t.driveId] }),
-    index('event_drives_drive_idx').on(t.driveId, t.eventId),
-    check('event_drives_role_enum', inList('role', DRIVE_LINK_ROLES)),
-  ],
-);
-
-// No foreign key on slot_id: deleting a grid must not erase the history of its bays. The label and
-// grid are copied as they were when the event was written (R39).
-export const eventSlots = sqliteTable(
-  'event_slots',
-  {
-    eventId: text('event_id')
-      .notNull()
-      .references(() => events.id, { onDelete: 'cascade' }),
-    slotId: text('slot_id').notNull(),
-    role: text('role', { enum: SLOT_LINK_ROLES }).notNull(),
-    slotLabel: text('slot_label'),
-    gridId: text('grid_id').notNull(),
-    gridName: text('grid_name').notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.eventId, t.slotId, t.role] }),
-    index('event_slots_slot_idx').on(t.slotId, t.eventId),
-    check('event_slots_role_enum', inList('role', SLOT_LINK_ROLES)),
-  ],
-);
-
-// No foreign key on pool_id: an unused pool can be deleted and its history stays readable.
-export const eventPools = sqliteTable(
-  'event_pools',
-  {
-    eventId: text('event_id')
-      .notNull()
-      .references(() => events.id, { onDelete: 'cascade' }),
-    poolId: text('pool_id').notNull(),
-    poolName: text('pool_name').notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.eventId, t.poolId] }),
-    index('event_pools_pool_idx').on(t.poolId, t.eventId),
+    index('events_drive_idx').on(t.driveId),
+    index('events_slot_idx').on(t.slotId),
+    index('events_pool_idx').on(t.poolId),
+    index('events_activity_ord_idx').on(t.activityId, t.ord),
+    check('events_type_enum', inList('type', EVENT_TYPES)),
   ],
 );
 

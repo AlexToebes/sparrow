@@ -5,15 +5,16 @@ import {
   occupantResolutionSchema,
   retireDriveInputSchema,
   enclosureSchema,
+  ACTIVITY_KINDS,
   EVENT_TYPES,
-  DRIVE_LINK_ROLES,
-  SLOT_LINK_ROLES,
-  eventLinksSchema,
+  activitySchema,
+  installationSchema,
+  storedActivitySchema,
+  storedDriveSchema,
   storedEventSchema,
   exportFileSchema,
   EXPORT_SCHEMA_VERSION,
   gridSchema,
-  membershipSchema,
   normalizeSerial,
   observationSchema,
   createPoolInputSchema,
@@ -41,12 +42,15 @@ const drive = {
   warrantyExpiry: null,
   vendor: null,
   notes: null,
-  status: 'spare',
-  slotId: null,
   retirementReason: null,
   retirementDate: null,
   retirementNote: null,
+  // Computed from the installation (R13, D7): a spare has none.
+  status: 'spare',
+  slotId: null,
   installedOn: null,
+  poolId: null,
+  poolRole: null,
   ...stamps,
 };
 
@@ -116,6 +120,30 @@ describe('driveSchema', () => {
     expect(driveSchema.safeParse({ ...drive, slotId: 's1' }).success).toBe(false);
   });
 
+  it('R29: pool and role are set together and only on an installed drive', () => {
+    const installed = { ...drive, status: 'installed', slotId: 's1' };
+    expect(driveSchema.safeParse({ ...installed, poolId: 'p', poolRole: 'data' }).success).toBe(
+      true,
+    );
+    expect(driveSchema.safeParse({ ...installed, poolId: 'p' }).success).toBe(false);
+    expect(driveSchema.safeParse({ ...drive, poolId: 'p', poolRole: 'data' }).success).toBe(false);
+  });
+
+  it('R41: the stored drive has no status, bay or pool; the retirement date and note need a reason', () => {
+    const { status, slotId, installedOn, poolId, poolRole, ...stored } = drive;
+    void [status, slotId, installedOn, poolId, poolRole];
+    expect(storedDriveSchema.safeParse(stored).success).toBe(true);
+    expect(Object.keys(storedDriveSchema.parse(stored))).not.toContain('slotId');
+    expect(storedDriveSchema.safeParse({ ...stored, retirementNote: 'x' }).success).toBe(false);
+    expect(storedDriveSchema.safeParse({ ...stored, retirementDate: '2026-03-04' }).success).toBe(
+      false,
+    );
+    expect(
+      storedDriveSchema.safeParse({ ...stored, retirementReason: 'failed', retirementNote: 'x' })
+        .success,
+    ).toBe(true);
+  });
+
   it('R68: installedOn is a date or null (not recorded) when installed, and only allowed then', () => {
     const installed = { ...drive, status: 'installed', slotId: 's1' };
     expect(driveSchema.safeParse({ ...installed, installedOn: null }).success).toBe(true);
@@ -157,7 +185,7 @@ describe('driveSchema', () => {
   });
 });
 
-describe('pool, membership, event schemas', () => {
+describe('pool, installation, activity schemas', () => {
   it('R30: pool accepts valid and rejects empty name', () => {
     const pool = { id: 'p', name: 'tank', layoutLabel: 'raidz2', expectedMembers: null, ...stamps };
     expect(poolSchema.safeParse(pool).success).toBe(true);
@@ -185,20 +213,38 @@ describe('pool, membership, event schemas', () => {
     expect(updatePoolInputSchema.safeParse({ expectedMembers: 101 }).success).toBe(false);
   });
 
-  const noLinks = { drives: [], slots: [], pools: [] };
+  const event = {
+    id: 'e',
+    ord: 0,
+    type: 'drive-installed',
+    driveId: 'd',
+    slotId: 's',
+    slotLabel: 'Bay 1',
+    gridId: 'g',
+    gridName: 'Front',
+    poolId: 'p',
+    poolName: 'tank',
+    payload: { poolRole: 'data' },
+  };
+  const activity = {
+    id: 'a',
+    seq: 1,
+    kind: 'assigned',
+    recordedAt: ts,
+    occurredOn: '2026-01-02',
+    note: null,
+    events: [event],
+  };
 
-  it('R14: every event type of the one-event-per-action model is accepted', () => {
-    const e = { id: 'e', type: 'health-changed', at: ts, payload: {}, links: noLinks };
+  it('R14: the event types and activity kinds are the atomic model, with no pair-patterns', () => {
     expect([...EVENT_TYPES]).toEqual(
       expect.arrayContaining([
         'drive-installed',
-        'drive-removed',
+        'drive-uninstalled',
+        'installation-updated',
         'drive-retired',
         'drive-sent-for-rma',
         'drive-reinstated',
-        'drive-moved',
-        'drives-swapped',
-        'drive-replaced',
         'pool-joined',
         'pool-left',
         'pool-role-changed',
@@ -206,84 +252,85 @@ describe('pool, membership, event schemas', () => {
         'pool-created',
       ]),
     );
+    for (const gone of ['drive-removed', 'drive-moved', 'drives-swapped', 'drive-replaced']) {
+      expect(EVENT_TYPES as readonly string[]).not.toContain(gone);
+    }
+    expect([...ACTIVITY_KINDS]).toEqual(
+      expect.arrayContaining([
+        'assigned',
+        'replaced',
+        'moved',
+        'swapped',
+        'pool-changed',
+        'health-polled',
+        'layout-updated',
+      ]),
+    );
     for (const type of EVENT_TYPES) {
-      expect(storedEventSchema.safeParse({ ...e, type }).success).toBe(true);
+      expect(storedEventSchema.safeParse({ ...event, type }).success).toBe(true);
     }
   });
 
-  it('R74: link roles are fixed lists', () => {
-    expect([...DRIVE_LINK_ROLES]).toEqual(['subject', 'outgoing', 'incoming']);
-    expect([...SLOT_LINK_ROLES]).toEqual(['from', 'to', 'at']);
-    const link = { driveId: 'd', role: 'subject' };
-    expect(eventLinksSchema.safeParse({ ...noLinks, drives: [link] }).success).toBe(true);
-    expect(
-      eventLinksSchema.safeParse({ ...noLinks, drives: [{ ...link, role: 'bystander' }] }).success,
-    ).toBe(false);
-    const slot = { slotId: 's', role: 'at', slotLabel: null, gridId: 'g', gridName: 'Front' };
-    expect(eventLinksSchema.safeParse({ ...noLinks, slots: [slot] }).success).toBe(true);
-    expect(
-      eventLinksSchema.safeParse({ ...noLinks, slots: [{ ...slot, role: 'beside' }] }).success,
-    ).toBe(false);
-    expect(
-      eventLinksSchema.safeParse({ ...noLinks, pools: [{ poolId: 'p', poolName: 'tank' }] })
-        .success,
-    ).toBe(true);
+  it('R29, D7: an installation sets pool and role together', () => {
+    const i = {
+      driveId: 'd',
+      slotId: 's',
+      poolId: 'p',
+      poolRole: 'data',
+      installedOn: null,
+    };
+    expect(installationSchema.safeParse(i).success).toBe(true);
+    expect(installationSchema.safeParse({ ...i, poolId: null, poolRole: null }).success).toBe(true);
+    expect(installationSchema.safeParse({ ...i, poolRole: null }).success).toBe(false);
+    expect(installationSchema.safeParse({ ...i, poolRole: 'cache' }).success).toBe(false);
+    expect(installationSchema.safeParse({ ...i, installedOn: '29/02/2024' }).success).toBe(false);
   });
 
-  it('R29: membership validates role and end not before start', () => {
-    const m = {
-      id: 'm',
-      driveId: 'd',
-      poolId: 'p',
-      role: 'data',
-      source: 'manual',
-      startedAt: ts,
-      endedAt: null,
-      createdAt: ts,
-    };
-    expect(membershipSchema.safeParse(m).success).toBe(true);
-    expect(membershipSchema.safeParse({ ...m, role: 'cache' }).success).toBe(false);
-    expect(membershipSchema.safeParse({ ...m, endedAt: '2025-01-01T00:00:00Z' }).success).toBe(
+  it('R14: an event concerns one drive, one bay and one pool, all optional, with snapshots', () => {
+    expect(storedEventSchema.safeParse(event).success).toBe(true);
+    const bare = { ...event, driveId: null, slotId: null, slotLabel: null, poolId: null };
+    expect(
+      storedEventSchema.safeParse({ ...bare, gridId: null, gridName: null, poolName: null }),
+    ).toMatchObject({ success: true });
+    expect(storedEventSchema.safeParse({ ...event, type: 'drive-exploded' }).success).toBe(false);
+    expect(storedEventSchema.safeParse({ ...event, payload: 'x' }).success).toBe(false);
+  });
+
+  it('R14: an activity has a kind, a seq, an optional date and its events; the API adds the drive', () => {
+    expect(storedActivitySchema.safeParse(activity).success).toBe(true);
+    expect(storedActivitySchema.safeParse({ ...activity, kind: 'exploded' }).success).toBe(false);
+    expect(storedActivitySchema.safeParse({ ...activity, seq: 0 }).success).toBe(false);
+    expect(storedActivitySchema.safeParse({ ...activity, occurredOn: null }).success).toBe(true);
+    expect(storedActivitySchema.safeParse({ ...activity, occurredOn: '02/01/2026' }).success).toBe(
       false,
     );
+    const api = {
+      ...activity,
+      events: [{ ...event, drive: { serial: 'ZL1', capacityBytes: null, driveType: null } }],
+    };
+    expect(activitySchema.safeParse(api).success).toBe(true);
+    expect(activitySchema.safeParse(activity).success).toBe(false);
   });
 
-  it('R14: a stored event accepts a payload object and rejects an unknown type or missing links', () => {
-    const e = { id: 'e', type: 'drive-created', at: ts, payload: { a: 1 }, links: noLinks };
-    expect(storedEventSchema.safeParse(e).success).toBe(true);
-    expect(storedEventSchema.safeParse({ ...e, type: 'drive-exploded' }).success).toBe(false);
-    expect(storedEventSchema.safeParse({ ...e, payload: 'x' }).success).toBe(false);
-    expect(storedEventSchema.safeParse({ ...e, links: undefined }).success).toBe(false);
-    // The old single-drive shape is gone.
-    expect(storedEventSchema.safeParse({ ...e, driveId: 'd' }).success).toBe(true); // extra keys are ignored
-  });
-
-  it('R41, R42: the export is schema version 2 and carries event links', () => {
-    expect(EXPORT_SCHEMA_VERSION).toBe(2);
+  it('R41, R42: the export is schema version 3 and carries installations and activities', () => {
+    expect(EXPORT_SCHEMA_VERSION).toBe(3);
     const file = {
       format: 'sparrow-export',
-      schemaVersion: 2,
+      schemaVersion: 3,
       exportedAt: ts,
       data: {
         enclosures: [],
         grids: [],
         slots: [],
         drives: [],
+        installations: [],
         pools: [],
-        memberships: [],
-        events: [
-          {
-            id: 'e',
-            type: 'pool-created',
-            at: ts,
-            payload: {},
-            links: { ...noLinks, pools: [{ poolId: 'p', poolName: 'tank' }] },
-          },
-        ],
+        activities: [activity],
         appMeta: [],
       },
     };
     expect(exportFileSchema.safeParse(file).success).toBe(true);
+    expect(exportFileSchema.safeParse({ ...file, schemaVersion: 2 }).success).toBe(false);
     expect(exportFileSchema.safeParse({ ...file, schemaVersion: 1 }).success).toBe(false);
   });
 });

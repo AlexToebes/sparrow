@@ -1,15 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { eq, like } from 'drizzle-orm';
 import { assignDrive, removeToSpares, retireDrive, sendForRma } from '../src/core/assignment.js';
+import { listPoolActivities } from '../src/core/activities.js';
 import { createDrive, getDrive } from '../src/core/drives.js';
 import { DomainError } from '../src/core/errors.js';
-import { listDriveEvents } from '../src/core/events.js';
 import { createLayoutService } from '../src/core/layout.js';
 import { createPool, deletePool, getPool, listPools, updatePool } from '../src/core/pools.js';
-import { changeMembership, joinPool, leavePool, listMemberships } from '../src/core/memberships.js';
+import { changeMembership, joinPool, leavePool } from '../src/core/memberships.js';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
-import { events, memberships } from '../src/db/schema.js';
-import { loadLinks } from '../src/core/events.js';
+import { activities, installations } from '../src/db/schema.js';
+import {
+  activitiesOf,
+  countActivities,
+  eventsOfDrive,
+  lastActivity,
+  shape,
+} from './activity-helpers.js';
 
 let opened: OpenedDatabase;
 beforeEach(() => {
@@ -19,11 +24,16 @@ afterEach(() => opened.sqlite.close());
 
 const db = () => opened.db;
 const spare = (serial: string) => createDrive(db(), { serial });
-const types = (id: string) => listDriveEvents(db(), id).map((e) => e.type);
+const types = (id: string) => eventsOfDrive(db(), id).map((e) => e.type);
 const eventsOf = (id: string, type: string) =>
-  listDriveEvents(db(), id).filter((e) => e.type === type);
-const rows = (driveId: string) =>
-  db().select().from(memberships).where(eq(memberships.driveId, driveId)).all();
+  eventsOfDrive(db(), id).filter((e) => e.type === type);
+const installationOf = (driveId: string) =>
+  db()
+    .select()
+    .from(installations)
+    .all()
+    .find((i) => i.driveId === driveId);
+const activityCount = () => db().select().from(activities).all().length;
 
 function setup() {
   const layout = createLayoutService(db());
@@ -78,7 +88,7 @@ describe('pool CRUD (R30)', () => {
     expect(rename.code).toBe('conflict');
   });
 
-  it('updates name and layout label; renaming a pool keeps its memberships', () => {
+  it('updates name and layout label; renaming a pool keeps its members', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
     const driveId = install('A', slots[0]!, pool.id);
@@ -87,46 +97,47 @@ describe('pool CRUD (R30)', () => {
     expect(getPool(db(), pool.id).members.map((m) => m.driveId)).toEqual([driveId]);
   });
 
-  it('R75: pool create, update and delete write events with no drive', () => {
+  it('R75: pool create, update and delete are `pool-edited` activities whose events belong to the pool and no drive', () => {
     const pool = createPool(db(), { name: 'tank', expectedMembers: 6 });
     updatePool(db(), pool.id, { layoutLabel: 'raidz1', expectedMembers: 4 });
-    updatePool(db(), pool.id, { layoutLabel: 'raidz1' }); // no-op: no event
+    updatePool(db(), pool.id, { layoutLabel: 'raidz1' }); // no-op: no activity
     deletePool(db(), pool.id);
-    const rows = db()
-      .select()
-      .from(events)
-      .where(like(events.type, 'pool-%'))
-      .all()
-      .map((e) => ({ ...e, links: loadLinks(db(), [e.id]).get(e.id)! }));
-    // Pool record events link the pool (with its name at the time) and no drive.
-    expect(rows.flatMap((e) => e.links.drives)).toEqual([]);
-    expect(
-      rows.every((e) => e.links.pools.length === 1 && e.links.pools[0]!.poolId === pool.id),
-    ).toBe(true);
-    expect(rows.map((e) => e.links.pools[0]!.poolName)).toEqual(['tank', 'tank', 'tank']);
-    const byType = (t: string) => rows.filter((e) => e.type === t);
-    expect(byType('pool-created')).toHaveLength(1);
-    expect(byType('pool-created')[0]!.payload).toMatchObject({ name: 'tank' });
-    expect(byType('pool-updated')).toHaveLength(1);
-    expect(byType('pool-updated')[0]!.payload).toMatchObject({
+    const acts = activitiesOf(db());
+    expect(acts.map((a) => a.kind)).toEqual(['pool-edited', 'pool-edited', 'pool-edited']);
+    const rows = acts.flatMap((a) => a.events);
+    expect(rows.map((e) => e.type)).toEqual(['pool-created', 'pool-updated', 'pool-deleted']);
+    expect(rows.map((e) => e.driveId)).toEqual([null, null, null]);
+    // Each event names the pool by id and by the name it had then.
+    expect(rows.map((e) => [e.poolId, e.poolName])).toEqual([
+      [pool.id, 'tank'],
+      [pool.id, 'tank'],
+      [pool.id, 'tank'],
+    ]);
+    // Created and deleted carry the whole record; updated carries from/to for every changed field.
+    expect(rows[0]!.payload).toMatchObject({
+      id: pool.id,
+      name: 'tank',
+      layoutLabel: null,
+      expectedMembers: 6,
+    });
+    expect(rows[1]!.payload).toEqual({
       changes: {
         layoutLabel: { from: null, to: 'raidz1' },
         expectedMembers: { from: 6, to: 4 },
       },
     });
-    expect(byType('pool-deleted')[0]!.payload).toMatchObject({ name: 'tank' });
+    expect(rows[2]!.payload).toMatchObject({ id: pool.id, name: 'tank', expectedMembers: 4 });
   });
 
-  it('R75: a refused pool delete or rename writes no event', () => {
+  it('R75: a refused pool delete or rename writes no activity', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
     install('A', slots[0]!, pool.id);
     const other = createPool(db(), { name: 'other' });
-    const count = () => db().select().from(events).where(like(events.type, 'pool-%')).all().length;
-    const before = count();
+    const before = activityCount();
     expect(thrown(() => deletePool(db(), pool.id)).code).toBe('conflict');
     expect(thrown(() => updatePool(db(), other.id, { name: 'tank' })).code).toBe('conflict');
-    expect(count()).toBe(before);
+    expect(activityCount()).toBe(before);
   });
 
   it('R34: sizeCheck compares current members with the expected count', () => {
@@ -167,58 +178,66 @@ describe('pool CRUD (R30)', () => {
     expect(thrown(() => deletePool(db(), 'nope')).code).toBe('not-found');
   });
 
-  it('deletes a pool that never had a membership', () => {
+  it('deletes a pool that no installation references', () => {
     const pool = createPool(db(), { name: 'unused' });
     deletePool(db(), pool.id);
     expect(listPools(db())).toEqual([]);
   });
 
-  it('delete is blocked by history: a pool that once had a member cannot be deleted', () => {
+  it('R29 (changed 2026-10-12): delete is blocked only while a drive is installed in the pool; the history keeps the name', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
     const driveId = install('A', slots[0]!, pool.id);
-    removeToSpares(db(), driveId);
     const err = thrown(() => deletePool(db(), pool.id));
     expect(err.code).toBe('conflict');
     expect(getPool(db(), pool.id).name).toBe('tank');
+
+    removeToSpares(db(), driveId);
+    deletePool(db(), pool.id);
+    expect(listPools(db())).toEqual([]);
+    // The drive's history still names the deleted pool (copied on its events).
+    const installed = eventsOf(driveId, 'drive-installed')[0]!;
+    expect(installed).toMatchObject({ poolId: pool.id, poolName: 'tank' });
+    // And the pool's own history is still readable by its id.
+    expect(listPoolActivities(db(), pool.id).length).toBeGreaterThanOrEqual(3);
   });
 });
 
 describe('assignment-time membership (R35, R33)', () => {
-  it('assign with a pool shows up in listMemberships with role and source manual', () => {
+  it('assign with a pool sets the pool and role on the drive and its installation', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
     const driveId = install('A', slots[0]!, pool.id);
-    expect(listMemberships(db(), driveId)).toEqual([
-      expect.objectContaining({
-        driveId,
-        poolId: pool.id,
-        role: 'data',
-        source: 'manual',
-        endedAt: null,
-      }),
-    ]);
+    expect(installationOf(driveId)).toMatchObject({
+      driveId,
+      slotId: slots[0],
+      poolId: pool.id,
+      poolRole: 'data',
+    });
+    expect(getDrive(db(), driveId)).toMatchObject({ poolId: pool.id, poolRole: 'data' });
   });
 
-  it('getPool lists the installed member with its slot label', () => {
+  it('getPool lists the installed member with its slot label and installation date', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
     const driveId = install('A', slots[0]!, pool.id);
     const detail = getPool(db(), pool.id);
     expect(detail.members).toEqual([
-      expect.objectContaining({
+      {
         driveId,
         serial: 'A',
+        capacityBytes: null,
         role: 'data',
+        slotId: slots[0],
         slotLabel: 'Slot 1',
-        startedAt: expect.any(String),
-      }),
+        installedOn: new Date().toISOString().slice(0, 10),
+      },
     ]);
   });
 });
 
 describe('join (R29, R33)', () => {
-  it('joins an installed drive, writes pool-joined and keeps the given start date', () => {
+  it('joins an installed drive: one `pool-joined` activity with one pool-joined event, dated by the given day', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
     const driveId = install('A', slots[0]!);
@@ -227,65 +246,56 @@ describe('join (R29, R33)', () => {
       role: 'hot-spare',
       startedAt: '2026-01-02T03:04:05.000Z',
     });
-    expect(m).toMatchObject({
+    expect(m).toMatchObject({ driveId, poolId: pool.id, poolRole: 'hot-spare' });
+    const act = lastActivity(db());
+    expect(act).toMatchObject({ kind: 'pool-joined', occurredOn: '2026-01-02' });
+    expect(shape(act)).toEqual(['pool-joined']);
+    expect(act.events[0]).toMatchObject({
+      driveId,
+      slotId: slots[0],
       poolId: pool.id,
-      role: 'hot-spare',
-      startedAt: '2026-01-02T03:04:05.000Z',
-      endedAt: null,
-      source: 'manual',
+      poolName: 'tank',
     });
-    const joined = eventsOf(driveId, 'pool-joined')[0]!;
-    expect(joined.payload).toMatchObject({ role: 'hot-spare' });
-    expect(joined.links.drives.map((d) => [d.driveId, d.role])).toEqual([[driveId, 'subject']]);
-    expect(joined.links.pools).toEqual([{ poolId: pool.id, poolName: 'tank' }]);
+    expect(act.events[0]!.payload).toEqual({ poolRole: 'hot-spare' });
   });
 
   it('R29: rejects a start date in the future (beyond clock skew)', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
     const driveId = install('A', slots[0]!);
+    const before = activityCount();
     const future = new Date(Date.now() + 60 * 60_000).toISOString();
     expect(thrown(() => joinPool(db(), driveId, { poolId: pool.id, startedAt: future })).code).toBe(
       'invalid',
     );
-    expect(listMemberships(db(), driveId)).toHaveLength(0);
+    expect(activityCount()).toBe(before);
+    expect(getDrive(db(), driveId).poolId).toBeNull();
     const nearly = new Date(Date.now() + 60_000).toISOString(); // within tolerance
-    expect(joinPool(db(), driveId, { poolId: pool.id, startedAt: nearly }).startedAt).toBe(nearly);
+    expect(joinPool(db(), driveId, { poolId: pool.id, startedAt: nearly }).poolId).toBe(pool.id);
   });
 
-  it('R33: a user-supplied start date goes into the payload while the event stays stamped now', () => {
+  it('R29: rejects an end date in the future; a past one is the activity date', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
     const driveId = install('A', slots[0]!);
-    const before = Date.now();
-    joinPool(db(), driveId, { poolId: pool.id, startedAt: '2026-01-02T03:04:05.000Z' });
-    const ev = eventsOf(driveId, 'pool-joined')[0]!;
-    expect(Date.parse(ev.at)).toBeGreaterThanOrEqual(before);
-    expect(ev.payload.startedAt).toBe('2026-01-02T03:04:05.000Z');
-  });
-
-  it('R29: rejects an end date in the future; a past one is kept in the payload', () => {
-    const { slots } = setup();
-    const pool = createPool(db(), { name: 'tank' });
-    const driveId = install('A', slots[0]!);
-    joinPool(db(), driveId, { poolId: pool.id, startedAt: '2026-01-02T03:04:05.000Z' });
+    joinPool(db(), driveId, { poolId: pool.id });
     const future = new Date(Date.now() + 60 * 60_000).toISOString();
     expect(thrown(() => leavePool(db(), driveId, { endedAt: future })).code).toBe('invalid');
     expect(eventsOf(driveId, 'pool-left')).toHaveLength(0);
     leavePool(db(), driveId, { endedAt: '2026-02-03T00:00:00.000Z' });
-    expect(eventsOf(driveId, 'pool-left')[0]!.payload.endedAt).toBe('2026-02-03T00:00:00.000Z');
+    expect(lastActivity(db())).toMatchObject({ kind: 'pool-left', occurredOn: '2026-02-03' });
   });
 
-  it('role defaults to data and start date to now', () => {
+  it('role defaults to data and the date to not given', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
     const driveId = install('A', slots[0]!);
     const m = joinPool(db(), driveId, { poolId: pool.id });
-    expect(m.role).toBe('data');
-    expect(Date.parse(m.startedAt)).not.toBeNaN();
+    expect(m.poolRole).toBe('data');
+    expect(lastActivity(db()).occurredOn).toBeNull();
   });
 
-  it('a second open membership is a conflict that points to change', () => {
+  it('a drive already in a pool is a conflict that points to change', () => {
     const { slots } = setup();
     const a = createPool(db(), { name: 'a' });
     const b = createPool(db(), { name: 'b' });
@@ -293,7 +303,7 @@ describe('join (R29, R33)', () => {
     const err = thrown(() => joinPool(db(), driveId, { poolId: b.id }));
     expect(err.code).toBe('conflict');
     expect(err.message).toMatch(/change/);
-    expect(rows(driveId)).toHaveLength(1);
+    expect(installationOf(driveId)!.poolId).toBe(a.id);
   });
 
   it('R8/R33: joining while spare is rejected and changes nothing', () => {
@@ -301,7 +311,7 @@ describe('join (R29, R33)', () => {
     const d = spare('SP');
     const err = thrown(() => joinPool(db(), d.id, { poolId: pool.id }));
     expect(err.code).toBe('conflict');
-    expect(rows(d.id)).toEqual([]);
+    expect(installationOf(d.id)).toBeUndefined();
     expect(types(d.id)).toEqual(['drive-created']);
   });
 
@@ -321,52 +331,48 @@ describe('join (R29, R33)', () => {
 });
 
 describe('later edits: role and pool change (R29, R36)', () => {
-  it('role change on the same pool updates the open membership, keeps startedAt, logs pool-role-changed', () => {
+  it('role change on the same pool is a `pool-role-changed` activity with from and to', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
     const driveId = install('A', slots[0]!, pool.id);
-    const before = listMemberships(db(), driveId)[0]!;
     const after = changeMembership(db(), driveId, { role: 'hot-spare' });
-    expect(after).toMatchObject({
-      id: before.id,
+    expect(after).toMatchObject({ driveId, poolId: pool.id, poolRole: 'hot-spare' });
+    const act = lastActivity(db());
+    expect(act.kind).toBe('pool-role-changed');
+    expect(act.events).toHaveLength(1);
+    expect(act.events[0]).toMatchObject({
+      type: 'pool-role-changed',
+      driveId,
+      slotId: slots[0],
       poolId: pool.id,
-      role: 'hot-spare',
-      startedAt: before.startedAt,
-      endedAt: null,
     });
-    expect(listMemberships(db(), driveId)).toHaveLength(1);
-    const changed = eventsOf(driveId, 'pool-role-changed')[0]!;
-    expect(changed.payload).toMatchObject({ from: 'data', to: 'hot-spare' });
-    expect(changed.links.drives.map((d) => [d.driveId, d.role])).toEqual([[driveId, 'subject']]);
-    expect(changed.links.pools.map((p) => p.poolId)).toEqual([pool.id]);
+    expect(act.events[0]!.payload).toEqual({ from: 'data', to: 'hot-spare' });
   });
 
-  it('same role on the same pool is a no-op with no event', () => {
+  it('same role on the same pool is a no-op with no activity', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
     const driveId = install('A', slots[0]!, pool.id);
-    const count = listDriveEvents(db(), driveId).length;
+    const count = countActivities(db());
     changeMembership(db(), driveId, { poolId: pool.id, role: 'data' });
-    expect(listDriveEvents(db(), driveId)).toHaveLength(count);
+    expect(countActivities(db())).toBe(count);
   });
 
-  it('pool change ends the old membership (pool-left) and opens a new one (pool-joined)', () => {
+  it('pool change is ONE `pool-changed` activity: pool-left on the old pool, pool-joined on the new', () => {
     const { slots } = setup();
     const a = createPool(db(), { name: 'a' });
     const b = createPool(db(), { name: 'b' });
     const driveId = install('A', slots[0]!, a.id);
-    const old = listMemberships(db(), driveId)[0]!;
+    const before = countActivities(db());
     const next = changeMembership(db(), driveId, { poolId: b.id });
-    expect(next).toMatchObject({ poolId: b.id, role: 'data', endedAt: null });
-    const history = listMemberships(db(), driveId);
-    expect(history.map((m) => [m.poolId, m.endedAt === null])).toEqual([
-      [b.id, true],
-      [a.id, false],
+    expect(next).toMatchObject({ poolId: b.id, poolRole: 'data' });
+    expect(countActivities(db())).toBe(before + 1);
+    const act = lastActivity(db());
+    expect(act.kind).toBe('pool-changed');
+    expect(act.events.map((e) => [e.type, e.poolId, e.driveId, e.slotId])).toEqual([
+      ['pool-left', a.id, driveId, slots[0]],
+      ['pool-joined', b.id, driveId, slots[0]],
     ]);
-    expect(history[1]!.id).toBe(old.id);
-    expect(history[1]!.endedAt).not.toBeNull();
-    expect(eventsOf(driveId, 'pool-left')[0]!.links.pools.map((p) => p.poolId)).toEqual([a.id]);
-    expect(eventsOf(driveId, 'pool-joined')[0]!.links.pools.map((p) => p.poolId)).toEqual([b.id]);
   });
 
   it('pool change can also set a new role', () => {
@@ -375,10 +381,11 @@ describe('later edits: role and pool change (R29, R36)', () => {
     const b = createPool(db(), { name: 'b' });
     const driveId = install('A', slots[0]!, a.id);
     const next = changeMembership(db(), driveId, { poolId: b.id, role: 'hot-spare' });
-    expect(next.role).toBe('hot-spare');
+    expect(next.poolRole).toBe('hot-spare');
+    expect(lastActivity(db()).events[1]!.payload).toEqual({ poolRole: 'hot-spare' });
   });
 
-  it('change with no open membership is a conflict (join first)', () => {
+  it('change with no pool is a conflict (join first)', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
     const driveId = install('A', slots[0]!);
@@ -392,84 +399,74 @@ describe('later edits: role and pool change (R29, R36)', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
     const driveId = install('A', slots[0]!, pool.id);
+    const before = countActivities(db());
     expect(thrown(() => changeMembership(db(), driveId, { poolId: 'nope' })).code).toBe(
       'not-found',
     );
-    expect(listMemberships(db(), driveId)).toHaveLength(1);
+    expect(installationOf(driveId)!.poolId).toBe(pool.id);
+    expect(countActivities(db())).toBe(before);
   });
 });
 
 describe('leave and history (R29, R33)', () => {
-  it('leavePool ends the membership, logs pool-left, keeps the row', () => {
+  it('leavePool clears the pool and role, keeps the installation, logs one `pool-left` activity', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
     const driveId = install('A', slots[0]!, pool.id);
     const ended = leavePool(db(), driveId);
-    expect(ended.endedAt).not.toBeNull();
-    expect(ended.endedAt! >= ended.startedAt).toBe(true);
-    expect(listMemberships(db(), driveId)).toHaveLength(1);
-    expect(eventsOf(driveId, 'pool-left')).toHaveLength(1);
+    expect(ended).toMatchObject({ driveId, slotId: slots[0], poolId: null, poolRole: null });
+    const act = lastActivity(db());
+    expect(act.kind).toBe('pool-left');
+    expect(act.events[0]).toMatchObject({ type: 'pool-left', poolId: pool.id, poolName: 'tank' });
+    expect(act.events[0]!.payload).toEqual({ poolRole: 'data' });
     expect(getDrive(db(), driveId).status).toBe('installed');
   });
 
-  it('leave with an endedAt before the start is clamped to the start (CHECK holds)', () => {
-    const { slots } = setup();
-    const pool = createPool(db(), { name: 'tank' });
-    const driveId = install('A', slots[0]!);
-    const m = joinPool(db(), driveId, { poolId: pool.id, startedAt: '2026-03-01T00:00:00.000Z' });
-    const ended = leavePool(db(), driveId, { endedAt: '2026-02-01T00:00:00.000Z' });
-    expect(ended.endedAt).toBe(m.startedAt);
-  });
-
-  it('leave with no open membership is a conflict', () => {
+  it('leave with no pool is a conflict', () => {
     const { slots } = setup();
     const driveId = install('A', slots[0]!);
     expect(thrown(() => leavePool(db(), driveId)).code).toBe('conflict');
   });
 
-  it('history is kept when a drive is removed to spares', () => {
+  it('leaving the bay takes the drive out of the pool without a pool event (removed to spares)', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
     const driveId = install('A', slots[0]!, pool.id);
     removeToSpares(db(), driveId);
-    expect(listMemberships(db(), driveId)).toHaveLength(1);
-    expect(listMemberships(db(), driveId)[0]!.endedAt).not.toBeNull();
-    expect(types(driveId)).toContain('pool-left');
-  });
-
-  it('history is kept when a drive is retired from an installed slot', () => {
-    const { slots } = setup();
-    const pool = createPool(db(), { name: 'tank' });
-    const driveId = install('A', slots[0]!, pool.id);
-    retireDrive(db(), driveId, { reason: 'failed', date: '2026-05-01' });
-    const history = listMemberships(db(), driveId);
-    expect(history).toHaveLength(1);
-    expect(history[0]!.endedAt).not.toBeNull();
+    expect(getDrive(db(), driveId)).toMatchObject({ poolId: null, poolRole: null });
+    expect(types(driveId)).not.toContain('pool-left');
+    // The uninstall event names the pool the drive left.
+    expect(eventsOf(driveId, 'drive-uninstalled')[0]).toMatchObject({ poolId: pool.id });
     expect(getPool(db(), pool.id).members).toEqual([]);
   });
 
-  it('history is kept after RMA', () => {
+  it('retiring from a bay and RMA both take the drive out of the pool', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
-    const driveId = install('A', slots[0]!, pool.id);
-    sendForRma(db(), driveId);
-    expect(listMemberships(db(), driveId)).toHaveLength(1);
-    expect(listMemberships(db(), driveId)[0]!.endedAt).not.toBeNull();
+    const a = install('A', slots[0]!, pool.id);
+    const b = install('B', slots[1]!, pool.id);
+    retireDrive(db(), a, { reason: 'failed', date: '2026-05-01' });
+    sendForRma(db(), b);
+    expect(getPool(db(), pool.id).members).toEqual([]);
+    expect(installationOf(a)).toBeUndefined();
+    expect(installationOf(b)).toBeUndefined();
   });
 
-  it('listMemberships returns the full history newest first, and 404s on an unknown drive', () => {
+  it("a pool's history lists the activities with an event on it, each with all its events, newest first", () => {
     const { slots } = setup();
     const a = createPool(db(), { name: 'a' });
     const b = createPool(db(), { name: 'b' });
     const driveId = install('A', slots[0]!, a.id);
     changeMembership(db(), driveId, { poolId: b.id });
     leavePool(db(), driveId);
-    const history = listMemberships(db(), driveId);
-    expect(history.map((m) => m.poolId)).toEqual([b.id, a.id]);
-    expect(thrown(() => listMemberships(db(), 'nope')).code).toBe('not-found');
+    const history = listPoolActivities(db(), a.id);
+    expect(history.map((h) => h.kind)).toEqual(['pool-changed', 'assigned', 'pool-edited']);
+    // The pool-changed activity is returned whole: it also holds the event on the other pool.
+    expect(history[0]!.events.map((e) => e.type)).toEqual(['pool-left', 'pool-joined']);
+    expect(history.map((h) => h.seq)).toEqual([...history.map((h) => h.seq)].sort((x, y) => y - x));
   });
 
-  it('a failing event write rolls back the membership change', () => {
+  it('a failing event write rolls back the pool change', () => {
     const { slots } = setup();
     const pool = createPool(db(), { name: 'tank' });
     const driveId = install('A', slots[0]!);
@@ -479,6 +476,6 @@ describe('leave and history (R29, R33)', () => {
       BEGIN SELECT RAISE(ABORT, 'boom'); END;
     `);
     expect(() => joinPool(db(), driveId, { poolId: pool.id })).toThrow(/boom/);
-    expect(rows(driveId)).toEqual([]);
+    expect(installationOf(driveId)!.poolId).toBeNull();
   });
 });

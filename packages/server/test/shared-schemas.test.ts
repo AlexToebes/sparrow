@@ -1,16 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  driveSchema,
+  activitySchema,
   enclosureSchema,
-  eventSchema,
-  storedEventSchema,
   gridSchema,
-  membershipSchema,
+  installationSchema,
   poolSchema,
   slotSchema,
+  storedActivitySchema,
+  storedDriveSchema,
 } from '@sparrow/shared';
+import { driveSchema } from '@sparrow/shared';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
-import { listDriveEvents, recordEvent, type DbTransaction } from '../src/core/events.js';
+import { listDriveActivities, recordActivity, type DbTransaction } from '../src/core/activities.js';
+import { listDrives } from '../src/core/drives.js';
 import { createRepositories, type Repositories } from '../src/db/repositories.js';
 
 // Proves that rows produced by the repositories satisfy the shared zod schemas
@@ -47,23 +49,12 @@ describe('repository records match shared schemas', () => {
     expect(slotSchema.parse(labelled)).toEqual(labelled);
   });
 
-  it('drive: spare with only required fields, and fully populated installed and retired drives', () => {
-    const spare = repo.drives.create({ serial: ' ab-12 ', status: 'spare' });
-    expect(driveSchema.parse(spare)).toEqual(spare);
+  it('drive: a spare with only required fields, and fully populated and retired drives (stored and API views)', () => {
+    const spare = repo.drives.create({ serial: ' ab-12 ' });
+    expect(storedDriveSchema.parse(spare)).toEqual(spare);
 
-    const enclosure = repo.enclosures.create({ name: 'NAS' });
-    const grid = repo.grids.create({
-      enclosureId: enclosure.id,
-      name: 'Front',
-      rows: 1,
-      columns: 1,
-      orientation: 'landscape',
-    });
-    const slot = repo.slots.create({ gridId: grid.id, position: 0, label: null });
-    const installed = repo.drives.create({
+    const full = repo.drives.create({
       serial: 'INS-1',
-      status: 'installed',
-      slotId: slot.id,
       model: 'WD Red',
       capacityBytes: 4_000_787_030_016,
       driveType: 'HDD',
@@ -76,18 +67,49 @@ describe('repository records match shared schemas', () => {
       vendor: 'WD',
       notes: 'noisy',
     });
-    expect(driveSchema.parse(installed)).toEqual(installed);
+    expect(storedDriveSchema.parse(full)).toEqual(full);
 
     const retired = repo.drives.create({
       serial: 'OLD-1',
-      status: 'retired',
       retirementReason: 'replaced',
       retirementDate: '2026-03-04',
       retirementNote: 'SMART failures',
       driveType: 'NVMe',
       condition: 'tested',
     });
-    expect(driveSchema.parse(retired)).toEqual(retired);
+    expect(storedDriveSchema.parse(retired)).toEqual(retired);
+
+    // The API view adds the computed status and the installation fields; all of them satisfy driveSchema.
+    const enclosure = repo.enclosures.create({ name: 'NAS' });
+    const grid = repo.grids.create({
+      enclosureId: enclosure.id,
+      name: 'Front',
+      rows: 1,
+      columns: 1,
+      orientation: 'landscape',
+    });
+    const slot = repo.slots.create({ gridId: grid.id, position: 0, label: null });
+    const pool = repo.pools.create({ name: 'tank', layoutLabel: null });
+    repo.installations.create({
+      driveId: full.id,
+      slotId: slot.id,
+      poolId: pool.id,
+      poolRole: 'data',
+      installedOn: '2025-01-02',
+    });
+    const view = listDrives(opened.db);
+    expect(view.map((d) => [d.serial, d.status])).toEqual([
+      ['ab-12', 'spare'],
+      ['INS-1', 'installed'],
+      ['OLD-1', 'retired'],
+    ]);
+    expect(view.find((d) => d.status === 'installed')).toMatchObject({
+      slotId: slot.id,
+      installedOn: '2025-01-02',
+      poolId: pool.id,
+      poolRole: 'data',
+    });
+    for (const d of view) expect(driveSchema.parse(d)).toEqual(d);
   });
 
   it('pool', () => {
@@ -97,49 +119,63 @@ describe('repository records match shared schemas', () => {
     expect(poolSchema.parse(tank)).toEqual(tank);
   });
 
-  it('membership, open and closed', () => {
-    const drive = repo.drives.create({ serial: 'M1', status: 'spare' });
+  it('installation, with and without a pool', () => {
+    const enclosure = repo.enclosures.create({ name: 'NAS' });
+    const grid = repo.grids.create({
+      enclosureId: enclosure.id,
+      name: 'Front',
+      rows: 1,
+      columns: 2,
+      orientation: 'landscape',
+    });
+    const [s1, s2] = [0, 1].map((position) =>
+      repo.slots.create({ gridId: grid.id, position, label: null }),
+    );
+    const d1 = repo.drives.create({ serial: 'M1' });
+    const d2 = repo.drives.create({ serial: 'M2' });
     const pool = repo.pools.create({ name: 'tank', layoutLabel: null });
-    const open = repo.memberships.create({
-      driveId: drive.id,
+    const withPool = repo.installations.create({
+      driveId: d1.id,
+      slotId: s1!.id,
       poolId: pool.id,
-      role: 'data',
-      source: 'manual',
-      startedAt: '2026-01-01T00:00:00.000Z',
-      endedAt: null,
+      poolRole: 'hot-spare',
+      installedOn: '2026-01-01',
     });
-    expect(membershipSchema.parse(open)).toEqual(open);
-    const closed = repo.memberships.create({
-      driveId: drive.id,
-      poolId: pool.id,
-      role: 'hot-spare',
-      source: 'manual',
-      startedAt: '2025-01-01T00:00:00.000Z',
-      endedAt: '2025-06-01T00:00:00.000Z',
+    expect(installationSchema.parse(withPool)).toEqual(withPool);
+    const plain = repo.installations.create({ driveId: d2.id, slotId: s2!.id });
+    expect(installationSchema.parse(plain)).toEqual(plain);
+    expect(plain).toEqual({
+      driveId: d2.id,
+      slotId: s2!.id,
+      poolId: null,
+      poolRole: null,
+      installedOn: null,
     });
-    expect(membershipSchema.parse(closed)).toEqual(closed);
   });
 
-  it('event: JSON payload and drive / slot / pool links round-trip, with and without links', () => {
-    const drive = repo.drives.create({ serial: 'E1', status: 'spare' });
-    const withDrive = recordIn((tx) =>
-      recordEvent(tx, {
-        type: 'drive-updated',
-        drives: [{ id: drive.id }],
-        payload: { changed: ['model'], before: { model: null }, after: { model: 'X' }, n: 2 },
+  it('activity: events with and without drive, bay and pool round-trip through the stored and API schemas', () => {
+    const drive = repo.drives.create({ serial: 'E1' });
+    const stored = recordIn((tx) =>
+      recordActivity(tx, {
+        kind: 'drive-edited',
+        events: [
+          {
+            type: 'drive-updated',
+            driveId: drive.id,
+            payload: { changes: { model: { from: null, to: 'X' } }, n: 2 },
+          },
+          { type: 'pool-created', poolId: undefined, payload: {} },
+        ],
       }),
     );
-    expect(typeof withDrive.payload).toBe('object');
-    expect(storedEventSchema.parse(withDrive)).toEqual(withDrive);
-    expect(withDrive.links.drives).toEqual([{ driveId: drive.id, role: 'subject' }]);
+    expect(storedActivitySchema.parse(stored)).toEqual(stored);
+    expect(stored.events[0]).toMatchObject({ driveId: drive.id, slotId: null, poolId: null });
+    expect(stored.events[1]).toMatchObject({ driveId: null, payload: {} });
     // The API view resolves the drive for display and satisfies its own schema.
-    const [shown] = listDriveEvents(opened.db, drive.id);
-    expect(eventSchema.parse(shown)).toEqual(shown);
-
-    const noLinks = recordIn((tx) => recordEvent(tx, { type: 'pool-joined', payload: {} }));
-    expect(storedEventSchema.parse(noLinks)).toEqual(noLinks);
-    expect(noLinks.payload).toEqual({});
-    expect(noLinks.links).toEqual({ drives: [], slots: [], pools: [] });
+    const [shown] = listDriveActivities(opened.db, drive.id);
+    expect(activitySchema.parse(shown)).toEqual(shown);
+    expect(shown!.events[0]!.drive).toEqual({ serial: 'E1', capacityBytes: null, driveType: null });
+    expect(shown!.events[1]!.drive).toBeNull();
   });
 });
 

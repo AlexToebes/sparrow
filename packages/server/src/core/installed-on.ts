@@ -26,17 +26,3 @@ export function parseNotFutureDate(field: string, value: string, now: Date = new
 export function parseInstalledOn(value: string, now: Date = new Date()): string {
   return parseNotFutureDate('installedOn', value, now);
 }
-
-/**
- * The membership start that goes with an installation date: the moment of the change when the date
- * is today (so same-day ordering against the other events holds), else midnight UTC of that date.
- * `userSupplied` is true when the start differs from "now" and must be carried in the event payload.
- */
-export function startOfInstalledOn(
-  date: string,
-  now: Date = new Date(),
-): { startedAt: string; userSupplied: boolean } {
-  return date >= todayUtc(now)
-    ? { startedAt: now.toISOString(), userSupplied: false }
-    : { startedAt: `${date}T00:00:00.000Z`, userSupplied: true };
-}

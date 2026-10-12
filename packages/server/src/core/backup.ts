@@ -5,25 +5,23 @@ import {
   EXPORT_FORMAT,
   EXPORT_SCHEMA_VERSION,
   exportFileSchema,
+  normalizeSerial,
   type ExportData,
   type ExportFile,
 } from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
 import {
+  activities,
   appMeta,
   drives,
   enclosures,
-  eventDrives,
-  eventPools,
   events,
-  eventSlots,
   grids,
-  memberships,
+  installations,
   pools,
   slots,
 } from '../db/schema.js';
 import { invalid } from './errors.js';
-import { loadLinks } from './events.js';
 
 // R41, R42, R43, R44: export, import and the automatic backup taken before an import.
 // The provider snapshot cache is not user data and is never exported or replaced (R42).
@@ -34,7 +32,8 @@ export interface ImportCounts {
   slots: number;
   drives: number;
   pools: number;
-  memberships: number;
+  installations: number;
+  activities: number;
   events: number;
   appMeta: number;
 }
@@ -51,16 +50,22 @@ export interface ImportOptions {
   now?: Date;
 }
 
-/** R41: every event with its drive, slot and pool links nested under `links`. */
-function exportEvents(db: AppDb): ExportData['events'] {
-  const rows = db.select().from(events).orderBy(asc(events.at), asc(events.id)).all();
-  const links = loadLinks(
-    db,
-    rows.map((r) => r.id),
-  );
-  return rows.map((r) => {
-    return { ...r, links: links.get(r.id)! };
-  });
+/** R41: the log in `seq` order, each activity with its events nested in order. */
+function exportActivities(db: AppDb): ExportData['activities'] {
+  const byActivity = new Map<string, ExportData['activities'][number]['events']>();
+  for (const { activityId, ...event } of db
+    .select()
+    .from(events)
+    .orderBy(asc(events.activityId), asc(events.ord))
+    .all()) {
+    byActivity.set(activityId, [...(byActivity.get(activityId) ?? []), event]);
+  }
+  return db
+    .select()
+    .from(activities)
+    .orderBy(asc(activities.seq))
+    .all()
+    .map((a) => ({ ...a, events: byActivity.get(a.id) ?? [] }));
 }
 
 /** R41, R42: reads every user table in a stable order. */
@@ -74,13 +79,9 @@ export function exportData(db: AppDb, now: Date = new Date()): ExportFile {
     grids: db.select().from(grids).orderBy(asc(grids.createdAt), asc(grids.id)).all(),
     slots: db.select().from(slots).orderBy(asc(slots.createdAt), asc(slots.id)).all(),
     drives: db.select().from(drives).orderBy(asc(drives.createdAt), asc(drives.id)).all(),
+    installations: db.select().from(installations).orderBy(asc(installations.driveId)).all(),
     pools: db.select().from(pools).orderBy(asc(pools.createdAt), asc(pools.id)).all(),
-    memberships: db
-      .select()
-      .from(memberships)
-      .orderBy(asc(memberships.createdAt), asc(memberships.id))
-      .all(),
-    events: exportEvents(db),
+    activities: exportActivities(db),
     appMeta: db.select().from(appMeta).orderBy(asc(appMeta.key)).all(),
   };
   return {
@@ -113,7 +114,7 @@ function checkVersion(input: unknown): void {
   }
   if (version < EXPORT_SCHEMA_VERSION) {
     throw invalid(
-      "This export was made by a pre-release build with an older event format and can't be imported; start fresh.",
+      "This export was made by a pre-release build with an older format (before the activity log) and can't be imported; start fresh.",
     );
   }
 }
@@ -134,25 +135,39 @@ function checkReferences(data: ExportData): string[] {
   const slotIds = idSet('slots', data.slots);
   const driveIds = idSet('drives', data.drives);
   const poolIds = idSet('pools', data.pools);
-  idSet('memberships', data.memberships);
-  idSet('events', data.events);
+  idSet('activities', data.activities);
+  idSet(
+    'events',
+    data.activities.flatMap((a) => a.events),
+  );
+  const seqs = new Set<number>();
+  for (const a of data.activities) {
+    if (seqs.has(a.seq)) problems.push(`activities: duplicate seq ${a.seq}`);
+    seqs.add(a.seq);
+  }
 
   const check = (name: string, id: string, targets: Set<string>, target: string) => {
     if (!targets.has(id)) problems.push(`${name} references missing ${target} ${id}`);
   };
   for (const g of data.grids) check(`grid ${g.id}`, g.enclosureId, enclosureIds, 'enclosure');
   for (const s of data.slots) check(`slot ${s.id}`, s.gridId, gridIds, 'grid');
-  for (const d of data.drives) {
-    if (d.slotId !== null) check(`drive ${d.id}`, d.slotId, slotIds, 'slot');
+  const installedDrives = new Set<string>();
+  const occupiedSlots = new Set<string>();
+  for (const i of data.installations) {
+    check(`installation of drive ${i.driveId}`, i.driveId, driveIds, 'drive');
+    check(`installation of drive ${i.driveId}`, i.slotId, slotIds, 'slot');
+    if (i.poolId !== null) check(`installation of drive ${i.driveId}`, i.poolId, poolIds, 'pool');
+    if (installedDrives.has(i.driveId)) problems.push(`drive ${i.driveId} is installed twice`);
+    if (occupiedSlots.has(i.slotId)) problems.push(`slot ${i.slotId} holds two drives`);
+    installedDrives.add(i.driveId);
+    occupiedSlots.add(i.slotId);
   }
-  for (const m of data.memberships) {
-    check(`membership ${m.id}`, m.driveId, driveIds, 'drive');
-    check(`membership ${m.id}`, m.poolId, poolIds, 'pool');
-  }
-  // Drive links must resolve (drives are never deleted); slot and pool links keep their id even
+  // A drive link must resolve (drives are never deleted); slot and pool links keep their id even
   // after the slot or pool is gone, so those are not checked against the file.
-  for (const e of data.events) {
-    for (const d of e.links.drives) check(`event ${e.id}`, d.driveId, driveIds, 'drive');
+  for (const a of data.activities) {
+    for (const e of a.events) {
+      if (e.driveId !== null) check(`event ${e.id}`, e.driveId, driveIds, 'drive');
+    }
   }
   const metaKeys = new Set<string>();
   for (const m of data.appMeta) {
@@ -206,8 +221,8 @@ export function importData(db: AppDb, input: unknown, opts: ImportOptions): Impo
   try {
     db.transaction((tx) => {
       tx.delete(appMeta).run();
-      tx.delete(events).run(); // the link rows go with their event (ON DELETE CASCADE)
-      tx.delete(memberships).run();
+      tx.delete(activities).run(); // the events go with their activity (ON DELETE CASCADE)
+      tx.delete(installations).run();
       tx.delete(drives).run();
       tx.delete(slots).run();
       tx.delete(grids).run();
@@ -218,25 +233,19 @@ export function importData(db: AppDb, input: unknown, opts: ImportOptions): Impo
       for (const row of data.grids) tx.insert(grids).values(row).run();
       for (const row of data.slots) tx.insert(slots).values(row).run();
       for (const row of data.pools) tx.insert(pools).values(row).run();
-      for (const row of data.drives) tx.insert(drives).values(row).run();
-      for (const row of data.memberships) tx.insert(memberships).values(row).run();
-      for (const { links, ...row } of data.events) {
-        tx.insert(events).values(row).run();
-        if (links.drives.length > 0) {
-          tx.insert(eventDrives)
-            .values(links.drives.map((l) => ({ eventId: row.id, ...l })))
+      // F20: the normalized serial is derived, so it is recomputed rather than trusted.
+      for (const row of data.drives) {
+        tx.insert(drives)
+          .values({ ...row, serialNormalized: normalizeSerial(row.serial) })
+          .run();
+      }
+      for (const row of data.installations) tx.insert(installations).values(row).run();
+      for (const { events: items, ...activity } of data.activities) {
+        tx.insert(activities).values(activity).run(); // seq is preserved
+        for (const event of items)
+          tx.insert(events)
+            .values({ ...event, activityId: activity.id })
             .run();
-        }
-        if (links.slots.length > 0) {
-          tx.insert(eventSlots)
-            .values(links.slots.map((l) => ({ eventId: row.id, ...l })))
-            .run();
-        }
-        if (links.pools.length > 0) {
-          tx.insert(eventPools)
-            .values(links.pools.map((l) => ({ eventId: row.id, ...l })))
-            .run();
-        }
       }
       for (const row of data.appMeta) tx.insert(appMeta).values(row).run();
     });
@@ -258,8 +267,9 @@ export function importData(db: AppDb, input: unknown, opts: ImportOptions): Impo
       slots: data.slots.length,
       drives: data.drives.length,
       pools: data.pools.length,
-      memberships: data.memberships.length,
-      events: data.events.length,
+      installations: data.installations.length,
+      activities: data.activities.length,
+      events: data.activities.reduce((n, a) => n + a.events.length, 0),
       appMeta: data.appMeta.length,
     },
   };

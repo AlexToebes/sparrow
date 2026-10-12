@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Health, Observation } from '@sparrow/shared';
 import { retireDrive } from '../src/core/assignment.js';
 import { createDrive, getDrive } from '../src/core/drives.js';
-import { listDriveEvents } from '../src/core/events.js';
 import { recordHealthChanges } from '../src/core/health-history.js';
 import { createPoller } from '../src/core/poller.js';
 import type { DriveDataProvider } from '../src/core/provider-port.js';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
 import { createRepositories } from '../src/db/repositories.js';
 import { events } from '../src/db/schema.js';
+import { activitiesOf, eventsOfDrive as listDriveEvents } from './activity-helpers.js';
 
 let opened: OpenedDatabase;
 beforeEach(() => {
@@ -42,9 +42,22 @@ describe('R20 health changes in the event log', () => {
     const [e] = healthEvents(d.id);
     expect(e).toMatchObject({
       type: 'health-changed',
-      at: T1,
       payload: { from: null, to: 'ok', reportedAt: '2026-03-04T05:06:07.000Z' },
     });
+    // The activity is the poll: recorded at the poll time, no user date.
+    const poll = activitiesOf(db()).find((a) => a.kind === 'health-polled')!;
+    expect(poll).toMatchObject({ recordedAt: T1, occurredOn: null });
+  });
+
+  it('R20, R14: one poll is ONE health-polled activity with a health-changed event per changed drive; none if nothing changed', () => {
+    createDrive(db(), { serial: 'AAA' });
+    createDrive(db(), { serial: 'BBB' });
+    recordHealthChanges(db(), [obs('AAA', 'ok'), obs('BBB', 'ok')], T1);
+    recordHealthChanges(db(), [obs('AAA', 'ok'), obs('BBB', 'ok')], T2); // nothing changed
+    recordHealthChanges(db(), [obs('AAA', 'ok'), obs('BBB', 'failed')], T2);
+    const polls = activitiesOf(db()).filter((a) => a.kind === 'health-polled');
+    expect(polls.map((a) => a.events.length)).toEqual([2, 1]);
+    expect(polls.map((a) => a.recordedAt)).toEqual([T1, T2]);
   });
 
   it('R20: a change is logged with from, to and the reported time', () => {
@@ -55,9 +68,9 @@ describe('R20 health changes in the event log', () => {
     const [latest, first] = healthEvents(d.id);
     expect(first!.payload).toMatchObject({ from: null, to: 'ok' });
     expect(latest).toMatchObject({
-      at: T2,
       payload: { from: 'ok', to: 'warning', reportedAt: reported },
     });
+    expect(activitiesOf(db()).filter((a) => a.kind === 'health-polled')[1]!.recordedAt).toBe(T2);
     expect(Object.keys(latest!.payload).sort()).toEqual(['from', 'reportedAt', 'to']);
   });
 

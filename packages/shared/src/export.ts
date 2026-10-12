@@ -1,19 +1,21 @@
 import { z } from 'zod';
 import { timestampSchema } from './common.js';
-import { driveSchema } from './drive.js';
+import { storedActivitySchema } from './activity.js';
+import { storedDriveSchema } from './drive.js';
+import { installationSchema } from './installation.js';
 import { enclosureSchema, gridSchema, slotSchema } from './layout.js';
-import { storedEventSchema } from './event.js';
-import { membershipSchema, poolSchema } from './pool.js';
+import { poolSchema } from './pool.js';
 
 /** R42: the format marker that identifies a Sparrow export file. */
 export const EXPORT_FORMAT = 'sparrow-export' as const;
 
 /**
  * R42: the export schema version. Bump it when the file layout changes.
- * An import accepts exactly this version. Version 2 (2026-10-11) nests the drive / slot / pool links
- * under each event; version 1 files come from pre-release builds and are rejected.
+ * An import accepts exactly this version. Version 3 (2026-10-12) holds installations instead of
+ * memberships and slot ids on drives, and an activity log with nested atomic events; version 1 and 2
+ * files come from pre-release builds and are rejected.
  */
-export const EXPORT_SCHEMA_VERSION = 2;
+export const EXPORT_SCHEMA_VERSION = 3;
 
 /** One app_meta row (for example the layout-seeded flag from R5). */
 export const appMetaEntrySchema = z.object({
@@ -34,11 +36,12 @@ export const exportFileSchema = z.object({
     enclosures: z.array(enclosureSchema),
     grids: z.array(gridSchema),
     slots: z.array(slotSchema),
-    drives: z.array(driveSchema),
+    drives: z.array(storedDriveSchema),
+    /** The drives that are installed right now: the bay, the date and the pool of each (R29, D7). */
+    installations: z.array(installationSchema),
     pools: z.array(poolSchema),
-    memberships: z.array(membershipSchema),
-    /** Each event carries its drive, slot and pool links nested under `links` (schema 2). */
-    events: z.array(storedEventSchema),
+    /** The history, in `seq` order, each activity with its events nested in order. */
+    activities: z.array(storedActivitySchema),
     appMeta: z.array(appMetaEntrySchema),
   }),
 });

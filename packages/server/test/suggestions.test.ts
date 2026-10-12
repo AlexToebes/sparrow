@@ -3,7 +3,6 @@ import type { Observation } from '@sparrow/shared';
 import { buildApp } from '../src/api/app.js';
 import { createDrive, getDrive, updateDrive } from '../src/core/drives.js';
 import { DomainError } from '../src/core/errors.js';
-import { listDriveEvents } from '../src/core/events.js';
 import type { DriveDataProvider } from '../src/core/provider-port.js';
 import {
   applySuggestions,
@@ -15,6 +14,12 @@ import {
 } from '../src/core/suggestions.js';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
 import { createRepositories } from '../src/db/repositories.js';
+import {
+  eventsOfDrive as listDriveEvents,
+  kindsOf,
+  lastActivity,
+  shape,
+} from './activity-helpers.js';
 
 const fakeProvider: DriveDataProvider = {
   id: 'fake',
@@ -228,6 +233,9 @@ describe('dismissing suggestions (R72)', () => {
       'model',
       'driveType',
     ]);
+    // One suggestions-dismissed activity holds one event per field.
+    expect(lastActivity(db()).kind).toBe('suggestions-dismissed');
+    expect(shape(lastActivity(db()))).toEqual(['suggestion-dismissed', 'suggestion-dismissed']);
     const dismissals = listDriveEvents(db(), d.id).filter((e) => e.type === 'suggestion-dismissed');
     expect(
       dismissals
@@ -255,6 +263,7 @@ describe('dismissing suggestions (R72)', () => {
     undismissSuggestions(db(), P, d.id, ['model']);
     expect(getDriveSuggestions(db(), P, d.id).map((s) => s.field)).toContain('model');
     const latest = listDriveEvents(db(), d.id)[0];
+    expect(kindsOf(db()).at(-1)).toBe('suggestions-restored');
     expect(latest).toMatchObject({
       type: 'suggestion-dismissed',
       payload: { field: 'model', value: null },

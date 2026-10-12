@@ -5,7 +5,6 @@ import { buildApp } from '../src/api/app.js';
 import { assignDrive } from '../src/core/assignment.js';
 import { createDrive, getDrive, listDrives } from '../src/core/drives.js';
 import { DomainError } from '../src/core/errors.js';
-import { listDriveEvents } from '../src/core/events.js';
 import {
   createFromObservation,
   getInbox,
@@ -19,6 +18,7 @@ import type { DriveDataProvider } from '../src/core/provider-port.js';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
 import { createRepositories } from '../src/db/repositories.js';
 import { events } from '../src/db/schema.js';
+import { activitiesOf, eventsOfDrive, lastActivity, shape } from './activity-helpers.js';
 
 const fakeProvider: DriveDataProvider = {
   id: 'fake',
@@ -190,10 +190,20 @@ describe('R63: retired candidates', () => {
     ]);
     expect(result[0]?.model).toBe('M1');
     expect(result[0]?.wwn).toBe('0xAA');
-    expect(listDriveEvents(db(), result[0]!.id).map((e) => e.type)).toEqual([
+    expect(eventsOfDrive(db(), result[0]!.id).map((e) => e.type)).toEqual([
       'drive-retired',
       'drive-created',
     ]);
+    // Retirements on different days did not happen together: one `retired-imported` activity per item,
+    // each dated with its own day, drive-created then drive-retired.
+    const acts = activitiesOf(db()).filter((a) => a.kind === 'retired-imported');
+    expect(acts).toHaveLength(2);
+    expect(acts.map((a) => a.occurredOn)).toEqual(['2026-03-04', '2025-12-01']);
+    expect(acts.map(shape)).toEqual([
+      ['drive-created', 'drive-retired'],
+      ['drive-created', 'drive-retired'],
+    ]);
+    expect(acts[1]!.events[1]!.payload).toEqual({ reason: 'replaced', note: 'old' });
     expect(listRetiredCandidates(db(), P)).toEqual([]);
   });
 
@@ -211,8 +221,9 @@ describe('R63: retired candidates', () => {
     });
     expect(result.map((d) => d.retirementDate)).toEqual(['2026-03-04', null]);
     expect(
-      listDriveEvents(db(), result[1]!.id).find((e) => e.type === 'drive-retired')!.payload,
-    ).toMatchObject({ reason: 'failed', date: null });
+      eventsOfDrive(db(), result[1]!.id).find((e) => e.type === 'drive-retired')!.payload,
+    ).toEqual({ reason: 'failed', note: null });
+    expect(lastActivity(db())).toMatchObject({ kind: 'retired-imported', occurredOn: null });
     const before = eventCount();
     expect(
       thrown(() =>
@@ -264,7 +275,7 @@ describe('R63: retired candidates', () => {
 });
 
 describe('resolving an inbox entry (R22, R23)', () => {
-  it('links to a spare: fills only missing fields, writes drive-linked, installs in the slot', () => {
+  it('links to a spare: fills only missing fields; ONE discovered-linked activity of drive-linked + drive-installed', () => {
     const [slot] = slots();
     const spare = createDrive(db(), { serial: 'ab-1', model: 'Mine' });
     snapshot([
@@ -284,13 +295,19 @@ describe('resolving an inbox entry (R22, R23)', () => {
       wwn: '0x1',
       driveType: 'HDD',
     });
-    const types = listDriveEvents(db(), spare.id).map((e) => e.type);
+    const types = eventsOfDrive(db(), spare.id).map((e) => e.type);
     expect(types).toEqual(['drive-installed', 'drive-linked', 'drive-created']);
-    const linked = listDriveEvents(db(), spare.id).find((e) => e.type === 'drive-linked');
-    expect(linked?.payload.filled).toEqual({
-      wwn: '0x1',
-      capacityBytes: 8_000_000_000_000,
-      driveType: 'HDD',
+    const act = lastActivity(db());
+    expect(act.kind).toBe('discovered-linked');
+    expect(shape(act)).toEqual(['drive-linked', 'drive-installed']);
+    // Each filled field carries what it was, so the link can be undone as well as replayed.
+    expect(act.events[0]!.payload).toEqual({
+      observationSerial: 'AB-1',
+      filled: {
+        wwn: { from: null, to: '0x1' },
+        capacityBytes: { from: null, to: 8_000_000_000_000 },
+        driveType: { from: null, to: 'HDD' },
+      },
     });
     expect(getInbox(db(), P).entries).toEqual([]);
   });
@@ -312,10 +329,14 @@ describe('resolving an inbox entry (R22, R23)', () => {
       status: 'installed',
       slotId: slot,
     });
-    expect(listDriveEvents(db(), drive.id).map((e) => e.type)).toEqual([
+    expect(eventsOfDrive(db(), drive.id).map((e) => e.type)).toEqual([
       'drive-installed',
       'drive-created',
     ]);
+    // One discovered-created activity holds both.
+    const act = lastActivity(db());
+    expect(act.kind).toBe('discovered-created');
+    expect(shape(act)).toEqual(['drive-created', 'drive-installed']);
     expect(getInbox(db(), P).count).toBe(0);
   });
 

@@ -72,10 +72,12 @@ describe('drive API (R3, R11, R13, R14, R21, D5, D6)', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ model: 'Exos', capacityBytes: 18_000_000_000_000 });
 
-    const events = (await get(`/api/drives/${created.id}/events`)).json() as Array<{
-      type: string;
-      payload: Record<string, unknown>;
+    const history = (await get(`/api/drives/${created.id}/history`)).json() as Array<{
+      kind: string;
+      events: { type: string; payload: Record<string, unknown> }[];
     }>;
+    expect(history.map((a) => a.kind)).toEqual(['drive-edited', 'drive-added']);
+    const events = history.flatMap((a) => a.events);
     expect(events.map((e) => e.type)).toEqual(['drive-updated', 'drive-created']);
     expect(events[0]!.payload).toEqual({
       changes: {
@@ -96,7 +98,7 @@ describe('drive API (R3, R11, R13, R14, R21, D5, D6)', () => {
       expect(res.statusCode).toBe(400);
     }
     expect((await get(`/api/drives/${created.id}`)).json()).toMatchObject({ status: 'spare' });
-    expect((await get(`/api/drives/${created.id}/events`)).json()).toHaveLength(1);
+    expect((await get(`/api/drives/${created.id}/history`)).json()).toHaveLength(1);
   });
 
   it("D6: PATCH to another drive's serial returns 409 and leaves both drives alone", async () => {
@@ -110,7 +112,7 @@ describe('drive API (R3, R11, R13, R14, R21, D5, D6)', () => {
   it('PATCH and GET of an unknown drive return 404', async () => {
     expect((await patch('missing', { model: 'x' })).statusCode).toBe(404);
     expect((await get('/api/drives/missing')).statusCode).toBe(404);
-    expect((await get('/api/drives/missing/events')).statusCode).toBe(404);
+    expect((await get('/api/drives/missing/history')).statusCode).toBe(404);
   });
 
   it('R3: GET /api/drives filters by status; an unknown status is 400', async () => {
@@ -123,14 +125,16 @@ describe('drive API (R3, R11, R13, R14, R21, D5, D6)', () => {
     expect((await get('/api/drives?status=bogus')).statusCode).toBe(400);
   });
 
-  it('R14: GET /api/drives/:id/events returns events newest first', async () => {
+  it('R14: GET /api/drives/:id/history returns activities newest first', async () => {
     const created = (await post({ serial: 'NF-1' })).json() as { id: string };
     await patch(created.id, { vendor: 'A' });
     await patch(created.id, { vendor: 'B' });
-    const events = (await get(`/api/drives/${created.id}/events`)).json() as Array<{
-      type: string;
+    const history = (await get(`/api/drives/${created.id}/history`)).json() as Array<{
+      kind: string;
+      seq: number;
     }>;
-    expect(events.map((e) => e.type)).toEqual(['drive-updated', 'drive-updated', 'drive-created']);
+    expect(history.map((a) => a.kind)).toEqual(['drive-edited', 'drive-edited', 'drive-added']);
+    expect(history.map((a) => a.seq)).toEqual([...history.map((a) => a.seq)].sort((x, y) => y - x));
   });
 
   it('D5: DELETE /api/drives/:id is not routed (404 or 405) and the drive still exists', async () => {
@@ -143,31 +147,32 @@ describe('drive API (R3, R11, R13, R14, R21, D5, D6)', () => {
   });
 });
 
-describe('GET /api/events/recent (R75)', () => {
-  it('returns the latest events of all kinds, newest first, with the drive serial when set', async () => {
+describe('GET /api/activities/recent (R75)', () => {
+  it('returns the latest activities of all kinds, newest first, with their events resolved for display', async () => {
     const layout = createLayoutService(opened.db);
     layout.createEnclosure({ name: 'NAS' });
     await app.inject({ method: 'POST', url: '/api/drives', payload: { serial: 'ABC123' } });
     await app.inject({ method: 'POST', url: '/api/pools', payload: { name: 'tank' } });
 
-    const res = await app.inject({ method: 'GET', url: '/api/events/recent' });
+    const res = await app.inject({ method: 'GET', url: '/api/activities/recent' });
     expect(res.statusCode).toBe(200);
     const body = res.json() as {
-      type: string;
-      links: { drives: { serial: string; role: string }[]; pools: { poolName: string }[] };
+      kind: string;
+      events: { type: string; drive: { serial: string } | null; poolName: string | null }[];
     }[];
-    expect(body.map((e) => e.type)).toEqual(['pool-created', 'drive-created', 'enclosure-created']);
-    // Each event carries its links resolved for display: drive serials, pool names (R75).
-    expect(body.map((e) => e.links.drives.map((d) => `${d.role}:${d.serial}`))).toEqual([
-      [],
-      ['subject:ABC123'],
-      [],
+    expect(body.map((a) => a.kind)).toEqual(['pool-edited', 'drive-added', 'layout-updated']);
+    expect(body.map((a) => a.events.map((e) => e.type))).toEqual([
+      ['pool-created'],
+      ['drive-created'],
+      ['enclosure-created'],
     ]);
-    expect(body[0]!.links.pools).toEqual([{ poolId: expect.any(String), poolName: 'tank' }]);
+    // Each event carries its drive's serial and the pool's name as it was (R75).
+    expect(body.map((a) => a.events[0]!.drive?.serial ?? null)).toEqual([null, 'ABC123', null]);
+    expect(body[0]!.events[0]!.poolName).toBe('tank');
 
-    const limited = await app.inject({ method: 'GET', url: '/api/events/recent?limit=2' });
+    const limited = await app.inject({ method: 'GET', url: '/api/activities/recent?limit=2' });
     expect(limited.json()).toHaveLength(2);
-    const bad = await app.inject({ method: 'GET', url: '/api/events/recent?limit=0' });
+    const bad = await app.inject({ method: 'GET', url: '/api/activities/recent?limit=0' });
     expect(bad.statusCode).toBe(400);
   });
 });

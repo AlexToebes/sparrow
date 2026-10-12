@@ -1,14 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, isNull, ne } from 'drizzle-orm';
+import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import type { CreatePoolInput, Pool, UpdatePoolInput } from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
-import { drives, memberships, pools, slots } from '../db/schema.js';
+import { drives, installations, pools, slots } from '../db/schema.js';
+import { recordActivity } from './activities.js';
 import { conflict, invalid } from './errors.js';
-import { recordEvent } from './events.js';
 import { requirePool } from './memberships.js';
 
-// Pool records (R30). Pool CRUD writes events linked to the pool and to no drive (R75). A pool that has
-// ever had a membership cannot be deleted, because the history must stay readable (R29).
+// Pool records (R30). Pool CRUD records a `pool-edited` activity whose events belong to the pool and
+// to no drive (R75). A pool can be deleted when no installation references it; the history keeps its
+// name (a snapshot on each event), so deleting never erases it (R29, changed 2026-10-12).
 
 /** R34: how the current member count compares with the expected one (null expected = no check). */
 export type PoolSizeCheck = 'ok' | 'fewer' | 'more';
@@ -30,15 +31,17 @@ const summarize = (pool: Pool, memberCount: number): PoolSummary => ({
   sizeCheck: poolSizeCheck(memberCount, pool.expectedMembers),
 });
 
+/** A drive installed in a bay that belongs to the pool (the pool is a property of the installation). */
 export interface PoolMember {
-  membershipId: string;
   driveId: string;
   serial: string;
   capacityBytes: number | null;
   role: 'data' | 'hot-spare';
-  startedAt: string;
-  /** The slot's label (or "Slot N") when the drive is installed; always set for open members. */
-  slotLabel: string | null;
+  /** R68: null = not recorded. */
+  installedOn: string | null;
+  slotId: string;
+  /** The bay's label, or "Slot N". */
+  slotLabel: string;
 }
 
 export interface PoolDetail extends PoolSummary {
@@ -83,14 +86,10 @@ export function createPool(db: AppDb, input: CreatePoolInput): Pool {
       })
       .returning()
       .get();
-    recordEvent(tx, {
-      type: 'pool-created',
-      pools: [{ id: row.id }],
-      payload: {
-        name: row.name,
-        layoutLabel: row.layoutLabel,
-        expectedMembers: row.expectedMembers,
-      },
+    // The whole record, so the log can rebuild it.
+    recordActivity(tx, {
+      kind: 'pool-edited',
+      events: [{ type: 'pool-created', poolId: row.id, payload: { ...row } }],
     });
     return row;
   });
@@ -121,10 +120,9 @@ export function updatePool(db: AppDb, id: string, input: UpdatePoolInput): Pool 
       if (current[field] !== row[field]) changes[field] = { from: current[field], to: row[field] };
     }
     if (Object.keys(changes).length > 0) {
-      recordEvent(tx, {
-        type: 'pool-updated',
-        pools: [{ id }],
-        payload: { name: row.name, changes },
+      recordActivity(tx, {
+        kind: 'pool-edited',
+        events: [{ type: 'pool-updated', poolId: id, payload: { changes } }],
       });
     }
     return row;
@@ -134,11 +132,11 @@ export function updatePool(db: AppDb, id: string, input: UpdatePoolInput): Pool 
 function memberCounts(db: AppDb): Map<string, number> {
   const counts = new Map<string, number>();
   for (const row of db
-    .select({ poolId: memberships.poolId })
-    .from(memberships)
-    .where(isNull(memberships.endedAt))
+    .select({ poolId: installations.poolId, n: sql<number>`count(*)` })
+    .from(installations)
+    .groupBy(installations.poolId)
     .all()) {
-    counts.set(row.poolId, (counts.get(row.poolId) ?? 0) + 1);
+    if (row.poolId !== null) counts.set(row.poolId, row.n);
   }
   return counts;
 }
@@ -153,58 +151,56 @@ export function listPools(db: AppDb): PoolSummary[] {
     .map((p) => summarize(p, counts.get(p.id) ?? 0));
 }
 
-/** A pool with its current members (open memberships), ordered by serial. */
+/** A pool with its current members (the installed drives that are in it), ordered by serial. */
 export function getPool(db: AppDb, id: string): PoolDetail {
   return db.transaction((tx) => {
     const pool = requirePool(tx, id);
     const rows = tx
       .select({
-        membershipId: memberships.id,
         driveId: drives.id,
         serial: drives.serial,
-        serialNormalized: drives.serialNormalized,
         capacityBytes: drives.capacityBytes,
-        role: memberships.role,
-        startedAt: memberships.startedAt,
+        role: installations.poolRole,
+        installedOn: installations.installedOn,
+        slotId: slots.id,
         slotLabel: slots.label,
         slotPosition: slots.position,
       })
-      .from(memberships)
-      .innerJoin(drives, eq(drives.id, memberships.driveId))
-      .leftJoin(slots, eq(slots.id, drives.slotId))
-      .where(and(eq(memberships.poolId, id), isNull(memberships.endedAt)))
+      .from(installations)
+      .innerJoin(drives, eq(drives.id, installations.driveId))
+      .innerJoin(slots, eq(slots.id, installations.slotId))
+      .where(eq(installations.poolId, id))
       .orderBy(asc(drives.serialNormalized))
       .all();
     const members: PoolMember[] = rows.map((r) => ({
-      membershipId: r.membershipId,
       driveId: r.driveId,
       serial: r.serial,
       capacityBytes: r.capacityBytes,
-      role: r.role,
-      startedAt: r.startedAt,
-      slotLabel: r.slotPosition === null ? null : (r.slotLabel ?? `Slot ${r.slotPosition + 1}`),
+      role: r.role!,
+      installedOn: r.installedOn,
+      slotId: r.slotId,
+      slotLabel: r.slotLabel ?? `Slot ${r.slotPosition + 1}`,
     }));
     return { ...summarize(pool, members.length), members };
   });
 }
 
-/** Deletes a pool only when it has never had a membership (R29: history must be preserved). */
+/** Deletes a pool that no installation references. Its history stays readable through the name copied on each event. */
 export function deletePool(db: AppDb, id: string): void {
   db.transaction((tx) => {
     const pool = requirePool(tx, id);
     const used = tx
-      .select({ id: memberships.id })
-      .from(memberships)
-      .where(eq(memberships.poolId, id))
+      .select({ driveId: installations.driveId })
+      .from(installations)
+      .where(eq(installations.poolId, id))
       .get();
     if (used) {
-      throw conflict(`Pool ${id} has membership history and cannot be deleted`);
+      throw conflict(`Pool ${id} still has drives installed in it and cannot be deleted`);
     }
     tx.delete(pools).where(eq(pools.id, id)).run();
-    recordEvent(tx, {
-      type: 'pool-deleted',
-      pools: [{ id, name: pool.name }],
-      payload: { name: pool.name },
+    recordActivity(tx, {
+      kind: 'pool-edited',
+      events: [{ type: 'pool-deleted', poolId: id, poolName: pool.name, payload: { ...pool } }],
     });
   });
 }
