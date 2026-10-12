@@ -232,6 +232,69 @@ describe('Scrutiny adapter fetching', () => {
   });
 });
 
+describe('Scrutiny adapter limits (R46, R59)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const entry = (device: Record<string, unknown>) => ({
+    data: {
+      summary: {
+        x: {
+          device: { serial_number: 'TESTSERIAL1', capacity: 1000, ...device },
+          smart: { collector_date: '2026-10-10T00:00:00Z', risk_category: 'healthy' },
+        },
+      },
+    },
+  });
+
+  it('R59: a record without rotational_speed has an unknown type, not SSD', () => {
+    const [o] = mapSummary(entry({ device_protocol: 'ATA' }), BASE);
+    expect(o).toBeDefined();
+    expect(o?.driveType).toBeUndefined();
+    expect(mapSummary(entry({ rotational_speed: 0 }), BASE)[0]?.driveType).toBe('SSD');
+    expect(mapSummary(entry({ rotational_speed: 7200 }), BASE)[0]?.driveType).toBe('HDD');
+    expect(mapSummary(entry({ device_protocol: 'NVMe' }), BASE)[0]?.driveType).toBe('NVMe');
+  });
+
+  it('Appendix B: risk "healthy" (seen in the capture, not in the table) maps to ok', () => {
+    const [o] = mapSummary(entry({ rotational_speed: 5400 }), BASE);
+    expect(o?.health).toBe('ok');
+  });
+
+  it('rejects a response larger than 20 MB, by Content-Length or while streaming', async () => {
+    const p = createScrutinyProvider({ SCRUTINY_URL: BASE });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response('{}', {
+            status: 200,
+            headers: { 'content-length': String(30 * 1024 * 1024) },
+          }),
+      ),
+    );
+    await expect(p.fetchSnapshot()).rejects.toThrow(/larger than 20 MB/);
+    const chunk = new Uint8Array(1024 * 1024).fill(32);
+    let sent = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            new ReadableStream({
+              pull(controller) {
+                if (sent++ < 25) controller.enqueue(chunk);
+                else controller.close();
+              },
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
+    const r = await p.checkConnection();
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/larger than 20 MB/);
+  });
+});
+
 describe('Scrutiny adapter passes the provider contract (R57)', () => {
   const body = JSON.stringify(fixture);
   const stubOk = () =>

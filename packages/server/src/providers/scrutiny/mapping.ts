@@ -16,7 +16,8 @@ const rawEntrySchema = z.object({
     device_protocol: z.string().default(''),
     device_type: z.string().default(''),
     capacity: z.number().default(0),
-    rotational_speed: z.number().default(0),
+    /** No default: a missing speed is unknown, not 0 (which would read as SSD). */
+    rotational_speed: z.number().optional(),
     archived: z.boolean().default(false),
     device_status: z.number().int().default(0),
     UpdatedAt: z.string().optional(),
@@ -43,7 +44,12 @@ const STATUS_SCRUTINY_FAILED = 2;
 /** Used when a record never reported (no collector date and no UpdatedAt): reads as maximally stale. */
 const NEVER_REPORTED = '1970-01-01T00:00:00.000Z';
 
-/** Appendix B. `hasSmart` false means no SMART data was collected. */
+/**
+ * Appendix B. `risk_category` values seen in the real capture are `healthy`, `monitor`,
+ * `plan_replacement` and `replace_soon`. Appendix B names only the last two plus `monitor`
+ * (ok); `healthy` is not listed there and also maps to ok, as does any unrecognised value
+ * (only the explicit failure flags and categories raise a drive above ok).
+ * `hasSmart` false means no SMART data was collected. */
 export function mapHealth(
   status: number,
   riskCategory: string | undefined,
@@ -57,9 +63,11 @@ export function mapHealth(
   return 'ok';
 }
 
-function mapDriveType(d: RawEntry['device']): DriveType {
+/** R59. Undefined (type unknown) when the record has no rotational speed and is not NVMe. */
+function mapDriveType(d: RawEntry['device']): DriveType | undefined {
   if (d.device_protocol.toLowerCase() === 'nvme' || d.device_type.toLowerCase() === 'nvme')
     return 'NVMe';
+  if (d.rotational_speed === undefined) return undefined;
   return d.rotational_speed === 0 ? 'SSD' : 'HDD';
 }
 
@@ -84,13 +92,14 @@ export function mapEntry(entry: RawEntry, baseUrl: string): Observation {
   const smart = entry.smart ?? undefined;
   const model = d.model_name.trim();
   const formFactor = d.form_factor.trim();
+  const driveType = mapDriveType(d);
   const detailUrl = detailUrlFor(baseUrl, d.device_id);
   return {
     ...(serial ? { serial } : {}),
     ...(wwn ? { wwn } : {}),
     ...(model ? { model } : {}),
     ...(d.capacity > 0 ? { capacityBytes: d.capacity } : {}),
-    driveType: mapDriveType(d),
+    ...(driveType ? { driveType } : {}),
     ...(formFactor ? { formFactor } : {}),
     health: mapHealth(d.device_status, smart?.risk_category, smart !== undefined),
     lastReportedAt: toIso(smart?.collector_date) ?? toIso(d.UpdatedAt) ?? NEVER_REPORTED,

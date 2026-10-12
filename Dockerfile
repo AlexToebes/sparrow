@@ -19,6 +19,8 @@ RUN pnpm install --frozen-lockfile
 COPY tsconfig.base.json ./
 COPY packages packages
 RUN pnpm build
+# No source maps in the image (the vite build emits none unless SOURCEMAP=1; this keeps it that way).
+RUN find packages/web/dist -name '*.map' -delete
 
 # Production-only server tree: dist, drizzle migrations and prod node_modules,
 # with @sparrow/shared injected as a copy of its built dist.

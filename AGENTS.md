@@ -54,10 +54,10 @@ Do not add a dependency that is not in this table without a stated reason in the
     ├── shared/                   # zod schemas + inferred types (drive, installation, slot, pool, activity, observation, export)
     ├── server/
     │   ├── src/
-    │   │   ├── core/             # domain services, no provider imports
+    │   │   ├── core/             # domain services, no provider imports; includes provider-port.ts, the DriveDataProvider interface (R48)
     │   │   ├── db/               # drizzle schema, migrations, repositories
     │   │   ├── providers/
-    │   │   │   ├── port.ts       # DriveDataProvider interface (R48)
+    │   │   │   ├── port.ts       # re-exports the DriveDataProvider interface, which lives in core/provider-port.ts (R48)
     │   │   │   ├── none/
     │   │   │   ├── scrutiny/     # adapter, mapping, fixtures in test/fixtures
     │   │   │   └── index.ts      # registry

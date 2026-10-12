@@ -24,6 +24,8 @@ export interface AppDeps {
   dataDir?: string | undefined;
   /** R16: built web bundle to serve (index.html fallback for client routes). Unset = API only. */
   webDistDir?: string | undefined;
+  /** N1 hardening: accepted Host header names (no port, lowercase). Unset or empty = allow all. */
+  allowedHosts?: string[] | undefined;
 }
 
 export interface ErrorBody {
@@ -42,6 +44,15 @@ const sendError = (
   return reply.status(status).send(body);
 };
 
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+/** Host header without the port (IPv6 literals keep their brackets), lowercase. */
+export function hostName(header: string | undefined): string {
+  const h = (header ?? '').trim().toLowerCase();
+  if (h.startsWith('[')) return h.slice(0, h.indexOf(']') + 1);
+  return h.split(':')[0] ?? '';
+}
+
 const DOMAIN_STATUS = { 'not-found': 404, conflict: 409, invalid: 400 } as const;
 
 export function buildApp(deps: AppDeps): FastifyInstance {
@@ -55,6 +66,39 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     'backupDir',
     deps.backupDir ?? path.join(process.env.DATA_DIR ?? '/data', 'exports'),
   );
+
+  // N1 hardening (no authentication, so close the cross-site doors): security headers on every
+  // response, a JSON content type on every API write, and an optional Host allowlist.
+  const allowedHosts = (deps.allowedHosts ?? []).map((h) => hostName(h)).filter(Boolean);
+  app.addHook('onRequest', async (req, reply) => {
+    const path = req.url.split('?')[0] ?? '';
+    // Liveness stays open so the container health check works whatever Host it uses.
+    if (allowedHosts.length > 0 && path !== '/api/health') {
+      if (!allowedHosts.includes(hostName(req.headers.host))) {
+        return sendError(reply, 403, 'forbidden', 'Host not allowed (see ALLOWED_HOSTS)');
+      }
+    }
+    // A bodyless or text/plain POST is what a cross-site no-cors fetch or form can send; a JSON
+    // content type forces a CORS preflight, which this server never grants.
+    if (path.startsWith('/api/') && !SAFE_METHODS.has(req.method)) {
+      const type = (req.headers['content-type'] ?? '').split(';')[0]?.trim().toLowerCase();
+      if (type !== 'application/json') {
+        return sendError(
+          reply,
+          415,
+          'unsupported-media-type',
+          'Write requests must use content-type: application/json',
+        );
+      }
+    }
+    return undefined;
+  });
+  app.addHook('onSend', async (_req, reply, payload) => {
+    reply.header('content-security-policy', "frame-ancestors 'none'");
+    reply.header('x-frame-options', 'DENY');
+    reply.header('x-content-type-options', 'nosniff');
+    return payload;
+  });
 
   // An empty body with a JSON content type (a bodyless POST from fetch, curl -H) is {}, not a 400.
   const parseJson = app.getDefaultJsonParser('error', 'error');

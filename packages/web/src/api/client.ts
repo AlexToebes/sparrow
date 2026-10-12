@@ -34,8 +34,9 @@ export async function apiSend<S extends z.ZodType>(
     path,
     {
       method,
-      headers: body === undefined ? undefined : { 'content-type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      // N1: the server only accepts JSON writes, so even a bodyless action sends {}.
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body ?? {}),
     },
     schema,
   );

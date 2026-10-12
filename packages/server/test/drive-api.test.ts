@@ -139,7 +139,11 @@ describe('drive API (R3, R11, R13, R14, R21, D5, D6)', () => {
 
   it('D5: DELETE /api/drives/:id is not routed (404 or 405) and the drive still exists', async () => {
     const created = (await post({ serial: 'NODEL' })).json() as { id: string };
-    const res = await app.inject({ method: 'DELETE', url: `/api/drives/${created.id}` });
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/drives/${created.id}`,
+      payload: {},
+    });
     expect([404, 405]).toContain(res.statusCode);
     const after = await get(`/api/drives/${created.id}`);
     expect(after.statusCode).toBe(200);

@@ -69,12 +69,19 @@ Notes:
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `3000` | HTTP port inside the container |
+| `HOST` | `0.0.0.0` | Address the server binds to (use `127.0.0.1` behind a local reverse proxy) |
+| `WEB_DIST_DIR` | `packages/web/dist` (the image sets `/app/web`) | Where the built web UI is served from; leave unset unless you build your own image |
+| `ALLOWED_HOSTS` | unset (any) | Optional comma-separated host names the server answers to, for example `sparrow.lan,192.168.1.20`. Other `Host` headers get 403 (guards against DNS rebinding). `/api/health` is exempt |
 | `DATA_DIR` | `/data` | Where the SQLite database (`app.db`) and exports are stored |
 | `PROVIDER` | `none` | `scrutiny` or `none` |
 | `POLL_INTERVAL_MINUTES` | `5` | How often the provider is polled |
 | `STALE_AFTER_HOURS` | derived (36 for Scrutiny) | A drive not reported for this long is flagged as missing |
 | `SCRUTINY_URL` | none | Scrutiny base URL (used when `PROVIDER=scrutiny`) |
 | `SCRUTINY_TOKEN` | none | Optional bearer token, if Scrutiny API auth is enabled |
+
+## Security
+
+Sparrow has no login (N1): run it on a trusted network, or put an authenticating reverse proxy in front. It does close the doors a web page on another site could use against a server on your LAN: every write (`POST`, `PATCH`, `DELETE` under `/api`) must send `content-type: application/json`, otherwise the answer is 415 (a browser cannot send that cross-site without a CORS preflight, which Sparrow never grants); responses carry `Content-Security-Policy: frame-ancestors 'none'`, `X-Frame-Options: DENY` and `X-Content-Type-Options: nosniff`; and `ALLOWED_HOSTS` can restrict the host names the server answers to. Scripts that call the API with `curl -X POST` need `-H 'content-type: application/json' -d '{}'`.
 
 ## Providers
 

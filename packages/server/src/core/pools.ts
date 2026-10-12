@@ -1,6 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, ne, sql } from 'drizzle-orm';
-import type { CreatePoolInput, Pool, UpdatePoolInput } from '@sparrow/shared';
+import type {
+  CreatePoolInput,
+  Pool,
+  PoolDetail,
+  PoolSizeCheck,
+  PoolSummary,
+  UpdatePoolInput,
+} from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
 import { drives, installations, pools, slots } from '../db/schema.js';
 import { recordActivity } from './activities.js';
@@ -11,14 +18,11 @@ import { requirePool } from './memberships.js';
 // to no drive (R75). A pool can be deleted when no installation references it; the history keeps its
 // name (a snapshot on each event), so deleting never erases it (R29, changed 2026-10-12).
 
-/** R34: how the current member count compares with the expected one (null expected = no check). */
-export type PoolSizeCheck = 'ok' | 'fewer' | 'more';
+// The response types (PoolSummary, PoolDetail, PoolSizeCheck) are defined once in @sparrow/shared,
+// where the web client validates them too.
+export type { PoolDetail, PoolSizeCheck, PoolSummary };
 
-export interface PoolSummary extends Pool {
-  memberCount: number;
-  /** Null when the pool has no expected size, so there is nothing to check (R34). */
-  sizeCheck: PoolSizeCheck | null;
-}
+/** R34: how the current member count compares with the expected one (null expected = no check). */
 
 export function poolSizeCheck(memberCount: number, expected: number | null): PoolSizeCheck | null {
   if (expected === null) return null;
@@ -32,21 +36,7 @@ const summarize = (pool: Pool, memberCount: number): PoolSummary => ({
 });
 
 /** A drive installed in a bay that belongs to the pool (the pool is a property of the installation). */
-export interface PoolMember {
-  driveId: string;
-  serial: string;
-  capacityBytes: number | null;
-  role: 'data' | 'hot-spare';
-  /** R68: null = not recorded. */
-  installedOn: string | null;
-  slotId: string;
-  /** The bay's label, or "Slot N". */
-  slotLabel: string;
-}
-
-export interface PoolDetail extends PoolSummary {
-  members: PoolMember[];
-}
+export type PoolMember = PoolDetail['members'][number];
 
 const nowIso = () => new Date().toISOString();
 

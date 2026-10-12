@@ -4,6 +4,34 @@ import { loadScrutinyConfig } from './config.js';
 import { mapSummary } from './mapping.js';
 
 const REQUEST_TIMEOUT_MS = 15_000;
+/** The real summary is a few hundred kB; anything beyond this is not a Scrutiny summary. */
+export const MAX_RESPONSE_BYTES = 20 * 1024 * 1024;
+
+/** Reads the body as text, failing as soon as it exceeds the cap (also when no Content-Length). */
+async function readLimitedText(res: Response): Promise<string> {
+  const tooBig = () =>
+    new Error(
+      `Scrutiny response is larger than ${MAX_RESPONSE_BYTES / (1024 * 1024)} MB; refusing to read it`,
+    );
+  const declared = Number(res.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > MAX_RESPONSE_BYTES) throw tooBig();
+  if (!res.body) return '';
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let received = 0;
+  let text = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.byteLength;
+    if (received > MAX_RESPONSE_BYTES) {
+      await reader.cancel();
+      throw tooBig();
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}
 
 /**
  * Scrutiny's collector runs on a cron that defaults to daily (`0 0 * * *`), so data is expected
@@ -23,7 +51,12 @@ export function createScrutinyProvider(env: Record<string, string | undefined>):
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`Scrutiny responded with HTTP ${res.status}`);
-    return res.json();
+    const text = await readLimitedText(res);
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error('Scrutiny sent a response that is not JSON');
+    }
   }
 
   return {

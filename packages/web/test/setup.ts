@@ -1,6 +1,10 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, vi } from 'vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
+
+// Pages are lazy chunks (F24): the first visit in a test file imports and transforms the module,
+// which can take longer than the 1 s default under parallel load.
+configure({ asyncUtilTimeout: 5000 });
 
 // Mantine reads matchMedia and observes element sizes; jsdom has neither.
 Object.defineProperty(window, 'matchMedia', {

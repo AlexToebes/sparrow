@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -101,6 +101,27 @@ describe('R43, R44: POST /api/import', () => {
       ((await exportJson()) as { data: { drives: { serial: string }[] } }).data.drives,
     ).toEqual([expect.objectContaining({ serial: 'KEEP' })]);
     expect(() => readdirSync(backupDir)).toThrow();
+  });
+
+  it('R44: an unwritable backup dir gives a domain error with the reason, and changes nothing', async () => {
+    createDrive(opened.db, { serial: 'KEEP' });
+    const file = (await exportJson()) as object;
+    const blocked = path.join(tmp, 'blocked');
+    writeFileSync(blocked, 'a file, not a directory');
+    const bad = buildApp({ db: opened.db, backupDir: path.join(blocked, 'exports') });
+    const res = await bad.inject({ method: 'POST', url: '/api/import', payload: file });
+    expect(res.statusCode).toBe(409);
+    const msg = (res.json() as { error: { code: string; message: string } }).error;
+    expect(msg.code).toBe('conflict');
+    expect(msg.message).toMatch(
+      /Could not write the automatic backup .*ENOTDIR.*nothing was imported/,
+    );
+    expect(msg.message).not.toContain(tmp);
+    expect(res.body).not.toContain('Internal server error');
+    await bad.close();
+    expect(
+      ((await exportJson()) as { data: { drives: { serial: string }[] } }).data.drives,
+    ).toEqual([expect.objectContaining({ serial: 'KEEP' })]);
   });
 
   it('returns 400 for a file that is not a Sparrow export', async () => {

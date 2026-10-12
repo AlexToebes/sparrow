@@ -34,3 +34,15 @@ export const statusResponseSchema = z.object({
   slots: z.array(slotStatusSchema),
 });
 export type StatusResponse = z.infer<typeof statusResponseSchema>;
+
+/** GET /api/provider/status (R19, R56). `capabilities` is the provider's own flags, shown as-is. */
+export const providerStatusSchema = z.object({
+  providerId: idSchema,
+  capabilities: z.record(z.string(), z.unknown()).optional(),
+  reachable: z.boolean(),
+  lastSuccessAt: timestampSchema.nullable(),
+  lastAttemptAt: timestampSchema.nullable(),
+  lastError: z.string().nullable(),
+  observationCount: z.number().int().min(0),
+});
+export type ProviderStatus = z.infer<typeof providerStatusSchema>;

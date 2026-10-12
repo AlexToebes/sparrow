@@ -213,7 +213,7 @@ describe('R69: removal date when a drive goes back to the spares', () => {
     assignDrive(db(), { driveId: a.id, slotId: s1!, installedOn: daysAgo(60) });
     assignDrive(db(), { driveId: b.id, slotId: s2!, installedOn: daysAgo(60) });
     assignDrive(db(), { driveId: c.id, slotId: s3!, installedOn: daysAgo(60) });
-    const post = (id: string, payload?: object) =>
+    const post = (id: string, payload: object = {}) =>
       app.inject({ method: 'POST', url: `/api/drives/${id}/remove`, payload });
 
     const dated = await post(a.id, { removedOn: daysAgo(7) });

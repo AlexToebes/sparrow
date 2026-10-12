@@ -353,7 +353,11 @@ const CASES: Case[] = [
 const NOT_ACTIONS = new Set(['POST /api/import']);
 
 const inject = (method: string, url: string, payload?: object) =>
-  app.inject({ method: method as 'POST', url, ...(payload ? { payload } : {}) });
+  app.inject({
+    method: method as 'POST',
+    url,
+    ...(method === 'GET' ? {} : { payload: payload ?? {} }),
+  });
 
 describe('R14: every mutating route records exactly one activity', () => {
   it('the table covers every mutating route the server registers', () => {
