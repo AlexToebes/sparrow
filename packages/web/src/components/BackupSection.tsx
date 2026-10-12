@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { EXPORT_FORMAT, EXPORT_SCHEMA_VERSION } from '@sparrow/shared';
 import { Alert, Button, Group, Modal, Text } from '@mantine/core';
 import { useDrives, useLayout } from '../api/hooks';
 import { useConfig, useImport, type ImportResult } from '../api/settings';
@@ -47,6 +48,26 @@ function countsOf(file: unknown): FileCounts {
   };
 }
 
+/**
+ * R43: checks the file's marker and schema version before the confirm step, so a file the server will
+ * refuse never reaches "Replace all data". The server still validates everything.
+ */
+export function exportFileProblem(file: unknown, name: string): string | null {
+  const o = typeof file === 'object' && file !== null ? (file as Record<string, unknown>) : null;
+  if (!o || o.format !== EXPORT_FORMAT) {
+    return `${name} is not a Sparrow export file.`;
+  }
+  const v = o.schemaVersion;
+  if (typeof v !== 'number') return `${name} has no export version, so it cannot be imported.`;
+  if (v > EXPORT_SCHEMA_VERSION) {
+    return `${name} was made by a newer Sparrow (export version ${v}); this one imports version ${EXPORT_SCHEMA_VERSION}. Update Sparrow first.`;
+  }
+  if (v < EXPORT_SCHEMA_VERSION) {
+    return `${name} is an old export (version ${v}) from a pre-release build; this Sparrow imports version ${EXPORT_SCHEMA_VERSION} only.`;
+  }
+  return null;
+}
+
 /** Settings > Backup: export download, and import with a required confirmation (R41, R43, R44). */
 export function BackupSection() {
   const fileInput = useRef<HTMLInputElement>(null);
@@ -57,6 +78,11 @@ export function BackupSection() {
   const layout = useLayout();
   const drives = useDrives();
   const doImport = useImport();
+  // The result sits above the buttons; on a phone make sure it is on screen after the dialog closes.
+  const resultRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (result) resultRef.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  }, [result]);
 
   const current: FileCounts | null =
     layout.data && drives.data
@@ -80,7 +106,13 @@ export function BackupSection() {
     if (!file) return;
     try {
       const json: unknown = JSON.parse(await file.text());
-      setParsed({ name: file.name, json });
+      const problem = exportFileProblem(json, file.name);
+      if (problem) {
+        setParsed(null);
+        setFileError(problem);
+      } else {
+        setParsed({ name: file.name, json });
+      }
     } catch {
       setParsed(null);
       setFileError(`${file.name} is not valid JSON, so it cannot be a Sparrow export.`);
@@ -110,6 +142,27 @@ export function BackupSection() {
           Backup
         </h2>
       </div>
+      {fileError ? (
+        <Alert color="red" title="Cannot read that file" role="alert" mb="md">
+          {fileError}
+        </Alert>
+      ) : null}
+      {result ? (
+        <Alert color="green" title="Import complete" mb="md" role="status" ref={resultRef}>
+          <p style={{ margin: 0 }}>
+            Imported{' '}
+            {['drives', 'enclosures', 'grids', 'slots', 'pools', 'events']
+              .map((k) => plural(result.counts[k] ?? 0, k))
+              .join(', ')}
+            .
+          </p>
+          <p style={{ margin: '4px 0 0' }}>
+            Your previous data was saved first to{' '}
+            <span className="mono wrap-anywhere">{result.backupPath}</span>.
+          </p>
+        </Alert>
+      ) : null}
+
       <Text size="sm" c="dimmed" mb="md">
         Export saves everything Sparrow knows (layout, drives, pools and history) as one JSON file.
         Import replaces all current data with the contents of such a file.
@@ -131,26 +184,6 @@ export function BackupSection() {
           onChange={(e) => void onPick(e.target.files?.[0])}
         />
       </Group>
-      {fileError ? (
-        <Alert color="red" title="Cannot read that file" role="alert" mt="sm">
-          {fileError}
-        </Alert>
-      ) : null}
-      {result ? (
-        <Alert color="green" title="Import complete" mt="sm" role="status">
-          <p style={{ margin: 0 }}>
-            Imported{' '}
-            {['drives', 'enclosures', 'grids', 'slots', 'pools', 'events']
-              .map((k) => plural(result.counts[k] ?? 0, k))
-              .join(', ')}
-            .
-          </p>
-          <p style={{ margin: '4px 0 0' }}>
-            Your previous data was saved first to <span className="mono">{result.backupPath}</span>.
-          </p>
-        </Alert>
-      ) : null}
-
       <Modal opened={parsed !== null} onClose={close} title="Replace all data with this file?">
         {parsed ? (
           <>
@@ -164,7 +197,10 @@ export function BackupSection() {
             </Text>
             <Text mt="sm">
               Before replacing anything, Sparrow saves the current data as a backup file in{' '}
-              <span className="mono">{config.data?.backupDir ?? 'the exports folder'}</span>.
+              <span className="mono wrap-anywhere">
+                {config.data?.backupDir ?? 'the exports folder'}
+              </span>
+              .
             </Text>
             <ApiErrorAlert error={doImport.error} title="Import failed" />
             <Group mt="md" justify="flex-end">

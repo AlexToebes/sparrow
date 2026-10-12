@@ -45,7 +45,8 @@ export function InboxPage() {
         <Alert color="indigo" variant="light" mb="md" title="Welcome to Sparrow">
           Your provider found {entries.length} {entries.length === 1 ? 'drive' : 'drives'} in the
           NAS. For each one, create a record and pick the bay it sits in. Then you can import
-          retired drives, if any are listed below, and set up pools in Settings.
+          retired drives, if any are listed below, and set up your pools on the{' '}
+          <Link to="/pools">Pools page</Link>.
         </Alert>
       ) : null}
 

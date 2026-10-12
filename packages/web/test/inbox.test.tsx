@@ -185,7 +185,8 @@ describe('Inbox (R22, R23, R25, R58)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Link to a spare' }));
     const pickDlg = await screen.findByRole('dialog', { name: 'Link NEW-1 to a spare' });
     expect(within(pickDlg).getByRole('button', { name: 'Next' })).toBeDisabled();
-    await pick(within(pickDlg), 'Spare', /SPARE1/);
+    // F9: the same card picker as the Assign dialog, not a dropdown.
+    await userEvent.click(await within(pickDlg).findByRole('radio', { name: /SPARE1/ }));
     await userEvent.click(within(pickDlg).getByRole('button', { name: 'Next' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
     expect(within(dlg).getByText(/Step 1 of 3 · Choose the slot/)).toBeInTheDocument();

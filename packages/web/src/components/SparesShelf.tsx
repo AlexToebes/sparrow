@@ -33,8 +33,40 @@ export function SparesShelf({
         <Text c="dimmed" size="sm">
           No spares on the shelf.
         </Text>
+      ) : phone ? (
+        <ul className="shelf-cards" aria-label="Spares">
+          {spares.map((d) => (
+            <li key={d.id} className="shelf-card">
+              <div className="shelf-card-top">
+                <button
+                  type="button"
+                  className="link-button mono shelf-serial"
+                  aria-label={`Details of ${d.serial}`}
+                  onClick={() => setViewing(d.id)}
+                >
+                  {d.serial}
+                </button>
+                <span className="mono">{formatBytes(d.capacityBytes) || '—'}</span>
+              </div>
+              <div className="shelf-card-meta">
+                {[d.model, d.condition].filter(Boolean).join(' · ') || 'No model or condition'}
+              </div>
+              <div className="shelf-card-bottom">
+                <span className="shelf-card-where">{d.storageLocation ?? 'On the shelf'}</span>
+                <Button
+                  size="compact-md"
+                  variant="light"
+                  aria-label={`Assign ${d.serial}`}
+                  onClick={() => setAssigning(d.id)}
+                >
+                  Assign
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
       ) : (
-        <Table.ScrollContainer minWidth={420}>
+        <Table.ScrollContainer minWidth={560}>
           <Table verticalSpacing="xs" horizontalSpacing="sm">
             <Table.Thead>
               <Table.Tr>

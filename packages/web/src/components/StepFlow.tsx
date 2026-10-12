@@ -9,7 +9,7 @@ export interface StepDef<K extends string = string> {
 
 /**
  * Shared shell for multi-step dialogs (R70): one decision per step. Shows "Step N of M · title"
- * (N and M follow the steps actually in play), one step's content at a time and a footer that stays
+ * (N and M follow the steps actually in play; M is left out while it can still change), one step's content at a time and a footer that stays
  * visible while the content scrolls. On a phone the dialog is fullscreen so a step such as the slot
  * picker gets the whole screen. Focus moves to the step heading whenever the step changes.
  * The caller owns the navigation and passes the buttons as `footer`.
@@ -21,6 +21,7 @@ export function StepFlow<K extends string>({
   onClose,
   footer,
   children,
+  totalKnown = true,
 }: {
   title: string;
   steps: StepDef<K>[];
@@ -28,6 +29,8 @@ export function StepFlow<K extends string>({
   onClose: () => void;
   footer: ReactNode;
   children: ReactNode;
+  /** False while later answers can still add or remove steps: the header then shows "Step N" only. */
+  totalKnown?: boolean;
 }) {
   const phone = useMediaQuery('(max-width: 48em)') ?? false;
   const heading = useRef<HTMLParagraphElement>(null);
@@ -64,7 +67,8 @@ export function StepFlow<K extends string>({
         className="step-heading"
         aria-live="polite"
       >
-        Step {index + 1} of {steps.length} · {steps[index]?.title}
+        Step {index + 1}
+        {totalKnown ? ` of ${steps.length}` : ''} · {steps[index]?.title}
       </Text>
       <div className="step-content">{children}</div>
       <div className="step-footer">{footer}</div>

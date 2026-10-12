@@ -14,6 +14,8 @@ const REASON_TEXT: Record<SlotFlag['reason'], string> = {
   stale: 'The provider has not reported this drive recently.',
 };
 
+const NEVER_REPORTED_TEXT = 'The provider has never reported this drive.';
+
 type Outcome = 'spares' | 'retire' | 'rma' | null;
 
 /**
@@ -24,10 +26,13 @@ export function MissingDrivePanel({
   drive,
   reason,
   where,
+  neverReported = false,
 }: {
   drive: Drive;
   reason: SlotFlag['reason'];
   where: string | null;
+  /** The provider has never reported this drive: it cannot "no longer" report it. */
+  neverReported?: boolean;
 }) {
   const [outcome, setOutcome] = useState<Outcome>(null);
   const rma = useDriveAction(drive.id, 'rma');
@@ -39,8 +44,9 @@ export function MissingDrivePanel({
     <section className="missing-box" aria-label="Drive missing">
       <h3>Drive missing</h3>
       <Text size="sm">
-        {REASON_TEXT[reason]} Sparrow has not changed anything: the drive is still recorded in{' '}
-        {where ?? 'this slot'}. What happened to it?
+        {reason === 'not-reported' && neverReported ? NEVER_REPORTED_TEXT : REASON_TEXT[reason]}{' '}
+        Sparrow has not changed anything: the drive is still recorded in {where ?? 'this slot'}.
+        What happened to it?
       </Text>
       <div className="detail-actions">
         <Button size="compact-md" variant="default" onClick={() => setOutcome('spares')}>

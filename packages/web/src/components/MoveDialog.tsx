@@ -379,6 +379,7 @@ export function MoveDialog({
 
   return (
     <StepFlow
+      totalKnown={!(dest === 'slot' && fill === null && !swapping)}
       title={`Move ${drive.serial}`}
       steps={steps}
       current={current}
@@ -461,8 +462,9 @@ export function MoveDialog({
         <>
           <Text mb="xs">
             <strong className="mono">{occupant?.serial ?? 'Another drive'}</strong>
-            {occupant ? ` (${capacityOf(occupant)})` : ''} is in {target?.label ?? 'that bay'}. What
-            should happen to it before <strong className="mono">{drive.serial}</strong> moves in?
+            {occupant ? ` (${capacityOf(occupant)})` : ''} is in {target ? targetWhere : 'that bay'}
+            . What should happen to it before <strong className="mono">{drive.serial}</strong> moves
+            in?
           </Text>
           <ChoiceCards<OccupantChoice>
             label="What happens to the drive in that bay"
