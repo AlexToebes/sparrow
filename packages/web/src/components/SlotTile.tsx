@@ -84,9 +84,14 @@ export function SlotTile({ view, pool, selected, onSelect }: SlotTileProps) {
           </span>
         ) : null}
         {view.note ? (
-          <span className="tile-note">
+          <span className="tile-note" title={view.note}>
             {view.stale ? <ClockIcon size={11} /> : null}
-            {view.note}
+            <span className="tile-note-full">{view.note}</span>
+            {view.stale ? (
+              <span className="tile-note-short" aria-hidden="true">
+                {view.note.replace(/^Stale, seen /, '').replace(/ ago$/, '')}
+              </span>
+            ) : null}
           </span>
         ) : null}
         {drive?.capacityBytes != null ? (

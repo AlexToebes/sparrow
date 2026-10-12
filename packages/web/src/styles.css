@@ -405,6 +405,9 @@ body {
   align-items: flex-start;
   gap: 4px;
 }
+.tile-note-short {
+  display: none;
+}
 .tile-note svg {
   flex: none;
   margin-top: 2px;
@@ -434,6 +437,15 @@ body {
   }
   .tile-note {
     font-size: 11px;
+    align-items: center;
+  }
+  /* Narrow tiles: clock icon + "3 d"; hatching and the banner already say stale. */
+  .tile[data-stale='true'] .tile-note-full {
+    display: none;
+  }
+  .tile[data-stale='true'] .tile-note-short {
+    display: inline;
+    white-space: nowrap;
   }
   .tile-word {
     font-size: 13px;
