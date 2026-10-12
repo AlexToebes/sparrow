@@ -157,7 +157,7 @@ Principles:
   - Uses the built-in `GITHUB_TOKEN` with `packages: write` on the image job only, a GitHub Actions build cache, and provenance attestations disabled to keep the GHCR platform listing clean.
 
 ## 5. Non-goals
-- N1: Authentication or user management.
+- N1: Authentication or user management. (added 2026-10-12: still no login, but the API refuses what another web page could trigger: every non-GET `/api` request must send `content-type: application/json` (415 otherwise), responses forbid framing and content sniffing, and the optional `ALLOWED_HOSTS` restricts the Host header against DNS rebinding. This is hardening, not authentication.)
 - N2 (MVP): Calling the TrueNAS API.
 - N3 (MVP): Scheduled automatic exports.
 
@@ -221,6 +221,7 @@ A stale drive keeps its last known health, marked stale. Raw provider details ar
 | `DATA_DIR` | `/data` | SQLite and exports |
 | `PROVIDER` | `none` | `scrutiny` or `none` |
 | `POLL_INTERVAL_MINUTES` | 5 | R19 |
+| `ALLOWED_HOSTS` | unset (any) | N1 hardening: comma list of accepted Host names (added 2026-10-12) |
 | `STALE_AFTER_HOURS` | derived (36 for Scrutiny) | R28 |
 | `SCRUTINY_URL` | none | Adapter setting (R45) |
 | `SCRUTINY_TOKEN` | none | Optional, if Scrutiny auth is enabled |

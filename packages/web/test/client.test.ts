@@ -1,6 +1,7 @@
+// R10, N1: the API client.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { ApiError, apiGet } from '../src/api/client';
+import { ApiError, apiGet, apiSend } from '../src/api/client';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -30,6 +31,18 @@ describe('api client', () => {
     await expect(apiGet('/x', z.object({ n: z.number() }))).rejects.toMatchObject({
       code: 'bad-response',
     });
+  });
+
+  it('N1: every write sends a JSON content type, with {} when there is no body', async () => {
+    const spy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response('{}', { status: 200 }));
+    await apiSend('POST', '/x', undefined, z.unknown());
+    await apiSend('DELETE', '/x', undefined, z.unknown());
+    await apiSend('PATCH', '/x', { a: 1 }, z.unknown());
+    const inits = spy.mock.calls.map(([, init]) => init as RequestInit);
+    for (const init of inits) expect(init.headers).toEqual({ 'content-type': 'application/json' });
+    expect(inits.map((i) => i.body)).toEqual(['{}', '{}', '{"a":1}']);
   });
 
   it('reports a network failure as ApiError', async () => {

@@ -6,6 +6,19 @@ const configSchema = z.object({
   WEB_DIST_DIR: z.preprocess((v) => (v === '' ? undefined : v), z.string().min(1).optional()),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   HOST: z.string().min(1).default('0.0.0.0'),
+  /** N1 hardening: comma-separated Host names to accept (DNS rebinding guard). Unset = any. */
+  ALLOWED_HOSTS: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z
+      .string()
+      .transform((v) =>
+        v
+          .split(',')
+          .map((h) => h.trim().toLowerCase())
+          .filter(Boolean),
+      )
+      .optional(),
+  ),
   PROVIDER: z.string().min(1).default('none'),
   POLL_INTERVAL_MINUTES: z.coerce.number().positive().default(5),
   /** R28: optional override in hours. Unset means 1.5 x the provider's update interval. */

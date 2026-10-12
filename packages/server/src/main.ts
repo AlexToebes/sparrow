@@ -24,6 +24,7 @@ export async function start(env: Record<string, string | undefined> = process.en
     pollIntervalMinutes: config.POLL_INTERVAL_MINUTES,
     dataDir: config.DATA_DIR,
     logger: true,
+    allowedHosts: config.ALLOWED_HOSTS,
     webDistDir: config.WEB_DIST_DIR ?? DEFAULT_WEB_DIST_DIR,
     backupDir: path.join(config.DATA_DIR, 'exports'),
   });

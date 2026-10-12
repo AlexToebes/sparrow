@@ -21,7 +21,7 @@ import {
   pools,
   slots,
 } from '../db/schema.js';
-import { invalid } from './errors.js';
+import { conflict, invalid } from './errors.js';
 
 // R41, R42, R43, R44: export, import and the automatic backup taken before an import.
 // The provider snapshot cache is not user data and is never exported or replaced (R42).
@@ -210,10 +210,13 @@ export function importData(db: AppDb, input: unknown, opts: ImportOptions): Impo
     mkdirSync(opts.backupDir, { recursive: true });
     writeFileSync(backupPath, `${JSON.stringify(current, null, 2)}\n`, { flag: 'wx' });
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    throw new Error(
-      `Could not write the automatic backup to ${backupPath}; import aborted: ${reason}`,
-      { cause: err },
+    // A domain error so the UI shows the real reason. Only the file name and the system error
+    // code are exposed, not the data directory path.
+    const code = (err as { code?: string }).code;
+    const reason = code ? `${code}` : 'unknown error';
+    throw conflict(
+      `Could not write the automatic backup (${path.basename(backupPath)}: ${reason}); nothing was imported. Check that the data directory is writable and has free space.`,
+      { cause: reason },
     );
   }
 

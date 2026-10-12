@@ -748,7 +748,11 @@ describe('assignment API', () => {
     });
     expect(defaults.json()).toEqual({ poolId: pool, role: 'hot-spare', previousDriveId: a.id });
 
-    const removed = await app.inject({ method: 'POST', url: `/api/drives/${a.id}/remove` });
+    const removed = await app.inject({
+      method: 'POST',
+      url: `/api/drives/${a.id}/remove`,
+      payload: {},
+    });
     expect(removed.json()).toMatchObject({ status: 'spare', slotId: null });
 
     const retired = await app.inject({
@@ -776,13 +780,21 @@ describe('assignment API', () => {
       ).statusCode,
     ).toBe(400);
 
-    const re = await app.inject({ method: 'POST', url: `/api/drives/${a.id}/reinstate` });
+    const re = await app.inject({
+      method: 'POST',
+      url: `/api/drives/${a.id}/reinstate`,
+      payload: {},
+    });
     expect(re.json()).toMatchObject({ status: 'spare', retirementReason: null });
 
     const rma = await app.inject({ method: 'POST', url: `/api/drives/${c.id}/rma`, payload: {} });
     expect(rma.json()).toMatchObject({ status: 'retired', retirementReason: 'failed' });
 
-    const missing = await app.inject({ method: 'POST', url: '/api/drives/nope/remove' });
+    const missing = await app.inject({
+      method: 'POST',
+      url: '/api/drives/nope/remove',
+      payload: {},
+    });
     expect(missing.statusCode).toBe(404);
   });
 });
