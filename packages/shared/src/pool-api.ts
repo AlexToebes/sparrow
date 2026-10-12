@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { idSchema, timestampSchema } from './common.js';
+import { dateSchema, idSchema, timestampSchema } from './common.js';
 import { membershipRoleSchema } from './enums.js';
+import { poolSchema } from './pool.js';
 
 // Request bodies for pools and pool membership (R29, R30, R35, R36). Membership is the pool and role
 // of a drive's installation; the user's date, when given, becomes the activity's occurred-on date.
@@ -56,3 +57,34 @@ export const leavePoolInputSchema = z.strictObject({
   endedAt: timestampSchema.optional(),
 });
 export type LeavePoolInput = z.infer<typeof leavePoolInputSchema>;
+
+// Response shapes of GET /api/pools and GET /api/pools/:id (R29, R30, R34, R68). The server's core
+// types mirror these; a server test parses the real responses with them.
+
+/** R34: how the member count compares with the expected one. */
+export const poolSizeCheckSchema = z.enum(['ok', 'fewer', 'more']);
+export type PoolSizeCheck = z.infer<typeof poolSizeCheckSchema>;
+
+export const poolSummarySchema = poolSchema.extend({
+  memberCount: z.number().int().min(0),
+  /** R34: null when the pool has no expected size. */
+  sizeCheck: poolSizeCheckSchema.nullable(),
+});
+export type PoolSummary = z.infer<typeof poolSummarySchema>;
+
+/** Members are the drives installed in a bay with this pool (R29). */
+export const poolDetailSchema = poolSummarySchema.extend({
+  members: z.array(
+    z.object({
+      driveId: idSchema,
+      serial: z.string(),
+      capacityBytes: z.number().nullable(),
+      role: membershipRoleSchema,
+      /** R68: null = not recorded. */
+      installedOn: dateSchema.nullable(),
+      slotId: idSchema,
+      slotLabel: z.string(),
+    }),
+  ),
+});
+export type PoolDetail = z.infer<typeof poolDetailSchema>;

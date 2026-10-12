@@ -1,4 +1,4 @@
-import type { Observation } from '@sparrow/shared';
+import { providerStatusSchema, type Observation } from '@sparrow/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../src/api/app.js';
 import { createPoller } from '../src/core/poller.js';
@@ -202,7 +202,12 @@ describe('GET /api/provider/status', () => {
       return [obs('A'), obs('B')];
     });
     const app = buildApp({ db, provider });
-    const get = async () => (await app.inject('/api/provider/status')).json();
+    const get = async () => {
+      const body = (await app.inject('/api/provider/status')).json();
+      // The web client validates this response with the shared schema.
+      expect(providerStatusSchema.safeParse(body).success).toBe(true);
+      return body;
+    };
 
     expect(await get()).toMatchObject({
       providerId: 'fake',

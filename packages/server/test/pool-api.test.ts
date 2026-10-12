@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import { poolDetailSchema, poolSummarySchema } from '@sparrow/shared';
 import { buildApp } from '../src/api/app.js';
 import { assignDrive } from '../src/core/assignment.js';
 import { createDrive } from '../src/core/drives.js';
@@ -40,7 +41,12 @@ beforeEach(() => {
 });
 
 const call = (method: string, url: string, payload?: unknown) =>
-  app.inject({ method: method as 'GET', url, payload: payload as object | undefined });
+  app.inject({
+    method: method as 'GET',
+    url,
+    // N1: writes need a JSON content type, so a bodyless write sends {}.
+    payload: (payload ?? (method === 'GET' ? undefined : {})) as object | undefined,
+  });
 
 /** Creates a drive and installs it in the next free slot of the test grid. */
 function installed(serial: string, poolId?: string | null): { driveId: string } {
@@ -80,6 +86,9 @@ describe('pool API (R30, R29, R33, R36)', () => {
       name: 'tank',
       members: [expect.objectContaining({ serial: 'A', role: 'data', slotLabel: 'Slot 1' })],
     });
+    // The shared schemas are what the web client validates with: the real responses must parse.
+    expect(poolDetailSchema.safeParse(detail.json()).success).toBe(true);
+    expect(poolSummarySchema.array().safeParse(list).success).toBe(true);
     expect((await call('GET', '/api/pools/nope')).statusCode).toBe(404);
   });
 
