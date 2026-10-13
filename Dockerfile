@@ -2,7 +2,7 @@
 # R66: multi-stage, non-root, listens on PORT, data in the /data volume.
 
 # ---- build: all workspaces, compile shared + server, bundle the web UI -------------------------
-FROM node:24-slim AS build
+FROM node:24.21.0-slim AS build
 WORKDIR /repo
 
 # Install the pnpm version pinned in package.json ("packageManager"), so there is one source of truth.
@@ -27,7 +27,7 @@ RUN find packages/web/dist -name '*.map' -delete
 RUN pnpm --filter @sparrow/server deploy --prod /out
 
 # ---- runtime: production dependencies only ------------------------------------------------------
-FROM node:24-slim AS runtime
+FROM node:24.21.0-slim AS runtime
 ENV NODE_ENV=production \
     PORT=3000 \
     DATA_DIR=/data \
