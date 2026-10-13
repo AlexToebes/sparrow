@@ -61,6 +61,7 @@ export function createScrutinyProvider(env: Record<string, string | undefined>):
 
   return {
     id: 'scrutiny',
+    endpoint: config.baseUrl,
     capabilities: { drives: true, pools: false },
     expectedUpdateIntervalHours: EXPECTED_UPDATE_INTERVAL_HOURS,
     async fetchSnapshot(): Promise<Observation[]> {

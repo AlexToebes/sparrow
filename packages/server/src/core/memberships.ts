@@ -5,6 +5,7 @@ import { installations, pools } from '../db/schema.js';
 import { recordActivity, type DbTransaction, type EventInput } from './activities.js';
 import { getDrive } from './drives.js';
 import { conflict, invalid, notFound } from './errors.js';
+import { assertNotBeforeInstalled } from './installed-on.js';
 import { installationOfDrive, type InstallationRow } from './installations.js';
 
 // Pool membership (R29, R33, R35, R36) is the pool and role of a drive's installation. Joining,
@@ -79,6 +80,7 @@ export function joinPool(db: AppDb, driveId: string, input: JoinPoolInput): Inst
   return db.transaction((tx) => {
     const row = requireInstallation(tx, driveId);
     requirePool(tx, input.poolId);
+    assertNotBeforeInstalled('added to a pool', dayOf(input.startedAt), row.installedOn);
     if (row.poolId !== null) {
       throw conflict(`Drive ${driveId} is already in a pool; change its membership instead`);
     }
@@ -149,6 +151,7 @@ export function leavePool(
     const row = installationOfDrive(tx, driveId);
     getDrive(tx, driveId);
     if (!row || row.poolId === null) throw conflict(`Drive ${driveId} is not in a pool`);
+    assertNotBeforeInstalled('removed from a pool', dayOf(opts.endedAt), row.installedOn);
     const next = setPool(tx, row, null, null);
     recordActivity(tx, {
       kind: 'pool-left',

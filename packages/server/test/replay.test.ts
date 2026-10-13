@@ -140,7 +140,14 @@ function runScenario(): { states: ReturnType<typeof plain>[]; counts: number[] }
     }),
   ); // moved (to spares, with a replacement)
   step(() => removeToSpares(db(), ids.d!, { note: 'shelf', removedOn: null })); // removed
-  step(() => assignDrive(db(), { driveId: ids.d!, slotId: s[3]!, poolId: ids.tank! }));
+  step(() =>
+    assignDrive(db(), {
+      driveId: ids.d!,
+      slotId: s[3]!,
+      poolId: ids.tank!,
+      installedOn: '2025-06-20',
+    }),
+  );
   step(() => retireDrive(db(), ids.d!, { reason: 'failed', date: '2025-07-07', note: 'clicks' })); // retired
   step(() => assignDrive(db(), { driveId: ids.e!, slotId: s[3]!, installedOn: '2025-08-08' }));
   step(() => sendForRma(db(), ids.e!, { date: '2025-09-09', note: 'ticket' })); // sent-for-rma

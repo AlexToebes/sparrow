@@ -15,7 +15,7 @@ import {
 import { driveInSlot, getDrive } from './drives.js';
 import { conflict, invalid } from './errors.js';
 import { installDrive, installationOfDrive, uninstallDrive } from './installations.js';
-import { parseNotFutureDate, todayUtc } from './installed-on.js';
+import { assertNotBeforeInstalled, parseNotFutureDate, todayUtc } from './installed-on.js';
 
 // R73: one Move for an installed drive. It composes the slot-freeing, retiring, RMA and install
 // steps in ONE transaction and records ONE activity, however many bays it touches (R14): `moved`
@@ -99,7 +99,7 @@ function moveInto(
     }
     moved = moveBetweenBays(tx, drive, dest.slotId, date, evs);
   } else if (dest.kind === 'spares') {
-    freeSlot(tx, drive, { removedOn: date, backdate: true }, evs);
+    freeSlot(tx, drive, { removedOn: date }, evs);
     moved = getDrive(tx, drive.id);
   } else if (dest.kind === 'retire') {
     moved = retireInternal(
@@ -141,11 +141,7 @@ function moveBetweenBays(
   date: string | null,
   evs: EventInput[],
 ): Drive {
-  if (date !== null && drive.installedOn !== null && date < drive.installedOn) {
-    throw invalid(
-      `A drive can't be moved before it was installed (installed on ${drive.installedOn})`,
-    );
-  }
+  assertNotBeforeInstalled('moved', date, drive.installedOn);
   const from = installationOfDrive(tx, drive.id)!;
   uninstallDrive(tx, from, evs);
   installDrive(
@@ -187,11 +183,7 @@ function swapInto(
   const b = driveInSlot(tx, targetSlotId);
   if (!b) throw invalid(`Bay ${bInfo.slotLabel} is empty; there is no drive to swap with`);
   for (const d of [a, b]) {
-    if (date !== null && d.installedOn !== null && date < d.installedOn) {
-      throw invalid(
-        `${d.serial} can't be moved before it was installed (installed on ${d.installedOn})`,
-      );
-    }
+    assertNotBeforeInstalled('moved', date, d.installedOn);
   }
   const rowA = installationOfDrive(tx, a.id)!;
   const rowB = installationOfDrive(tx, b.id)!;

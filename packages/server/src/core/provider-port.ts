@@ -10,6 +10,8 @@ export interface DriveDataProvider {
   id: string;
   capabilities: { drives: true; pools: boolean };
   expectedUpdateIntervalHours: number;
+  /** Where the provider is reached, for log lines. Optional; the core strips credentials before logging. */
+  endpoint?: string | undefined;
   /** May throw or reject on failure; the poller turns that into a stale snapshot (R18). */
   fetchSnapshot(): Promise<Observation[]>;
   /** Reports connectivity as a result; must never reject. */

@@ -113,7 +113,7 @@ describe('R60: retirement date is optional (not recorded rather than guessed)', 
   it('R60, R69: a dated retirement is the day the drive left its bay', () => {
     const [slot] = slotIds();
     const d = spare('A');
-    assignDrive(db(), { driveId: d.id, slotId: slot!, poolId: null });
+    assignDrive(db(), { driveId: d.id, slotId: slot!, poolId: null, installedOn: daysAgo(10) });
     retireDrive(db(), d.id, { reason: 'failed', date: daysAgo(3) });
     expect(lastActivity(db()).occurredOn).toBe(daysAgo(3));
     expect(getDrive(db(), d.id).retirementDate).toBe(daysAgo(3));

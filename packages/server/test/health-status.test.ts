@@ -36,7 +36,7 @@ function slots(): string[] {
 
 function install(serial: string, slotId: string): string {
   const drive = createDrive(db(), { serial });
-  assignDrive(db(), { driveId: drive.id, slotId });
+  assignDrive(db(), { driveId: drive.id, slotId, installedOn: '2026-01-01' });
   return drive.id;
 }
 

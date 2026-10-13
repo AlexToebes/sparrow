@@ -10,6 +10,7 @@ import { conflict } from './errors.js';
 import { listDriveEventsOfType, recordActivity } from './activities.js';
 import { getDrive, updateDrive } from './drives.js';
 import { getMatchState, type Match } from './matching.js';
+import { fitObservedText } from './observation-text.js';
 
 // Suggested updates (R72): what a matched observation could add to, or disagrees about in, a drive
 // record. Computed on every read from the record and the cached snapshot (R54); nothing is stored
@@ -36,7 +37,8 @@ function observed(o: Observation, field: SuggestionField): string | number | und
     case 'driveType':
       return o.driveType;
     default:
-      return text(o[field]);
+      // Cut to the record's limit so a long value compares equal to what filling it stores.
+      return fitObservedText(field, o[field]);
   }
 }
 

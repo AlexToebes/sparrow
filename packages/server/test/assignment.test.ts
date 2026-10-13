@@ -256,7 +256,7 @@ describe('occupied slot (R37, R62)', () => {
     const { slots } = setup();
     const a = spare('A');
     const b = spare('B');
-    assignDrive(db(), { driveId: a.id, slotId: slots[0]! });
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]!, installedOn: '2026-01-01' });
     const res = assignDrive(db(), {
       driveId: b.id,
       slotId: slots[0]!,
@@ -513,7 +513,12 @@ describe('remove, retire, RMA, reinstate (R60, R61, R27)', () => {
     const { slots } = setup();
     const pool = makePool('tank');
     const a = spare('A');
-    assignDrive(db(), { driveId: a.id, slotId: slots[0]!, poolId: pool });
+    assignDrive(db(), {
+      driveId: a.id,
+      slotId: slots[0]!,
+      poolId: pool,
+      installedOn: '2026-01-01',
+    });
     const r = retireDrive(db(), a.id, { reason: 'failed', date: '2026-03-04' });
     expect(r).toMatchObject({ status: 'retired', slotId: null, retirementDate: '2026-03-04' });
     const act = lastActivity(db());

@@ -24,7 +24,12 @@ import {
   uninstallDrive,
   type PoolRef,
 } from './installations.js';
-import { parseInstalledOn, parseNotFutureDate, todayUtc } from './installed-on.js';
+import {
+  assertNotBeforeInstalled,
+  parseInstalledOn,
+  parseNotFutureDate,
+  todayUtc,
+} from './installed-on.js';
 
 // Slot assignment and retirement (R8, R35, R37, R60, R61, R62, D7). Every public function runs in
 // ONE transaction and records ONE activity in that same transaction (R14), so a failure at any point
@@ -66,11 +71,6 @@ export function slotInfo(tx: Tx, slotId: string): SlotInfo {
 export interface Removal {
   /** YYYY-MM-DD, or null when not recorded. */
   removedOn: string | null;
-  /**
-   * True only for removing to the spares (R69): the date is then checked against the installation
-   * date. Retire and RMA record their own date (R60) without that check.
-   */
-  backdate: boolean;
 }
 
 /** R69: the removal date for a request. Omitted = today (UTC); null = not recorded; otherwise validated. */
@@ -81,8 +81,8 @@ export function removalDateOf(value: string | null | undefined, clock: Date): st
 
 /**
  * R60: the retirement date for a request. Omitted = today (UTC); null = not recorded (never guessed);
- * otherwise a calendar date that is not in the future. There is deliberately no check against the
- * installation date (parking lot).
+ * otherwise a calendar date that is not in the future. Against the installation date it is checked
+ * when the drive leaves its bay (R60, changed 2026-10-13).
  */
 export function retirementDateOf(value: string | null | undefined, clock: Date): string | null {
   if (value === undefined) return todayUtc(clock);
@@ -105,16 +105,7 @@ export function installedOnOf(value: string | null | undefined, clock: Date): st
 function leaveSlot(tx: Tx, drive: Drive, removal: Removal, evs: EventInput[]): PoolRef {
   const installation = installationOfDrive(tx, drive.id);
   if (!installation) throw conflict(`Drive ${drive.id} is not installed (${drive.status})`);
-  if (
-    removal.backdate &&
-    removal.removedOn !== null &&
-    installation.installedOn !== null &&
-    removal.removedOn < installation.installedOn
-  ) {
-    throw invalid(
-      `A drive can't be removed before it was installed (installed on ${installation.installedOn})`,
-    );
-  }
+  assertNotBeforeInstalled('removed', removal.removedOn, installation.installedOn);
   uninstallDrive(tx, installation, evs);
   return { poolId: installation.poolId, role: installation.poolRole };
 }
@@ -146,8 +137,7 @@ export function retireInternal(
 ): Drive {
   const drive = getDrive(tx, driveId);
   if (drive.status === 'retired') throw conflict(`Drive ${drive.id} is already retired`);
-  if (drive.status === 'installed')
-    leaveSlot(tx, drive, { removedOn: opts.date, backdate: false }, evs);
+  if (drive.status === 'installed') leaveSlot(tx, drive, { removedOn: opts.date }, evs);
   tx.update(drives)
     .set({
       retirementReason: opts.reason,
@@ -259,7 +249,7 @@ export function resolveOccupant(
 ): Drive {
   if (action.action === 'spare') {
     assertSameDay('removedOn', action.removedOn, date);
-    leaveSlot(tx, occupant, { removedOn: date, backdate: true }, evs);
+    leaveSlot(tx, occupant, { removedOn: date }, evs);
     return getDrive(tx, occupant.id);
   }
   assertSameDay('date', action.date, date);
@@ -383,7 +373,7 @@ export function removeToSpares(
   const removedOn = removalDateOf(opts.removedOn, new Date());
   return db.transaction((tx) => {
     const evs: EventInput[] = [];
-    freeSlot(tx, getDrive(tx, driveId), { removedOn, backdate: true }, evs);
+    freeSlot(tx, getDrive(tx, driveId), { removedOn }, evs);
     recordActivity(tx, {
       kind: 'removed',
       occurredOn: removedOn,

@@ -22,6 +22,7 @@ import {
 import { recordActivity, type EventInput } from './activities.js';
 import { getDrive, insertDrive, listDrives } from './drives.js';
 import { conflict, invalid, notFound } from './errors.js';
+import { fitObservedText } from './observation-text.js';
 import { getMatchState, matchObservations, normalizeWwn, observationKeyOf } from './matching.js';
 
 // The discovery inbox (R9, R22 to R25, R58, R63). Resolving an entry also picks the slot (decision
@@ -48,7 +49,7 @@ function toRetiredCandidate(o: Observation): RetiredCandidate {
   return {
     observationKey: observationKeyOf(o) ?? '',
     serial: (o.serial ?? '').trim(),
-    model: o.model ?? null,
+    model: fitObservedText('model', o.model) ?? null,
     capacityBytes: o.capacityBytes ?? null,
     driveType: o.driveType ?? null,
     retirementDate: o.lastReportedAt.slice(0, 10),
@@ -74,13 +75,16 @@ type Filled = Partial<Pick<Drive, 'wwn' | 'model' | 'capacityBytes' | 'driveType
 /** Fields the observation can supply that the drive lacks (R22). */
 function missingFrom(drive: Drive, o: Observation): Filled {
   const filled: Filled = {};
-  if (!drive.wwn && o.wwn?.trim()) filled.wwn = o.wwn.trim();
-  if (!drive.model && o.model) filled.model = o.model;
+  const wwn = fitObservedText('wwn', o.wwn);
+  const model = fitObservedText('model', o.model);
+  const formFactor = fitObservedText('formFactor', o.formFactor);
+  if (!drive.wwn && wwn) filled.wwn = wwn;
+  if (!drive.model && model) filled.model = model;
   if (drive.capacityBytes === null && o.capacityBytes !== undefined) {
     filled.capacityBytes = o.capacityBytes;
   }
   if (!drive.driveType && o.driveType) filled.driveType = o.driveType;
-  if (!drive.formFactor && o.formFactor) filled.formFactor = o.formFactor;
+  if (!drive.formFactor && formFactor) filled.formFactor = formFactor;
   return filled;
 }
 
@@ -221,17 +225,17 @@ export function createFromObservation(
       tx,
       {
         serial: (o.serial ?? '').trim(),
-        model: o.model,
+        model: fitObservedText('model', o.model),
         capacityBytes: o.capacityBytes,
         driveType: o.driveType,
-        formFactor: o.formFactor,
+        formFactor: fitObservedText('formFactor', o.formFactor),
         condition: input.condition,
         purchaseDate: input.purchaseDate,
         warrantyExpiry: input.warrantyExpiry,
         vendor: input.vendor,
         notes: input.notes,
       },
-      o.wwn,
+      fitObservedText('wwn', o.wwn),
       evs,
     );
     return placeAndRecord(tx, 'discovered-created', created.id, input, evs);
@@ -266,12 +270,12 @@ export function importRetired(db: AppDb, providerId: string, input: ImportRetire
         tx,
         {
           serial: (o.serial ?? '').trim(),
-          model: o.model,
+          model: fitObservedText('model', o.model),
           capacityBytes: o.capacityBytes,
           driveType: o.driveType,
-          formFactor: o.formFactor,
+          formFactor: fitObservedText('formFactor', o.formFactor),
         },
-        o.wwn,
+        fitObservedText('wwn', o.wwn),
         evs,
       );
       // R63: omitted = the last-reported day (the prefill); an explicit null = not recorded (R60).
