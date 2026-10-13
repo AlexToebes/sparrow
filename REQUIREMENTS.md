@@ -162,7 +162,7 @@ Principles:
 - N3 (MVP): Scheduled automatic exports.
 
 ## 6. Post-MVP backlog
-- R12: Compatibility check "can this spare replace the drive in slot X?" (type, capacity, pool of the current occupant). For pools like `big`, compare against the vdev's usable per-disk size (smallest member), not the replaced drive's size. To confirm when designing.
+- R12: Compatibility check "can this spare replace the drive in slot X?" (changed 2026-10-13 at the owner's request). Sparrow does not model vdevs, so a pool is treated as one vdev: its usable per-disk size is the smallest capacity among its current members (installations with that pool), including the drive being replaced (so for `big`, a 2 TB spare fits the bay of a 4 TB member while 2 TB is the smallest). A spare fits a bay when it has the same drive type as the bay's occupant (for an empty bay, its previous occupant, R35) and a capacity of at least the target size: the pool's usable size when that occupant is in a pool, else the occupant's own capacity. An unknown type or capacity on either side gives "unknown", never "doesn't fit"; an empty bay with no history has no check. The result per spare is `fits`, `too-small` (with the size needed), `different-type` or `unknown`, plus a short reason. It is advice: it never blocks an action. It is computed on every read, never stored.
 - Richer slot display: model, capacity, serial, temperature, pool badge.
 - Several providers at once with priority (observations are already tagged by provider).
 - Automatic pool membership (resolve partition UUIDs via `/dev/disk/by-partuuid` and `by-id`, or the TrueNAS API).

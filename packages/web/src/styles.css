@@ -975,7 +975,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 280px;
+  max-height: min(52vh, 440px);
   overflow-y: auto;
   padding: 3px;
 }
