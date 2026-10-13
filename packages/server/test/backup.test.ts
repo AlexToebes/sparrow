@@ -46,8 +46,20 @@ function seedRealistic(): void {
   const newDrive = createDrive(db(), { serial: 'new-1', condition: 'new', vendor: 'Acme' });
   const spare = createDrive(db(), { serial: 'SP-9' });
 
-  assignDrive(db(), { driveId: oldDrive.id, slotId: slot1!, poolId: pool.id, role: 'data' });
-  assignDrive(db(), { driveId: spare.id, slotId: slot2!, poolId: null, role: null });
+  assignDrive(db(), {
+    driveId: oldDrive.id,
+    slotId: slot1!,
+    poolId: pool.id,
+    role: 'data',
+    installedOn: '2026-08-01',
+  });
+  assignDrive(db(), {
+    driveId: spare.id,
+    slotId: slot2!,
+    poolId: null,
+    role: null,
+    installedOn: '2026-08-01',
+  });
   // Retire the old drive; this frees slot1 for the new drive.
   retireDrive(db(), oldDrive.id, {
     reason: 'replaced',

@@ -4,6 +4,7 @@ import type { AppDb } from '../db/client.js';
 import { createRepositories } from '../db/repositories.js';
 import { recordHealthChanges } from './health-history.js';
 import type { DriveDataProvider } from './provider-port.js';
+import { errorReason, safeUrlForLog } from './safe-url.js';
 
 /** The slice of a logger the poller uses (the Fastify logger fits). */
 export interface PollLog {
@@ -50,9 +51,11 @@ export function createPoller(opts: PollerOptions): Poller {
       observations = observationsSchema.parse(await provider.fetchSnapshot());
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
+      // The log says where the poll went (no credentials) and why it failed.
+      const url = safeUrlForLog(provider.endpoint);
       log?.warn(
-        { err, providerId: provider.id },
-        `Poll of provider "${provider.id}" failed: ${error}`,
+        { err, providerId: provider.id, ...(url ? { url } : {}) },
+        `Poll of provider "${provider.id}"${url ? ` at ${url}` : ''} failed: ${errorReason(err)}`,
       );
       // R18: keep the previous observations and lastSuccessAt; the snapshot goes stale, not empty.
       const prev = repos.snapshot.get();

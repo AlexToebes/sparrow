@@ -8,6 +8,9 @@ import {
   retirementReasonSchema,
 } from './enums.js';
 
+/** Length limits of the free-text drive fields; text taken from a provider observation is cut to these. */
+export const DRIVE_TEXT_MAX = { wwn: 100, model: 200, formFactor: 200 } as const;
+
 const driveFields = {
   id: idSchema,
   serial: z.string().min(1).max(100),
@@ -16,11 +19,11 @@ const driveFields = {
    * R2 fallback identifier, stored on the record. Set when linking or creating from an
    * observation; editable (or clearable) through PATCH /api/drives/:id.
    */
-  wwn: z.string().min(1).max(100).nullable(),
-  model: z.string().max(200).nullable(),
+  wwn: z.string().min(1).max(DRIVE_TEXT_MAX.wwn).nullable(),
+  model: z.string().max(DRIVE_TEXT_MAX.model).nullable(),
   capacityBytes: z.number().int().min(0).nullable(),
   driveType: driveTypeSchema.nullable(),
-  formFactor: z.string().max(200).nullable(),
+  formFactor: z.string().max(DRIVE_TEXT_MAX.formFactor).nullable(),
   storageLocation: z.string().max(200).nullable(),
   condition: driveConditionSchema.nullable(),
   lastTestDate: dateSchema.nullable(),

@@ -26,3 +26,19 @@ export function parseNotFutureDate(field: string, value: string, now: Date = new
 export function parseInstalledOn(value: string, now: Date = new Date()): string {
   return parseNotFutureDate('installedOn', value, now);
 }
+
+/**
+ * R60, R69 (changed 2026-10-13): a removal, retirement, RMA, move or pool date can't precede the
+ * installation date. `installedOn` null (not recorded) or `date` null means no check. The 400 names both dates.
+ */
+export function assertNotBeforeInstalled(
+  what: string,
+  date: string | null | undefined,
+  installedOn: string | null | undefined,
+): void {
+  if (date != null && installedOn != null && date < installedOn) {
+    throw invalid(
+      `A drive can't be ${what} before it was installed (installed on ${installedOn}); the date given is ${date}`,
+    );
+  }
+}

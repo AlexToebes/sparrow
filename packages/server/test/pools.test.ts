@@ -64,7 +64,7 @@ function thrown(fn: () => unknown): DomainError {
 /** Installs a fresh spare in a slot, optionally with a pool, and returns the drive id. */
 function install(serial: string, slotId: string, poolId?: string | null) {
   const d = spare(serial);
-  assignDrive(db(), { driveId: d.id, slotId, poolId });
+  assignDrive(db(), { driveId: d.id, slotId, poolId, installedOn: '2026-01-01' });
   return d.id;
 }
 
@@ -230,7 +230,7 @@ describe('assignment-time membership (R35, R33)', () => {
         role: 'data',
         slotId: slots[0],
         slotLabel: 'Slot 1',
-        installedOn: new Date().toISOString().slice(0, 10),
+        installedOn: '2026-01-01',
       },
     ]);
   });
