@@ -358,6 +358,8 @@ describe('R75: layout changes are activities with events that belong to no drive
       gridId: grid.id,
       changes: { name: { from: 'Front', to: 'Bays' }, rows: { from: 1, to: 2 } },
     });
+    // R75: the grid after the change is carried too, so the feed can name it and show both sizes.
+    expect(rows[3]!.payload.after).toMatchObject({ name: 'Bays', rows: 2 });
     // Growing adds slots: the new records are part of the change.
     expect((rows[3]!.payload.slotsAdded as unknown[]).length).toBe(2);
     expect(rows[4]!.payload).toEqual({ from: null, to: 'A1' });

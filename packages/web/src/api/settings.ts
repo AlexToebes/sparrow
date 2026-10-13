@@ -37,6 +37,7 @@ function useInvalidateLayout() {
       qc.invalidateQueries({ queryKey: ['layout'] }),
       qc.invalidateQueries({ queryKey: ['status'] }),
       qc.invalidateQueries({ queryKey: ['drives'] }),
+      qc.invalidateQueries({ queryKey: ['activities'] }),
     ]);
 }
 

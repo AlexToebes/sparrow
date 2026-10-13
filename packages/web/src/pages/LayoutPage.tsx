@@ -16,6 +16,7 @@ import { BayGrid } from '../components/BayGrid';
 import { FlipIcon, BoxIcon, InboxIcon } from '../components/icons';
 import { SlotDetail } from '../components/SlotDetail';
 import { SlotTile, StateIcon, poolColor } from '../components/SlotTile';
+import { RecentChangesCard } from '../components/RecentChanges';
 import { SparesShelf } from '../components/SparesShelf';
 import { formatGridSize } from '../lib/grid';
 import { buildSlotView, type SlotView } from '../lib/health';
@@ -263,6 +264,8 @@ export function LayoutPage() {
         spares={spares.data ?? []}
         retiredCount={(drives.data ?? []).filter((d) => d.status === 'retired').length}
       />
+
+      <RecentChangesCard />
 
       <SlotDetail
         view={selected}

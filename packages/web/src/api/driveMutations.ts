@@ -72,6 +72,7 @@ export function useInvalidateAll() {
         ['inbox'],
         ['pools'],
         ['assignment-defaults'],
+        ['activities'],
       ].map((queryKey) => qc.invalidateQueries({ queryKey })),
     );
 }
