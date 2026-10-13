@@ -16,6 +16,8 @@ const pool = (id: string, name: string, over: Record<string, unknown> = {}) => (
   updatedAt: T,
   memberCount: 0,
   sizeCheck: null,
+  smallestMemberBytes: null,
+  sparesFit: 0,
   ...over,
 });
 
@@ -157,6 +159,25 @@ describe('Pools page (R34, R76)', () => {
     const scratch = screen.getByRole('region', { name: 'scratch' });
     expect(within(scratch).getByText('0 members')).toBeInTheDocument();
     expect(await within(scratch).findByText('No drives in this pool.')).toBeInTheDocument();
+  });
+
+  it('R12: a pool with members shows its smallest member and how many spares fit', async () => {
+    const big = pool('p1', 'big', { memberCount: 3, smallestMemberBytes: 2e12, sparesFit: 3 });
+    const one = pool('p2', 'one', { memberCount: 1, smallestMemberBytes: 4e12, sparesFit: 1 });
+    const none = pool('p3', 'empty');
+    setupServer({
+      'GET /api/pools': [big, one, none],
+      'GET /api/pools/p1': { ...big, members: [] },
+      'GET /api/pools/p2': { ...one, members: [] },
+      'GET /api/pools/p3': { ...none, members: [] },
+    });
+    renderApp(<App />, '/pools');
+    const card = await screen.findByRole('region', { name: 'big' });
+    expect(within(card).getByText('Smallest member 2 TB · 3 spares fit')).toBeInTheDocument();
+    const single = screen.getByRole('region', { name: 'one' });
+    expect(within(single).getByText('Smallest member 4 TB · 1 spare fits')).toBeInTheDocument();
+    const empty = screen.getByRole('region', { name: 'empty' });
+    expect(within(empty).queryByText(/Smallest member/)).not.toBeInTheDocument();
   });
 
   it('warns about too many drives and stays quiet without an expected size', async () => {

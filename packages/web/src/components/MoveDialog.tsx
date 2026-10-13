@@ -8,7 +8,7 @@ import {
 } from '@sparrow/shared';
 import { ApiError } from '../api/client';
 import { occupantFromError, useMoveDrive } from '../api/driveMutations';
-import { useDrives, useLayout, usePools } from '../api/hooks';
+import { useDrives, useLayout, usePools, useSlotCompatibility } from '../api/hooks';
 import { formatBytes } from '../lib/format';
 import { slotLabel } from '../lib/health';
 import { NOT_RECORDED_HINT, OptionalDateField, PoolRoleFields, usePoolRole } from './AssignFields';
@@ -141,6 +141,8 @@ export function MoveDialog({
   const pools = usePools();
   const move = useMoveDrive(drive.id);
   const poolRole = usePoolRole(sourceSlotId);
+  // R12: the spare goes into the bay this drive leaves, so it is checked against that bay.
+  const compatibility = useSlotCompatibility(sourceSlotId);
 
   const [dest, setDest] = useState<MoveDestinationChoice | null>(initialDestination);
   const [reason, setReason] = useState<RetirementReason | null>(null);
@@ -539,7 +541,7 @@ export function MoveDialog({
                 value={spareId}
                 onChange={setSpareId}
                 loading={spares.isPending}
-                outgoing={drive}
+                compatibility={compatibility.data ?? null}
               />
               {spare ? (
                 <Text size="sm" mt="xs">

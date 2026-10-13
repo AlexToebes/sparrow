@@ -1060,11 +1060,17 @@ body {
   font-size: 12px;
   font-weight: 600;
 }
-.spare-tag[data-kind='suggested'] {
+.spare-tag[data-kind='fits'] {
   color: var(--sp-ok);
 }
-.spare-tag[data-kind='smaller'] {
+.spare-tag[data-kind='too-small'] {
   color: var(--sp-warn);
+}
+.spare-tag[data-kind='different-type'] {
+  color: var(--sp-fail, var(--mantine-color-red-7));
+}
+.spare-tag[data-kind='unknown'] {
+  color: var(--sp-dim);
 }
 .pool-role-details {
   margin-top: 12px;
@@ -1473,5 +1479,11 @@ body {
 }
 .feed-date {
   font-size: 12px;
+  color: var(--sp-dim);
+}
+
+.pool-fit {
+  margin: 4px 0 0;
+  font-size: 13px;
   color: var(--sp-dim);
 }

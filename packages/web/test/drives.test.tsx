@@ -84,6 +84,8 @@ function setup(extra: Record<string, unknown | ((body: unknown) => Response)> = 
         updatedAt: T,
         memberCount: 0,
         sizeCheck: null,
+        smallestMemberBytes: null,
+        sparesFit: 0,
       },
     ],
     'GET /api/pools/p1': {
@@ -95,6 +97,8 @@ function setup(extra: Record<string, unknown | ((body: unknown) => Response)> = 
       updatedAt: T,
       memberCount: 0,
       sizeCheck: null,
+      smallestMemberBytes: null,
+      sparesFit: 0,
       members: [],
     },
     'GET /api/slots/s1/assignment-defaults': {

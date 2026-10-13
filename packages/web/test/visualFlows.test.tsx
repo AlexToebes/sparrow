@@ -46,6 +46,73 @@ describe('Assigning with the slot picker (R70, R8, R35)', () => {
     });
   });
 
+  it('R12: Assign badges every spare against the chosen bay, fits first, none blocked', async () => {
+    const { slots, drives } = fixtureData();
+    const extra = [
+      makeDrive({ id: 'n1', serial: 'TINY1', status: 'spare', capacityBytes: 1e12 }),
+      makeDrive({ id: 'n2', serial: 'NOSIZE', status: 'spare' }),
+      makeDrive({
+        id: 'n3',
+        serial: 'FLASH',
+        status: 'spare',
+        capacityBytes: 8e12,
+        driveType: 'SSD',
+      }),
+    ];
+    const all = [...drives, ...extra];
+    setupServer(
+      {
+        'GET /api/drives?status=spare': all.filter((d) => d.status === 'spare'),
+        'GET /api/slots/s1/compatibility': {
+          slotId: 's1',
+          target: {
+            driveType: 'HDD',
+            sizeBytes: 4e12,
+            basis: 'pool',
+            poolName: 'big',
+            serial: 'OLD',
+          },
+          spares: [
+            { driveId: 'n3', verdict: 'different-type', reason: 'SSD, but HDD', neededBytes: null },
+            { driveId: 'n2', verdict: 'unknown', reason: 'no size', neededBytes: null },
+            { driveId: 'n1', verdict: 'too-small', reason: 'small', neededBytes: 4e12 },
+            { driveId: 'd9', verdict: 'fits', reason: 'ok', neededBytes: null },
+            { driveId: 'd8', verdict: 'fits', reason: 'ok', neededBytes: null },
+          ],
+        },
+      },
+      { slots, drives: all },
+    );
+    renderApp(<App />);
+    const dlg = await openAssignFromEmpty();
+    await within(dlg).findByText('Unknown size');
+    const cards = within(dlg).getAllByRole('radio');
+    expect(cards.map((c) => c.textContent?.match(/SPARE\d|TINY1|NOSIZE|FLASH/)?.[0])).toEqual([
+      'SPARE8',
+      'SPARE9',
+      'NOSIZE',
+      'TINY1',
+      'FLASH',
+    ]);
+    expect(within(cards[0]!).getByText('Fits')).toBeInTheDocument();
+    expect(within(cards[2]!).getByText('Unknown size')).toBeInTheDocument();
+    expect(within(cards[3]!).getByText('Too small · needs ≥ 4 TB')).toBeInTheDocument();
+    expect(within(cards[4]!).getByText('Different type')).toBeInTheDocument();
+    // Advice only: a spare that does not fit can still be chosen.
+    await userEvent.click(cards[4]!);
+    expect(within(dlg).getByRole('button', { name: 'Next' })).toBeEnabled();
+  });
+
+  it('R12: without a verdict (nothing to compare with) the cards carry no badge', async () => {
+    setupServer({
+      'GET /api/slots/s1/compatibility': { slotId: 's1', target: null, spares: [] },
+    });
+    renderApp(<App />);
+    const dlg = await openAssignFromEmpty();
+    await within(dlg).findByRole('radio', { name: /SPARE9/ });
+    expect(within(dlg).queryByText('Fits')).not.toBeInTheDocument();
+  });
+
   it('R8, R70: spare cards show serial, model, capacity, condition and location; retired never appear', async () => {
     setupServer();
     renderApp(<App />);
@@ -351,7 +418,7 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
     expect(moves(calls)).toHaveLength(0);
   });
 
-  it('R73, R60: step 2 compares both capacities; same-type spares of at least the size come first, smaller ones carry a note', async () => {
+  it('R73, R12: step 2 compares both capacities; spares that fit come first, the others carry a badge but stay selectable', async () => {
     const { slots, drives } = fixtureData();
     const extra = [
       makeDrive({ id: 'n1', serial: 'SMALL1', status: 'spare', capacityBytes: 2e12 }),
@@ -369,7 +436,25 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
       drives.find((d) => d.id === 'd8')!,
     ];
     setupServer(
-      { 'GET /api/drives?status=spare': all.filter((d) => d.status === 'spare') },
+      {
+        'GET /api/drives?status=spare': all.filter((d) => d.status === 'spare'),
+        'GET /api/slots/s2/compatibility': {
+          slotId: 's2',
+          target: {
+            driveType: null,
+            sizeBytes: 4e12,
+            basis: 'drive',
+            poolName: null,
+            serial: 'CCC2',
+          },
+          spares: [
+            { driveId: 'n2', verdict: 'different-type', reason: 'SSD, but HDD', neededBytes: null },
+            { driveId: 'n1', verdict: 'too-small', reason: 'small', neededBytes: 4e12 },
+            { driveId: 'd9', verdict: 'fits', reason: 'ok', neededBytes: null },
+            { driveId: 'd8', verdict: 'fits', reason: 'ok', neededBytes: null },
+          ],
+        },
+      },
       { slots, drives: all },
     );
     const dlg = await openMove();
@@ -385,10 +470,10 @@ describe('Move (R73, R60, R62, R35, R68, R69)', () => {
       'SMALL1',
       'SSD1',
     ]);
-    expect(within(cards[0]!).getByText(/Suggested/)).toHaveTextContent('Same type, ≥ 4 TB');
-    expect(
-      within(cards[2]!).getByText(/Smaller than the current drive \(2 TB vs 4 TB\)/),
-    ).toBeInTheDocument();
+    expect(within(cards[0]!).getByText('Fits')).toBeInTheDocument();
+    expect(within(cards[1]!).getByText('Fits')).toBeInTheDocument();
+    expect(within(cards[2]!).getByText('Too small · needs ≥ 4 TB')).toBeInTheDocument();
+    expect(within(cards[3]!).getByText('Different type')).toBeInTheDocument();
     expect(within(dlg).getByRole('button', { name: 'Next' })).toBeDisabled();
     await userEvent.click(cards[1]!);
     expect(within(dlg).getByText(/Out:/)).toHaveTextContent('CCC2 (4 TB) · In: SPARE9 (8 TB)');

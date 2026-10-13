@@ -79,6 +79,12 @@ function PoolCard({
           </span>
         ) : null}
       </div>
+      {pool.smallestMemberBytes !== null ? (
+        <p className="pool-fit">
+          Smallest member {formatBytes(pool.smallestMemberBytes)} · {pool.sparesFit}{' '}
+          {pool.sparesFit === 1 ? 'spare fits' : 'spares fit'}
+        </p>
+      ) : null}
       {detail.isPending ? <Skeleton height={48} mt="sm" /> : null}
       {detail.isError ? (
         <Text c="red" size="sm" mt="sm">

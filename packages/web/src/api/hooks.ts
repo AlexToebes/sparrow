@@ -6,6 +6,7 @@ import {
   driveSuggestionsResponseSchema,
   inboxResponseSchema,
   layoutSchema,
+  slotCompatibilitySchema,
   slotHistorySchema,
   statusResponseSchema,
   suggestionSummaryResponseSchema,
@@ -78,6 +79,19 @@ export const useSlotHistory = (slotId: string | null) =>
     queryKey: queryKeys.slotHistory(slotId ?? ''),
     queryFn: () => apiGet(`/api/slots/${slotId}/history`, slotHistorySchema),
     enabled: slotId !== null,
+  });
+
+/**
+ * R12: every spare on the shelf checked against one bay (advice, never blocks). Always refetched when
+ * a picker opens: the shelf, the pool and the bay change under it.
+ */
+export const useSlotCompatibility = (slotId: string | null) =>
+  useQuery({
+    queryKey: ['slots', slotId ?? '', 'compatibility'] as const,
+    queryFn: () => apiGet(`/api/slots/${slotId}/compatibility`, slotCompatibilitySchema),
+    enabled: slotId !== null,
+    staleTime: 0,
+    gcTime: 0,
   });
 
 /** The pool's history: activities with an event on it (its record, members joining, leaving, role changes), newest first. */

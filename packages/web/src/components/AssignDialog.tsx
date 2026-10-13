@@ -3,7 +3,7 @@ import { Alert, Button, Text } from '@mantine/core';
 import type { Drive, MembershipRole } from '@sparrow/shared';
 import { ApiError } from '../api/client';
 import { occupantFromError, useAssignDrive, type OccupantInput } from '../api/driveMutations';
-import { useDrives, useLayout, usePools } from '../api/hooks';
+import { useDrives, useLayout, usePools, useSlotCompatibility } from '../api/hooks';
 import { slotLabel } from '../lib/health';
 import {
   NOT_RECORDED_HINT,
@@ -91,6 +91,8 @@ export function AssignDialog({
   // Opened from a slot, the slot step is skipped until "Change" brings it back.
   const [slotStepShown, setSlotStepShown] = useState(fixedSlot === null);
   const poolRole = usePoolRole(slotId);
+  // R12: advice on which spare fits the chosen bay.
+  const compatibility = useSlotCompatibility(slotId);
   const { poolValue, roleValue } = poolRole;
   // R68: drives found in the NAS (the inbox flow) start with no date; moving a spare in starts at today.
   const [installedOn, setInstalledOn] = useState(() => (placement ? '' : todayLocal()));
@@ -331,6 +333,7 @@ export function AssignDialog({
             value={driveId}
             onChange={setDriveId}
             loading={spares.isPending}
+            compatibility={compatibility.data ?? null}
           />
         </>
       ) : null}

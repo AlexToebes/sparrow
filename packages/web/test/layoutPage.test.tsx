@@ -97,6 +97,8 @@ function fixtures(over: { providerStale?: boolean; allStale?: boolean } = {}) {
         updatedAt: T,
         memberCount: 1,
         sizeCheck: null,
+        smallestMemberBytes: null,
+        sparesFit: 0,
       },
     ],
     '/api/pools/p1': {
@@ -108,6 +110,8 @@ function fixtures(over: { providerStale?: boolean; allStale?: boolean } = {}) {
       updatedAt: T,
       memberCount: 1,
       sizeCheck: null,
+      smallestMemberBytes: null,
+      sparesFit: 0,
       members: [
         {
           driveId: 'd0',

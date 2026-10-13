@@ -1,8 +1,13 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Text, TextInput } from '@mantine/core';
-import type { Drive } from '@sparrow/shared';
+import type {
+  CompatibilityVerdict,
+  Drive,
+  SlotCompatibility,
+  SpareCompatibility,
+} from '@sparrow/shared';
 import { formatBytes } from '../lib/format';
-import { AlertTriangleIcon, CheckIcon } from './icons';
+import { AlertTriangleIcon, CheckIcon, HelpCircleIcon, XCircleIcon } from './icons';
 
 /** With more spares than this a search box appears. */
 export const SPARE_SEARCH_THRESHOLD = 6;
@@ -14,23 +19,42 @@ interface SparePickerProps {
   label?: string;
   loading?: boolean;
   /**
-   * The drive being replaced. Spares of the same type and at least its capacity are listed first
-   * and tagged "Suggested"; smaller ones get a non-blocking note (R60). A light version of the
-   * parking-lot sizing idea: no vdev-usable-size check.
+   * R12: the verdict for every spare against the bay it would go into (GET /api/slots/:id/compatibility).
+   * Each card gets a badge and the spares that fit come first. Advice only: every card stays selectable.
+   * Leave it out when the picker is not choosing for a bay.
    */
-  outgoing?: Drive | null;
+  compatibility?: SlotCompatibility | null;
 }
 
-type Fit = 'suggested' | 'smaller' | 'neutral';
+const VERDICT_RANK: Record<CompatibilityVerdict, number> = {
+  fits: 0,
+  unknown: 1,
+  'too-small': 2,
+  'different-type': 3,
+};
 
-/** How a spare compares with the drive it would replace. */
-export function fitFor(spare: Drive, outgoing: Drive | null | undefined): Fit {
-  if (!outgoing) return 'neutral';
-  const a = spare.capacityBytes;
-  const b = outgoing.capacityBytes;
-  if (a != null && b != null && a < b) return 'smaller';
-  const typeOk = outgoing.driveType == null || spare.driveType === outgoing.driveType;
-  return typeOk && a != null && b != null ? 'suggested' : 'neutral';
+/** R12: icon plus words (never color alone) for one verdict. */
+export function verdictBadge(v: SpareCompatibility): { text: string; kind: CompatibilityVerdict } {
+  switch (v.verdict) {
+    case 'fits':
+      return { text: 'Fits', kind: 'fits' };
+    case 'too-small':
+      return {
+        text: v.neededBytes ? `Too small · needs ≥ ${formatBytes(v.neededBytes)}` : 'Too small',
+        kind: 'too-small',
+      };
+    case 'different-type':
+      return { text: 'Different type', kind: 'different-type' };
+    default:
+      return { text: 'Unknown size', kind: 'unknown' };
+  }
+}
+
+function BadgeIcon({ kind }: { kind: CompatibilityVerdict }) {
+  if (kind === 'fits') return <CheckIcon size={12} />;
+  if (kind === 'unknown') return <HelpCircleIcon size={12} />;
+  if (kind === 'too-small') return <AlertTriangleIcon size={12} />;
+  return <XCircleIcon size={12} />;
 }
 
 /** Spares as selectable cards (R8): serial, model, capacity, condition, shelf location. Retired drives are never offered. */
@@ -40,15 +64,19 @@ export function SparePicker({
   onChange,
   label = 'Spare drive',
   loading = false,
-  outgoing = null,
+  compatibility = null,
 }: SparePickerProps) {
   const [query, setQuery] = useState('');
   const refs = useRef(new Map<string, HTMLButtonElement>());
+  const verdictById = useMemo(
+    () => new Map((compatibility?.spares ?? []).map((v) => [v.driveId, v])),
+    [compatibility],
+  );
   const offered = useMemo(() => {
     const list = spares.filter((d) => d.status === 'spare');
-    if (!outgoing) return list;
-    // Suggested first (closest size first), then the rest in their given order.
-    const rank = (d: Drive) => (fitFor(d, outgoing) === 'suggested' ? 0 : 1);
+    if (verdictById.size === 0) return list;
+    // R12: fits first (closest size first), then unknown, too small, different type; otherwise as given.
+    const rank = (d: Drive) => VERDICT_RANK[verdictById.get(d.id)?.verdict ?? 'unknown'];
     return list
       .map((d, i) => ({ d, i }))
       .sort(
@@ -58,7 +86,7 @@ export function SparePicker({
           x.i - y.i,
       )
       .map((x) => x.d);
-  }, [spares, outgoing]);
+  }, [spares, verdictById]);
   const q = query.trim().toLowerCase();
   const shown = q
     ? offered.filter((d) =>
@@ -105,7 +133,8 @@ export function SparePicker({
           {shown.map((d, i) => {
             const selected = d.id === value;
             const capacity = formatBytes(d.capacityBytes);
-            const fit = fitFor(d, outgoing);
+            const verdict = verdictById.get(d.id);
+            const badge = verdict ? verdictBadge(verdict) : null;
             return (
               <button
                 key={d.id}
@@ -144,16 +173,9 @@ export function SparePicker({
                     .filter(Boolean)
                     .join(' · ')}
                 </span>
-                {fit === 'suggested' ? (
-                  <span className="spare-tag" data-kind="suggested">
-                    <CheckIcon size={12} /> Suggested · Same type
-                    {outgoing?.capacityBytes ? `, ≥ ${formatBytes(outgoing.capacityBytes)}` : ''}
-                  </span>
-                ) : null}
-                {fit === 'smaller' ? (
-                  <span className="spare-tag" data-kind="smaller">
-                    <AlertTriangleIcon size={12} /> Smaller than the current drive ({capacity} vs{' '}
-                    {formatBytes(outgoing?.capacityBytes ?? null)})
+                {badge ? (
+                  <span className="spare-tag" data-kind={badge.kind} title={verdict?.reason}>
+                    <BadgeIcon kind={badge.kind} /> {badge.text}
                   </span>
                 ) : null}
               </button>

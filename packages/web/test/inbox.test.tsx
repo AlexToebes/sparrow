@@ -91,6 +91,8 @@ function setup(extra: Record<string, Handler> = {}, inbox: Record<string, unknow
         updatedAt: T,
         memberCount: 1,
         sizeCheck: null,
+        smallestMemberBytes: null,
+        sparesFit: 0,
       },
     ],
     'GET /api/pools/p1': {
@@ -102,6 +104,8 @@ function setup(extra: Record<string, Handler> = {}, inbox: Record<string, unknow
       updatedAt: T,
       memberCount: 1,
       sizeCheck: null,
+      smallestMemberBytes: null,
+      sparesFit: 0,
       members: [],
     },
     'GET /api/slots/s0/assignment-defaults': { poolId: 'p1', role: 'data', previousDriveId: null },

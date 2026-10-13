@@ -117,6 +117,8 @@ export function setupServer(
         updatedAt: T,
         memberCount: 0,
         sizeCheck: null,
+        smallestMemberBytes: null,
+        sparesFit: 0,
       },
     ],
     'GET /api/pools/p1': {
@@ -128,6 +130,8 @@ export function setupServer(
       updatedAt: T,
       memberCount: 0,
       sizeCheck: null,
+      smallestMemberBytes: null,
+      sparesFit: 0,
       members: [],
     },
     'GET /api/slots/s0/assignment-defaults': { poolId: 'p1', role: 'data', previousDriveId: 'd0' },
