@@ -55,6 +55,26 @@ describe('R16: serving the web bundle', () => {
     await app.close();
   });
 
+  it('serves the manifest and icons as files with the right content types, not index.html', async () => {
+    writeFileSync(path.join(dist, 'manifest.webmanifest'), '{"name":"Sparrow"}');
+    writeFileSync(path.join(dist, 'favicon.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+    writeFileSync(path.join(dist, 'icon-192.png'), 'png');
+    const app = buildApp({ db: opened.db, webDistDir: dist });
+    const manifest = await app.inject('/manifest.webmanifest');
+    expect(manifest.statusCode).toBe(200);
+    expect(manifest.headers['content-type']).toContain('application/manifest+json');
+    expect(manifest.json()).toEqual({ name: 'Sparrow' });
+    const svg = await app.inject('/favicon.svg');
+    expect(svg.statusCode).toBe(200);
+    expect(svg.headers['content-type']).toContain('image/svg+xml');
+    const png = await app.inject('/icon-192.png');
+    expect(png.statusCode).toBe(200);
+    expect(png.headers['content-type']).toContain('image/png');
+    expect((await app.inject('/icon-999.png')).statusCode).toBe(404);
+    expect((await app.inject('/favicon.ico')).statusCode).toBe(404);
+    await app.close();
+  });
+
   it('R67: the API still works when the bundle is missing', async () => {
     const app = buildApp({ db: opened.db, webDistDir: path.join(dist, 'nope') });
     expect((await app.inject('/api/health')).statusCode).toBe(200);

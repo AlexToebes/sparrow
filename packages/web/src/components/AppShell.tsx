@@ -4,6 +4,7 @@ import { NavLink, Outlet } from 'react-router';
 import { DriveIcon, GridIcon, PoolIcon, SettingsIcon } from './icons';
 import { ProviderBanner } from './ProviderBanner';
 import { ProviderStatusLine } from './ProviderStatusLine';
+import { SparrowMark } from './SparrowMark';
 
 const NAV = [
   { to: '/', label: 'Layout', icon: GridIcon, end: true },
@@ -39,7 +40,7 @@ export function AppShell() {
     >
       <MantineShell.Navbar className="sidebar" component="nav" aria-label="Main">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true" />
+          <SparrowMark />
           Sparrow
         </div>
         <div className="nav-links">{links('nav-link')}</div>

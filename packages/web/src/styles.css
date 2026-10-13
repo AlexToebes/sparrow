@@ -61,10 +61,8 @@ body {
   padding: 4px 10px 12px;
 }
 .brand-mark {
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  background: var(--mantine-color-indigo-6);
+  flex: none;
+  color: var(--mantine-color-indigo-6);
 }
 .nav-links {
   display: flex;
@@ -1566,4 +1564,7 @@ body {
   border-radius: 12px;
   background: var(--mantine-color-indigo-light);
   color: var(--mantine-color-indigo-light-color);
+}
+:root[data-mantine-color-scheme='dark'] .brand-mark {
+  color: var(--mantine-color-indigo-3);
 }
