@@ -519,6 +519,34 @@ describe('histories group events by activity', () => {
       (await app.inject({ method: 'GET', url: '/api/activities/recent?limit=0' })).statusCode,
     ).toBe(400);
   });
+
+  it('R75: /api/activities/recent pages with an exclusive before=<seq> cursor', async () => {
+    const { slots } = bays();
+    const a = spare('A');
+    assignDrive(db(), { driveId: a.id, slotId: slots[0]! });
+    const first = (
+      await app.inject({ method: 'GET', url: '/api/activities/recent?limit=1' })
+    ).json() as Activity[];
+    expect(first[0]!.kind).toBe('assigned');
+    const next = (
+      await app.inject({
+        method: 'GET',
+        url: `/api/activities/recent?limit=1&before=${first[0]!.seq}`,
+      })
+    ).json() as Activity[];
+    expect(next).toHaveLength(1);
+    expect(next[0]!.seq).toBeLessThan(first[0]!.seq);
+    expect(next[0]!.kind).toBe('drive-added');
+    const none = (
+      await app.inject({ method: 'GET', url: '/api/activities/recent?before=1' })
+    ).json() as Activity[];
+    expect(none).toEqual([]);
+    for (const bad of ['before=0', 'before=abc', 'before=1.5']) {
+      expect(
+        (await app.inject({ method: 'GET', url: `/api/activities/recent?${bad}` })).statusCode,
+      ).toBe(400);
+    }
+  });
 });
 
 describe('table constraints (schema)', () => {

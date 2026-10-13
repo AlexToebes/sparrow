@@ -61,7 +61,8 @@ export type ActivityEvent = z.infer<typeof eventSchema>;
 export const activitySchema = storedActivitySchema.extend({ events: z.array(eventSchema) });
 export type Activity = z.infer<typeof activitySchema>;
 
-/** GET /api/activities/recent?limit=50 (R75). */
+/** GET /api/activities/recent?limit=50&before=SEQ (R75). `before` is an exclusive seq cursor for paging. */
 export const recentActivitiesQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
+  before: z.coerce.number().int().min(1).optional(),
 });

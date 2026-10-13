@@ -285,6 +285,14 @@ export function createLayoutService(db: AppDb) {
               payload: {
                 gridId: id,
                 changes,
+                // The grid as it is after the change (R75): `changes` lists only what differs, and the
+                // feed needs the grid's name and both dimensions to say "resized 4 × 2 → 4 × 3".
+                after: {
+                  name: next.name,
+                  rows: next.rows,
+                  columns: next.columns,
+                  orientation: next.orientation,
+                },
                 ...(added.length > 0 ? { slotsAdded: added } : {}),
                 ...(doomed.length > 0 ? { slotsRemoved: doomed } : {}),
               },

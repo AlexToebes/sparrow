@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { desc, eq, inArray, sql } from 'drizzle-orm';
+import { desc, eq, lt, inArray, sql } from 'drizzle-orm';
 import type { Activity, ActivityKind, EventType, StoredActivity } from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
 import { getGrid, getSlot } from '../db/layout-repo.js';
@@ -211,10 +211,14 @@ export const listPoolActivities = (db: Reader, poolId: string): Activity[] =>
   activitiesWhere(db, 'poolId', poolId);
 
 /** The latest activities of every kind, newest first (R75). */
-export function listRecentActivities(db: Reader, limit: number): Activity[] {
+export function listRecentActivities(db: Reader, limit: number, before?: number): Activity[] {
+  const query = db.select().from(activities);
   return withEvents(
     db,
-    db.select().from(activities).orderBy(desc(activities.seq)).limit(limit).all(),
+    (before === undefined ? query : query.where(lt(activities.seq, before)))
+      .orderBy(desc(activities.seq))
+      .limit(limit)
+      .all(),
   );
 }
 

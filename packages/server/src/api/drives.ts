@@ -32,9 +32,10 @@ export const driveRoutes: FastifyPluginAsync<{ db: AppDb }> = async (app, opts) 
   );
 
   // R75: the latest activities of all kinds (drive and non-drive), newest first, each with its events.
-  app.get('/api/activities/recent', async (req) =>
-    listRecentActivities(db, recentActivitiesQuerySchema.parse(req.query).limit),
-  );
+  app.get('/api/activities/recent', async (req) => {
+    const { limit, before } = recentActivitiesQuerySchema.parse(req.query);
+    return listRecentActivities(db, limit, before);
+  });
 
   // R14: the activities that have an event for the drive, each with ALL its events, newest first.
   app.get<{ Params: { id: string } }>('/api/drives/:id/history', async (req) => {
