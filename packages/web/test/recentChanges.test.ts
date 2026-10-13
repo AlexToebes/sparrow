@@ -267,6 +267,15 @@ describe('R75: neutral wording of the recent changes feed', () => {
         ev('grid-created', { payload: { name: 'Rear', rows: 1, columns: 2 } }),
       ),
     ).toBe("Enclosure 'NAS' created with 'Front bays', 'Rear'");
+    // R77: the setup wizard's activity also creates pools.
+    expect(
+      text(
+        ev('enclosure-created', { payload: { name: 'NAS' } }),
+        ev('grid-created', { payload: { name: 'Front bays', rows: 2, columns: 4 } }),
+        ev('pool-created', { payload: { name: 'tank' } }),
+        ev('pool-created', { payload: { name: 'scratch' } }),
+      ),
+    ).toBe("Enclosure 'NAS' created with 'Front bays' and pools 'tank', 'scratch'");
     expect(text(ev('enclosure-renamed', { payload: { from: 'A', to: 'B' } }))).toBe(
       "Enclosure 'A' renamed to 'B'",
     );

@@ -269,8 +269,15 @@ function describeLayout(a: Activity): Part[] {
   const enclosure = a.events.find((e) => e.type === 'enclosure-created');
   const grids = ofType(a, 'grid-created');
   if (enclosure && grids.length > 0 && a.events.every((e) => e.type.endsWith('-created'))) {
-    const names = grids.map((g) => `'${str(g.payload.name) ?? '?'}'`);
-    return [`Enclosure '${str(enclosure.payload.name) ?? '?'}' created with ${names.join(', ')}`];
+    const quoted = (list: typeof grids) => list.map((g) => `'${str(g.payload.name) ?? '?'}'`);
+    // The setup wizard (R77) also creates pools in the same activity.
+    const pools = ofType(a, 'pool-created');
+    return [
+      `Enclosure '${str(enclosure.payload.name) ?? '?'}' created with ${quoted(grids).join(', ')}` +
+        (pools.length > 0
+          ? ` and ${pools.length === 1 ? 'pool' : 'pools'} ${quoted(pools).join(', ')}`
+          : ''),
+    ];
   }
   return joinSentences(a.events.map(describeLayoutEvent));
 }

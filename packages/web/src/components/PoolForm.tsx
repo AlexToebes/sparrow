@@ -1,12 +1,55 @@
 import { useState } from 'react';
-import { Alert, Button, Modal, Text, TextInput } from '@mantine/core';
+import { Alert, Autocomplete, Button, Modal, Text, TextInput } from '@mantine/core';
 import { createPoolInputSchema, updatePoolInputSchema } from '@sparrow/shared';
 import { useCreatePool, useDeletePool, useUpdatePool } from '../api/poolMutations';
 import type { PoolSummary } from '../api/schemas';
 import { ApiError } from '../api/client';
+import { LAYOUT_LABEL_SUGGESTIONS } from '../lib/setup';
 import { ConfirmDialog } from './ConfirmDialog';
 
 const orNull = (s: string) => (s.trim() === '' ? null : s.trim());
+
+/**
+ * The three pool fields (R30, R34), shared by the pool dialog and the setup wizard (R77). The layout
+ * label is free text; the usual ones are suggested.
+ */
+export function PoolFields(props: {
+  name: string;
+  label: string;
+  expected: string;
+  onName: (value: string) => void;
+  onLabel: (value: string) => void;
+  onExpected: (value: string) => void;
+  autoFocus?: boolean;
+}) {
+  return (
+    <>
+      <TextInput
+        label="Name"
+        required
+        {...(props.autoFocus === false ? {} : { 'data-autofocus': true })}
+        value={props.name}
+        onChange={(e) => props.onName(e.currentTarget.value)}
+      />
+      <Autocomplete
+        label="Layout label"
+        description="Optional, for example raidz2 or mirror. Shown next to the pool name."
+        mt="sm"
+        data={LAYOUT_LABEL_SUGGESTIONS}
+        value={props.label}
+        onChange={props.onLabel}
+      />
+      <TextInput
+        label="Expected drives"
+        description="Optional. Sparrow warns when the pool has fewer or more drives than this."
+        mt="sm"
+        inputMode="numeric"
+        value={props.expected}
+        onChange={(e) => props.onExpected(e.currentTarget.value)}
+      />
+    </>
+  );
+}
 
 /** Create or edit a pool (R30): name, layout label and the optional expected drive count (R34). */
 export function PoolForm({ pool, onClose }: { pool: PoolSummary | null; onClose: () => void }) {
@@ -44,27 +87,13 @@ export function PoolForm({ pool, onClose }: { pool: PoolSummary | null; onClose:
 
   return (
     <Modal opened onClose={onClose} title={pool ? `Edit ${pool.name}` : 'New pool'} centered>
-      <TextInput
-        label="Name"
-        required
-        data-autofocus
-        value={name}
-        onChange={(e) => setName(e.currentTarget.value)}
-      />
-      <TextInput
-        label="Layout label"
-        description="Optional, for example raidz2 or mirror. Shown next to the pool name."
-        mt="sm"
-        value={label}
-        onChange={(e) => setLabel(e.currentTarget.value)}
-      />
-      <TextInput
-        label="Expected drives"
-        description="Optional. Sparrow warns when the pool has fewer or more drives than this."
-        mt="sm"
-        inputMode="numeric"
-        value={expected}
-        onChange={(e) => setExpected(e.currentTarget.value)}
+      <PoolFields
+        name={name}
+        label={label}
+        expected={expected}
+        onName={setName}
+        onLabel={setLabel}
+        onExpected={setExpected}
       />
       {error ? (
         <Alert color="red" mt="sm" role="alert">

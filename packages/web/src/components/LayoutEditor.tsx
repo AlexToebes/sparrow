@@ -7,6 +7,7 @@ import { ApiErrorAlert } from './ApiErrorAlert';
 import { BayGrid } from './BayGrid';
 import { formatGridSize } from '../lib/grid';
 import { GridForm } from './GridForm';
+import { SetupWizard } from './SetupWizard';
 
 type Mutations = ReturnType<typeof useLayoutMutations>;
 
@@ -16,6 +17,9 @@ export function LayoutEditor() {
   const m = useLayoutMutations();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
+  // R77: the setup wizard, offered while there is no enclosure. It stays mounted once opened, even
+  // after it has created the layout.
+  const [wizard, setWizard] = useState(false);
 
   return (
     <section className="card" aria-labelledby="layout-editor-title">
@@ -35,7 +39,12 @@ export function LayoutEditor() {
         <EnclosureEditor key={e.id} enclosure={e} m={m} />
       ))}
       {layout.data && layout.data.enclosures.length === 0 ? (
-        <Text c="dimmed">No enclosures yet.</Text>
+        <div className="empty-layout-actions">
+          <Text c="dimmed">No enclosures yet.</Text>
+          <Button variant="light" onClick={() => setWizard(true)}>
+            Run setup wizard
+          </Button>
+        </div>
       ) : null}
       {adding ? (
         <form
@@ -80,6 +89,7 @@ export function LayoutEditor() {
           Add enclosure
         </Button>
       )}
+      {wizard ? <SetupWizard onClose={() => setWizard(false)} /> : null}
     </section>
   );
 }

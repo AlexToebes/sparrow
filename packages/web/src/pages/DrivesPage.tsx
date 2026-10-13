@@ -134,7 +134,8 @@ export function DrivesPage() {
       },
       { replace: true },
     );
-  const [adding, setAdding] = useState(false);
+  // /drives?add=1 opens the add dialog (the setup wizard's last step links here).
+  const [adding, setAdding] = useState(params.get('add') === '1');
 
   const whereBySlot = useMemo(() => {
     const m = new Map<string, string>();

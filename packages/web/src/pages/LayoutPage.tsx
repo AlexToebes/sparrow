@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Badge, Button, Skeleton, Text } from '@mantine/core';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
@@ -12,11 +12,13 @@ import {
   useSlotStatus,
 } from '../api/hooks';
 import { apiSend } from '../api/client';
+import { useSetupState } from '../api/setup';
 import { BayGrid } from '../components/BayGrid';
 import { FlipIcon, BoxIcon, InboxIcon } from '../components/icons';
 import { SlotDetail } from '../components/SlotDetail';
 import { SlotTile, StateIcon, poolColor } from '../components/SlotTile';
 import { RecentChangesCard } from '../components/RecentChanges';
+import { SetupWizard } from '../components/SetupWizard';
 import { SparesShelf } from '../components/SparesShelf';
 import { formatGridSize } from '../lib/grid';
 import { buildSlotView, type SlotView } from '../lib/health';
@@ -51,7 +53,7 @@ function FlipButton({ grid }: { grid: LayoutGrid }) {
   );
 }
 
-export function LayoutPage() {
+function LayoutBody() {
   const layout = useLayout();
   const drives = useDrives();
   const spares = useDrives('spare');
@@ -274,5 +276,60 @@ export function LayoutPage() {
         onClose={() => setSelectedId(null)}
       />
     </>
+  );
+}
+
+/**
+ * The Layout page (R77): with no enclosure it greets a new install with the setup wizard (when the
+ * setup is still `needed`) or, after "Skip", a quiet empty state with a way back into it.
+ */
+export function LayoutPage() {
+  const layout = useLayout();
+  const setup = useSetupState();
+  const spares = useDrives('spare');
+  const drives = useDrives();
+  // null = not decided yet. Once open, the wizard stays until closed, even after it has created the
+  // layout (which turns the setup state to `done` under it).
+  const [wizard, setWizard] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (wizard === null && setup.data?.state === 'needed') setWizard(true);
+  }, [wizard, setup.data?.state]);
+
+  const empty = layout.data !== undefined && layout.data.enclosures.length === 0;
+  return (
+    <>
+      {empty ? (
+        <>
+          <NoEnclosure welcome={setup.data?.state === 'needed'} onSetUp={() => setWizard(true)} />
+          <SparesShelf
+            spares={spares.data ?? []}
+            retiredCount={(drives.data ?? []).filter((d) => d.status === 'retired').length}
+          />
+          <RecentChangesCard />
+        </>
+      ) : (
+        <LayoutBody />
+      )}
+      {wizard === true ? <SetupWizard onClose={() => setWizard(false)} /> : null}
+    </>
+  );
+}
+
+function NoEnclosure({ welcome, onSetUp }: { welcome: boolean; onSetUp: () => void }) {
+  return (
+    <section className="card empty-layout" aria-label="No enclosure yet">
+      <h2 className="card-title">{welcome ? 'Welcome to Sparrow' : 'No enclosure yet'}</h2>
+      <Text c="dimmed" mt={6} mb="md">
+        {welcome
+          ? 'Set up your enclosure to see where each drive sits.'
+          : 'Add your enclosure and its bays to see where each drive sits. Spares and retired drives work without one.'}
+      </Text>
+      <div className="empty-layout-actions">
+        <Button onClick={onSetUp}>{welcome ? 'Start setup' : 'Set up now'}</Button>
+        <Button component={Link} to="/settings" variant="default">
+          Open Settings → Layout
+        </Button>
+      </div>
+    </section>
   );
 }
