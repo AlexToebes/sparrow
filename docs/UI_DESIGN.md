@@ -75,6 +75,11 @@ material, not code to copy: build with Mantine components, the shared zod types 
 - Review lists the enclosure, each grid with its drawn size, bay count and labels, and the pools; Create is the only button that writes. A refused Create shows the server's message and stays on Review.
 - After "Skip", or when the wizard is closed with the X, the Layout page shows a card "No enclosure yet" (or "Welcome to Sparrow" with "Start setup" while setup is still needed) with "Set up now" and "Open Settings → Layout", above the Spares shelf and Recent changes. Settings > Layout shows "Run setup wizard" beside "No enclosures yet".
 
+## App icon
+- Concept: a sparrow perched on a drive, white on indigo (#4c6ef5) with a rounded-square background. Approved by the owner.
+- Files in `packages/web/public/` (copied to the dist root): `icon.svg` (master), `favicon.svg` and `favicon-16.png` / `favicon-32.png` (hand-tuned for the pixel grid), `apple-touch-icon.png` (180 px), `icon-192.png`, `icon-512.png`, and `manifest.webmanifest`. There is no maskable icon (the rounded corners are transparent) and no `/favicon.ico` (browsers use the link tags).
+- The sidebar logo is the mono mark (`SparrowMark`, inline SVG in `currentColor`: indigo-6 in light, indigo-3 in dark), decorative (`aria-hidden`) because the word "Sparrow" sits next to it. The phone layout shows no logo.
+
 ## Formatting rules
 - Capacities in decimal units via one helper (`formatBytes(4_000_000_000_000) === "4 TB"`, 500 GB, 1.92 TB).
 - Timestamps: stored UTC, shown in local time; relative ("2 min ago", "3 d ago") for freshness, absolute

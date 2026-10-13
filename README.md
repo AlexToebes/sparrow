@@ -65,6 +65,8 @@ Notes:
 2. Open **Discovered** (the Discovered button on the Drives page). Every drive the provider reports appears there. Link each one to an existing spare, or create a new record, and assign it to a slot (with its pool and role).
 3. Optional: use **Import retired drives** to create "retired" records from drives the provider has decommissioned (for example archived in Scrutiny). Pick a reason for each: failed, replaced or other.
 
+Sparrow ships a web app manifest and icons, so on a phone you can use "Add to Home Screen" to open it like an app.
+
 ## Configuration
 
 | Variable | Default | Description |
