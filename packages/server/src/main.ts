@@ -3,8 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { buildApp } from './api/app.js';
 import { loadConfig } from './config.js';
 import { createPoller } from './core/poller.js';
-import { seedInitialLayout } from './core/layout.js';
-import { DataDirectoryError, openDataDatabase } from './db/client.js';
+import { DataDirectoryError, IncompatibleDatabaseError, openDataDatabase } from './db/client.js';
 import { createProvider } from './providers/index.js';
 
 /** Repo layout: packages/server/dist/main.js -> packages/web/dist. The image sets WEB_DIST_DIR. */
@@ -15,7 +14,6 @@ export const SERVICE_NAME = 'sparrow-server';
 export async function start(env: Record<string, string | undefined> = process.env) {
   const config = loadConfig(env);
   const { db } = openDataDatabase(config.DATA_DIR);
-  seedInitialLayout(db);
   const provider = createProvider(config.PROVIDER, env);
   const app = buildApp({
     db,
@@ -43,7 +41,7 @@ export async function start(env: Record<string, string | undefined> = process.en
 // Only start when run as the entrypoint, so importing this module in tests has no side effects.
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   start().catch((err: unknown) => {
-    if (err instanceof DataDirectoryError) {
+    if (err instanceof DataDirectoryError || err instanceof IncompatibleDatabaseError) {
       // One readable line for the operator instead of a stack trace.
       console.error(err.message);
     } else {

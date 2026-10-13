@@ -13,9 +13,6 @@ import type { EnclosureRow, GridRow, SlotRow, Tx } from '../db/layout-repo.js';
 import { conflict, notFound } from './errors.js';
 import { recordActivity, type EventInput } from './activities.js';
 
-/** app_meta key that records the one-time seeding (R5). */
-export const LAYOUT_SEEDED_KEY = 'layout.seeded';
-
 export interface OccupiedSlot {
   slotId: string;
   gridId: string;
@@ -27,12 +24,12 @@ export interface OccupiedSlot {
 
 const nowIso = () => new Date().toISOString();
 
-const makeEnclosure = (name: string): EnclosureRow => {
+export const makeEnclosure = (name: string): EnclosureRow => {
   const at = nowIso();
   return { id: randomUUID(), name, createdAt: at, updatedAt: at };
 };
 
-const makeGrid = (
+export const makeGrid = (
   enclosureId: string,
   input: { name: string; rows: number; columns: number; orientation: GridOrientation },
 ): GridRow => {
@@ -41,7 +38,7 @@ const makeGrid = (
 };
 
 /** One fresh slot per listed position; labels[position] is used when given. */
-const makeSlots = (
+export const makeSlots = (
   gridId: string,
   positions: number[],
   labels: (string | null)[] = [],
@@ -58,7 +55,7 @@ const makeSlots = (
 };
 
 /** A grid and its slots as one event payload: the whole record, so the log can rebuild or undo it. */
-const gridPayload = (grid: GridRow, slotRows: SlotRow[]): Record<string, unknown> => ({
+export const gridPayload = (grid: GridRow, slotRows: SlotRow[]): Record<string, unknown> => ({
   ...grid,
   slots: slotRows,
 });
@@ -68,7 +65,7 @@ function recordLayout(tx: Tx, events: EventInput[]): void {
   if (events.length > 0) recordActivity(tx, { kind: 'layout-updated', events });
 }
 
-const positionsUpTo = (count: number) => Array.from({ length: count }, (_, i) => i);
+export const positionsUpTo = (count: number) => Array.from({ length: count }, (_, i) => i);
 
 const groupBy = <T, K>(items: T[], key: (item: T) => K): Map<K, T[]> => {
   const groups = new Map<K, T[]>();
@@ -340,56 +337,3 @@ export function createLayoutService(db: AppDb) {
 }
 
 export type LayoutService = ReturnType<typeof createLayoutService>;
-
-interface SeedGrid {
-  name: string;
-  rows: number;
-  columns: number;
-  labels: string[];
-}
-
-/** R5: the initial NAS layout. Must match the spec exactly. */
-const SEED_GRIDS: SeedGrid[] = [
-  {
-    name: 'Front bays',
-    rows: 2,
-    columns: 4,
-    labels: ['1', '2', '3', '4', '5', '6', '7', '8'],
-  },
-  { name: 'Internal SSDs', rows: 1, columns: 2, labels: ['Left', 'Right'] },
-  { name: 'Boot', rows: 1, columns: 1, labels: ['NVMe'] },
-];
-
-/**
- * Seeds the R5 layout once. Runs in one transaction. It creates the NAS only when there are no
- * enclosures yet, and it sets `layout.seeded` either way, so it never runs again, even after the
- * user deletes everything. Returns true when it ran.
- */
-export function seedInitialLayout(db: AppDb): boolean {
-  return db.transaction((tx) => {
-    if (repo.getMeta(tx, LAYOUT_SEEDED_KEY) !== null) return false;
-
-    if (repo.selectEnclosures(tx).length === 0) {
-      const enclosure = makeEnclosure('NAS');
-      repo.insertEnclosure(tx, enclosure);
-      const events: EventInput[] = [{ type: 'enclosure-created', payload: { ...enclosure } }];
-      for (const spec of SEED_GRIDS) {
-        const grid = makeGrid(enclosure.id, {
-          name: spec.name,
-          rows: spec.rows,
-          columns: spec.columns,
-          orientation: 'landscape',
-        });
-        repo.insertGrid(tx, grid);
-        const slotRows = makeSlots(grid.id, positionsUpTo(grid.rows * grid.columns), spec.labels);
-        repo.insertSlots(tx, slotRows);
-        events.push({ type: 'grid-created', payload: gridPayload(grid, slotRows) });
-      }
-      // No unlogged state change: the seed is ONE `layout-updated` activity (R75).
-      recordLayout(tx, events);
-    }
-
-    repo.setMeta(tx, LAYOUT_SEEDED_KEY, nowIso());
-    return true;
-  });
-}

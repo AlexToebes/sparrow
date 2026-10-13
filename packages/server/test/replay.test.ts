@@ -16,7 +16,8 @@ import { exportData } from '../src/core/backup.js';
 import { createDrive, updateDrive } from '../src/core/drives.js';
 import { recordHealthChanges } from '../src/core/health-history.js';
 import { createFromObservation, importRetired, linkObservation } from '../src/core/inbox.js';
-import { createLayoutService, seedInitialLayout } from '../src/core/layout.js';
+import { createLayoutService } from '../src/core/layout.js';
+import { createOldLayout } from './old-layout.js';
 import { changeMembership, joinPool, leavePool } from '../src/core/memberships.js';
 import { moveDrive } from '../src/core/move.js';
 import { createPool, deletePool, updatePool } from '../src/core/pools.js';
@@ -77,9 +78,9 @@ function runScenario(): { states: ReturnType<typeof plain>[]; counts: number[] }
   let s: string[] = [];
   const ids: Record<string, string> = {};
 
-  step(() => seedInitialLayout(db())); // layout-updated (the first-run seed)
+  step(() => createOldLayout(db())); // layout-updated (the setup wizard: enclosure, grids)
   step(() => {
-    // The seed's first grid is the 8 front bays.
+    // The first grid is the 8 front bays.
     s = slots();
   });
   step(() => {

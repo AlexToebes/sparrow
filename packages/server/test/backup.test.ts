@@ -7,7 +7,8 @@ import { assignDrive, retireDrive, sendForRma } from '../src/core/assignment.js'
 import { exportData, importData } from '../src/core/backup.js';
 import { createDrive, updateDrive } from '../src/core/drives.js';
 import { DomainError } from '../src/core/errors.js';
-import { createLayoutService, seedInitialLayout } from '../src/core/layout.js';
+import { createLayoutService } from '../src/core/layout.js';
+import { createOldLayout } from './old-layout.js';
 import { createPool } from '../src/core/pools.js';
 import { openDatabase, type AppDb, type OpenedDatabase } from '../src/db/client.js';
 import { providerSnapshot } from '../src/db/schema.js';
@@ -30,7 +31,7 @@ const db = (): AppDb => opened.db;
 
 /** A realistic dataset built through the real services: layout, spares, assignment, retirement, pools. */
 function seedRealistic(): void {
-  seedInitialLayout(db());
+  createOldLayout(db());
   const layout = createLayoutService(db()).getLayout();
   const front = layout.enclosures[0]!.grids.find((g) => g.name === 'Front bays')!;
   const [slot1, slot2] = front.slots.map((s) => s.id);
@@ -112,7 +113,7 @@ describe('R41, R42: export', () => {
       expect.objectContaining({ slotId: expect.any(String), poolRole: 'hot-spare' }),
     ]);
     expect(data.activities.flatMap((a) => a.events.map((e) => e.type))).toContain('drive-retired');
-    expect(data.appMeta.map((m) => m.key)).toContain('layout.seeded');
+    expect(data.appMeta.map((m) => m.key)).toContain('setup');
   });
 
   it('R41: the activities come in seq order, each with its events nested in order', () => {
@@ -121,7 +122,7 @@ describe('R41, R42: export', () => {
     expect(data.activities.map((a) => a.seq)).toEqual(data.activities.map((_, i) => i + 1));
     for (const a of data.activities)
       expect(a.events.map((e) => e.ord)).toEqual(a.events.map((_, i) => i));
-    expect(data.activities[0]!.kind).toBe('layout-updated'); // the first-run seed
+    expect(data.activities[0]!.kind).toBe('layout-updated'); // the setup
   });
 
   it('R42: excludes the provider snapshot cache', () => {

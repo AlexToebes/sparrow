@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { getTableConfig, SQLiteTable } from 'drizzle-orm/sqlite-core';
 import * as schema from './schema.js';
 
 export type AppDb = BetterSQLite3Database<typeof schema>;
@@ -24,6 +25,37 @@ export class DataDirectoryError extends Error {
     this.name = 'DataDirectoryError';
     this.code = code;
   }
+}
+
+/** An app.db written by a pre-release build whose baseline migration was later edited in place. */
+export class IncompatibleDatabaseError extends Error {
+  constructor(dataDir: string, missing: string[]) {
+    super(
+      'This database was created by an incompatible pre-release build of Sparrow. ' +
+        `Stop the container, delete app.db, app.db-wal and app.db-shm in ${dataDir}, and start again. ` +
+        `(missing: ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? ', ...' : ''})`,
+    );
+    this.name = 'IncompatibleDatabaseError';
+  }
+}
+
+/**
+ * Pre-release builds edited the baseline migration in place, so an old file passes the migrator (its
+ * journal says "applied") yet lacks today's tables or columns. Lists every table and column of the
+ * current schema that the open database does not have.
+ */
+export function missingSchemaParts(sqlite: Database.Database): string[] {
+  const missing: string[] = [];
+  for (const value of Object.values(schema)) {
+    if (!(value instanceof SQLiteTable)) continue;
+    const { name, columns } = getTableConfig(value);
+    const present = new Set(
+      (sqlite.pragma(`table_info("${name}")`) as { name: string }[]).map((c) => c.name),
+    );
+    if (present.size === 0) missing.push(name);
+    else for (const col of columns) if (!present.has(col.name)) missing.push(`${name}.${col.name}`);
+  }
+  return missing;
 }
 
 function errorCode(err: unknown): string {
@@ -100,5 +132,10 @@ export function openDatabase(filePath: string): OpenedDatabase {
   sqlite.pragma('foreign_keys = ON');
   const db = drizzle(sqlite, { schema });
   migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+  const missing = missingSchemaParts(sqlite);
+  if (missing.length > 0) {
+    sqlite.close();
+    throw new IncompatibleDatabaseError(path.dirname(filePath), missing);
+  }
   return { db, sqlite };
 }

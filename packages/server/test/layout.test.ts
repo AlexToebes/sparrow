@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { layoutSchema } from '@sparrow/shared';
 import { recordActivity } from '../src/core/activities.js';
 import { buildApp } from '../src/api/app.js';
-import { createLayoutService, seedInitialLayout } from '../src/core/layout.js';
+import { createLayoutService } from '../src/core/layout.js';
+import { createOldLayout } from './old-layout.js';
 import { DomainError } from '../src/core/errors.js';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
 import { createRepositories, type Repositories } from '../src/db/repositories.js';
@@ -216,56 +217,9 @@ describe('resizing and orientation', () => {
   });
 });
 
-describe('R5: seeding runs once', () => {
-  it('seeds NAS with Front bays, Internal SSDs and Boot, then sets the flag', () => {
-    expect(seedInitialLayout(opened.db)).toBe(true);
-    const [nas] = service().getLayout().enclosures;
-    expect(nas!.name).toBe('NAS');
-    expect(nas!.grids.map((g) => [g.name, g.rows, g.columns, g.orientation])).toEqual([
-      ['Front bays', 2, 4, 'landscape'],
-      ['Internal SSDs', 1, 2, 'landscape'],
-      ['Boot', 1, 1, 'landscape'],
-    ]);
-    expect(nas!.grids[0]!.slots.map((s) => s.label)).toEqual([
-      '1',
-      '2',
-      '3',
-      '4',
-      '5',
-      '6',
-      '7',
-      '8',
-    ]);
-    expect(nas!.grids[1]!.slots.map((s) => s.label)).toEqual(['Left', 'Right']);
-    expect(nas!.grids[2]!.slots.map((s) => s.label)).toEqual(['NVMe']);
-    expect(repo.meta.get('layout.seeded')).toMatch(/^\d{4}-\d\d-\d\dT.*Z$/);
-  });
-
-  it('does not seed again after the user deletes everything', () => {
-    seedInitialLayout(opened.db);
-    const layout = service();
-    const enclosure = layout.getLayout().enclosures[0]!;
-    layout.deleteEnclosure(enclosure.id);
-    expect(layout.getLayout().enclosures).toEqual([]);
-
-    expect(seedInitialLayout(opened.db)).toBe(false);
-    expect(layout.getLayout().enclosures).toEqual([]);
-  });
-
-  it('sets the flag without creating anything when enclosures already exist', () => {
-    service().createEnclosure({ name: 'Mine' });
-    expect(seedInitialLayout(opened.db)).toBe(true);
-    expect(
-      service()
-        .getLayout()
-        .enclosures.map((e) => e.name),
-    ).toEqual(['Mine']);
-  });
-});
-
 describe('HTTP API (app.inject)', () => {
   it('GET /api/layout returns the nested layout', async () => {
-    seedInitialLayout(opened.db);
+    createOldLayout(opened.db);
     const app = buildApp({ db: opened.db });
     const res = await app.inject({ method: 'GET', url: '/api/layout' });
     expect(res.statusCode).toBe(200);
@@ -276,7 +230,7 @@ describe('HTTP API (app.inject)', () => {
   });
 
   it('returns 409 with occupied slots when a shrink is blocked', async () => {
-    seedInitialLayout(opened.db);
+    createOldLayout(opened.db);
     const app = buildApp({ db: opened.db });
     const layout = service().getLayout();
     const front = layout.enclosures[0]!.grids[0]!;
@@ -404,27 +358,6 @@ describe('R75: layout changes are activities with events that belong to no drive
     expect(() => svc.updateGrid(grid.id, { columns: 1 })).toThrow(DomainError);
     expect(() => svc.deleteGrid(grid.id)).toThrow(DomainError);
     expect(() => svc.deleteEnclosure(enc.id)).toThrow(DomainError);
-    expect(countActivities(opened.db)).toBe(before);
-  });
-
-  it('the first-run seed is ONE layout-updated activity (no unlogged state change)', () => {
-    seedInitialLayout(opened.db);
-    const acts = allActivities();
-    expect(acts).toHaveLength(1);
-    expect(acts[0]!.kind).toBe('layout-updated');
-    expect(acts[0]!.events.map((e) => e.type)).toEqual([
-      'enclosure-created',
-      'grid-created',
-      'grid-created',
-      'grid-created',
-    ]);
-    expect(acts[0]!.events[1]!.payload).toMatchObject({ name: 'Front bays' });
-  });
-
-  it('seeding over an existing layout writes nothing', () => {
-    service().createEnclosure({ name: 'Mine' });
-    const before = countActivities(opened.db);
-    expect(seedInitialLayout(opened.db)).toBe(true);
     expect(countActivities(opened.db)).toBe(before);
   });
 });

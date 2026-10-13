@@ -9,6 +9,7 @@ import { inboxRoutes } from './inbox.js';
 import { layoutRoutes } from './layout.js';
 import { poolRoutes } from './pools.js';
 import { providerStatusRoutes } from './provider-status.js';
+import { setupRoutes } from './setup.js';
 import { slotHistoryRoutes } from './slot-history.js';
 import { statusRoutes } from './status.js';
 import { suggestionRoutes } from './suggestions.js';
@@ -43,4 +44,6 @@ export const routeModules: FastifyPluginAsync<{ db: AppDb }>[] = [
   slotHistoryRoutes,
   // Post-MVP 16: spare compatibility (R12)
   compatibilityRoutes,
+  // Post-MVP 17: first-run setup wizard (R77)
+  setupRoutes,
 ];

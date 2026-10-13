@@ -349,8 +349,12 @@ const CASES: Case[] = [
   },
 ];
 
-/** Routes that mutate but are not actions in the log. */
-const NOT_ACTIONS = new Set(['POST /api/import']);
+/**
+ * Routes that mutate but are not covered by the table. POST /api/setup is an action (ONE activity) but
+ * only works on an empty layout, which `world()` is not: it has its own test below. POST /api/setup/skip
+ * only sets the `setup` flag in app_meta (no drive, bay or pool changes), so it logs nothing.
+ */
+const NOT_ACTIONS = new Set(['POST /api/import', 'POST /api/setup', 'POST /api/setup/skip']);
 
 const inject = (method: string, url: string, payload?: object) =>
   app.inject({
@@ -409,6 +413,22 @@ describe('R14: every mutating route records exactly one activity', () => {
       ['retired-imported', null],
     ]);
     void w;
+  });
+
+  it('POST /api/setup: one successful call on an empty layout = one activity; a refused call = none', async () => {
+    const body = {
+      enclosureName: 'NAS',
+      grids: [{ name: 'Front', rows: 1, columns: 2, orientation: 'landscape' }],
+      pools: [{ name: 'tank' }],
+    };
+    expect((await inject('POST', '/api/setup', { enclosureName: 'x', grids: [] })).statusCode).toBe(
+      400,
+    );
+    expect(countActivities(db())).toBe(0);
+    expect((await inject('POST', '/api/setup', body)).statusCode).toBe(201);
+    expect(countActivities(db())).toBe(1);
+    expect((await inject('POST', '/api/setup', body)).statusCode).toBe(409);
+    expect(countActivities(db())).toBe(1);
   });
 
   it('reads never write: no GET route creates an activity', async () => {

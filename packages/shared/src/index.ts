@@ -15,6 +15,7 @@ export * from './assignment-api.js';
 export * from './move-api.js';
 export * from './inbox-api.js';
 export * from './pool-api.js';
+export * from './setup-api.js';
 export * from './status-api.js';
 export * from './export.js';
 export * from './suggestions-api.js';
