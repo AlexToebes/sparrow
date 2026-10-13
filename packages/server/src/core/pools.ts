@@ -10,7 +10,9 @@ import type {
 } from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
 import { drives, installations, pools, slots } from '../db/schema.js';
-import { recordActivity } from './activities.js';
+import { recordActivity, type Reader } from './activities.js';
+import { poolFitSummary } from './compatibility.js';
+import { listDrives } from './drives.js';
 import { conflict, invalid } from './errors.js';
 import { requirePool } from './memberships.js';
 
@@ -29,10 +31,12 @@ export function poolSizeCheck(memberCount: number, expected: number | null): Poo
   return memberCount < expected ? 'fewer' : memberCount > expected ? 'more' : 'ok';
 }
 
-const summarize = (pool: Pool, memberCount: number): PoolSummary => ({
+const summarize = (db: Reader, pool: Pool, memberCount: number): PoolSummary => ({
   ...pool,
   memberCount,
   sizeCheck: poolSizeCheck(memberCount, pool.expectedMembers),
+  // R12: the usable per-disk size and how many spares on the shelf fit a bay of this pool.
+  ...poolFitSummary(db, pool.id, listDrives(db, { status: 'spare' })),
 });
 
 /** A drive installed in a bay that belongs to the pool (the pool is a property of the installation). */
@@ -138,7 +142,7 @@ export function listPools(db: AppDb): PoolSummary[] {
     .from(pools)
     .orderBy(asc(pools.name))
     .all()
-    .map((p) => summarize(p, counts.get(p.id) ?? 0));
+    .map((p) => summarize(db, p, counts.get(p.id) ?? 0));
 }
 
 /** A pool with its current members (the installed drives that are in it), ordered by serial. */
@@ -171,7 +175,7 @@ export function getPool(db: AppDb, id: string): PoolDetail {
       slotId: r.slotId,
       slotLabel: r.slotLabel ?? `Slot ${r.slotPosition + 1}`,
     }));
-    return { ...summarize(pool, members.length), members };
+    return { ...summarize(tx, pool, members.length), members };
   });
 }
 

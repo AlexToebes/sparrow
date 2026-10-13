@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { AppDb } from '../db/client.js';
 import { backupRoutes } from './backup.js';
+import { compatibilityRoutes } from './compatibility.js';
 import { configInfoRoutes } from './config-info.js';
 import { assignmentRoutes } from './assignment.js';
 import { driveRoutes } from './drives.js';
@@ -40,4 +41,6 @@ export const routeModules: FastifyPluginAsync<{ db: AppDb }>[] = [
   suggestionRoutes,
   // Post-MVP 7: bay history (R74)
   slotHistoryRoutes,
+  // Post-MVP 16: spare compatibility (R12)
+  compatibilityRoutes,
 ];

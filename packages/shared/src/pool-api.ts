@@ -69,6 +69,10 @@ export const poolSummarySchema = poolSchema.extend({
   memberCount: z.number().int().min(0),
   /** R34: null when the pool has no expected size. */
   sizeCheck: poolSizeCheckSchema.nullable(),
+  /** R12: the usable per-disk size (smallest current member with a known capacity); null if none. */
+  smallestMemberBytes: z.number().nullable(),
+  /** R12: how many spares on the shelf fit a bay of this pool. */
+  sparesFit: z.number().int().min(0),
 });
 export type PoolSummary = z.infer<typeof poolSummarySchema>;
 

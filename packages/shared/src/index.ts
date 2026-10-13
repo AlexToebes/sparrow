@@ -19,3 +19,4 @@ export * from './status-api.js';
 export * from './export.js';
 export * from './suggestions-api.js';
 export * from './slot-history-api.js';
+export * from './compatibility-api.js';
