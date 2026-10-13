@@ -1,4 +1,4 @@
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import {
   activitySchema,
@@ -23,6 +23,7 @@ export const queryKeys = {
   drives: (status?: DriveStatus) => ['drives', status ?? 'all'] as const,
   slotHistory: (id: string) => ['slots', id, 'history'] as const,
   driveHistory: (id: string) => ['drives', id, 'history'] as const,
+  recentActivities: (limit: number) => ['activities', 'recent', limit] as const,
   inbox: ['inbox'] as const,
   providerStatus: ['provider-status'] as const,
   slotStatus: ['status'] as const,
@@ -46,6 +47,29 @@ export const useDriveHistory = (driveId: string | null) =>
     queryKey: queryKeys.driveHistory(driveId ?? ''),
     queryFn: () => apiGet(`/api/drives/${driveId}/history`, activitiesSchema),
     enabled: driveId !== null,
+  });
+
+/** R75: the latest activities of every kind, newest first (the Layout page's card). */
+export const useRecentActivities = (limit: number) =>
+  useQuery({
+    queryKey: queryKeys.recentActivities(limit),
+    queryFn: () => apiGet(`/api/activities/recent?limit=${limit}`, activitiesSchema),
+  });
+
+export const ACTIVITY_PAGE_SIZE = 30;
+
+/** R75: the whole feed, a page at a time. The cursor is the oldest seq loaded so far (exclusive). */
+export const useActivityFeed = () =>
+  useInfiniteQuery({
+    queryKey: ['activities', 'feed'] as const,
+    initialPageParam: null as number | null,
+    queryFn: ({ pageParam }) =>
+      apiGet(
+        `/api/activities/recent?limit=${ACTIVITY_PAGE_SIZE}${pageParam === null ? '' : `&before=${pageParam}`}`,
+        activitiesSchema,
+      ),
+    getNextPageParam: (last) =>
+      last.length < ACTIVITY_PAGE_SIZE ? undefined : (last[last.length - 1]?.seq ?? undefined),
   });
 
 /** R74: the bay's history, newest first, computed by the server from the event log. */

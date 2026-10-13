@@ -1433,3 +1433,45 @@ body {
     flex-wrap: wrap;
   }
 }
+
+/* Recent changes feed (R75) */
+.feed {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+.feed-item {
+  display: flex;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--sp-line);
+}
+.feed-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.feed-icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--sp-dim);
+}
+.feed-icon[data-health='ok'] {
+  color: var(--sp-ok);
+}
+.feed-icon[data-health='warning'] {
+  color: var(--sp-warn);
+}
+.feed-icon[data-health='failed'] {
+  color: var(--sp-fail);
+}
+.feed-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.feed-text {
+  font-weight: 500;
+}
+.feed-date {
+  font-size: 12px;
+  color: var(--sp-dim);
+}

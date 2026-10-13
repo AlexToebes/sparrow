@@ -138,6 +138,7 @@ export function setupServer(
       previousDriveId: 'd2',
     },
     'GET /api/slots/s3/assignment-defaults': { poolId: null, role: null, previousDriveId: null },
+    'GET /api/activities/recent?limit=5': [],
     'GET /api/drives/d0/history': [],
     'GET /api/drives/d2/history': [],
     'POST /api/slots/s0/assign': { drive: drives[2], occupant: drives[0] },

@@ -12,6 +12,9 @@ const DrivesPage = lazy(() =>
 );
 const InboxPage = lazy(() => import('./pages/InboxPage').then((m) => ({ default: m.InboxPage })));
 const PoolsPage = lazy(() => import('./pages/PoolsPage').then((m) => ({ default: m.PoolsPage })));
+const ActivityPage = lazy(() =>
+  import('./pages/ActivityPage').then((m) => ({ default: m.ActivityPage })),
+);
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
@@ -59,6 +62,14 @@ export function App() {
           element={
             <Page>
               <PoolsPage />
+            </Page>
+          }
+        />
+        <Route
+          path="activity"
+          element={
+            <Page>
+              <ActivityPage />
             </Page>
           }
         />

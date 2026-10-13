@@ -15,7 +15,7 @@ function useInvalidatePools() {
   const qc = useQueryClient();
   return () =>
     Promise.all(
-      [['pools'], ['drives'], ['layout'], ['assignment-defaults']].map((queryKey) =>
+      [['pools'], ['drives'], ['layout'], ['assignment-defaults'], ['activities']].map((queryKey) =>
         qc.invalidateQueries({ queryKey }),
       ),
     );

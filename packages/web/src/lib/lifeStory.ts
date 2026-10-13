@@ -155,14 +155,14 @@ function poolText(e: ActivityEvent | undefined): string | null {
 const join = (...parts: (string | null)[]): string | null =>
   parts.filter(Boolean).join(' · ') || null;
 
-const HEALTH_SHORT: Record<Health, string> = {
+export const HEALTH_SHORT: Record<Health, string> = {
   ok: 'OK',
   warning: 'Warning',
   failed: 'Failed',
   unknown: 'Unknown',
 };
 const HEALTH_VALUES = new Set<string>(Object.keys(HEALTH_SHORT));
-const healthOf = (v: unknown): Health | null =>
+export const healthOf = (v: unknown): Health | null =>
   typeof v === 'string' && HEALTH_VALUES.has(v) ? (v as Health) : null;
 
 /** R20: the from/to of a health-changed event, or null when it is not one (or is malformed). */
