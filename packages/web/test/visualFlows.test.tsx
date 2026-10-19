@@ -125,7 +125,7 @@ describe('Assigning with the slot picker (R70, R8, R35)', () => {
     expect(big).toHaveTextContent('tested');
     expect(big).toHaveTextContent('Desk drawer');
     expect(within(dlg).queryByText('OLD7')).not.toBeInTheDocument();
-    expect(within(dlg).queryByRole('textbox', { name: 'Search spares' })).not.toBeInTheDocument();
+    expect(within(dlg).getByRole('textbox', { name: 'Search spares' })).toBeInTheDocument();
     // The picker step shows nothing else, and nothing is chosen yet, so Next is disabled.
     expect(within(dlg).queryByLabelText('Pool')).not.toBeInTheDocument();
     expect(within(dlg).queryByLabelText('Installed on (optional)')).not.toBeInTheDocument();
@@ -185,29 +185,21 @@ describe('Assigning with the slot picker (R70, R8, R35)', () => {
     expect(posts(calls, '/api/slots/s1/assign')).toHaveLength(0);
   });
 
-  it('R8: with more than six spares the cards get a search box', async () => {
-    const { slots, drives } = fixtureData();
-    const many = Array.from({ length: 7 }, (_, i) =>
-      makeDrive({
-        id: `m${i}`,
-        serial: `MANY-${i}`,
-        status: 'spare',
-        model: i === 3 ? 'Findme' : 'Plain',
-      }),
-    );
-    const all = [...drives, ...many];
-    setupServer(
-      { 'GET /api/drives?status=spare': all.filter((d) => d.status === 'spare') },
-      { slots, drives: all },
-    );
+  it('R8: the spare search box is always shown, even with two spares, and filters them', async () => {
+    setupServer();
     renderApp(<App />);
     const dlg = await openAssignFromEmpty();
-    await userEvent.type(
-      await within(dlg).findByRole('textbox', { name: 'Search spares' }),
-      'findme',
-    );
-    expect(within(dlg).getAllByRole('radio', { name: /MANY-/ })).toHaveLength(1);
-    expect(within(dlg).getByRole('radio', { name: /MANY-3/ })).toBeInTheDocument();
+    const search = await within(dlg).findByRole('textbox', { name: 'Search spares' });
+    expect(within(dlg).getAllByRole('radio', { name: /SPARE/ })).toHaveLength(2);
+    await userEvent.type(search, 'desk');
+    expect(within(dlg).getAllByRole('radio', { name: /SPARE/ })).toHaveLength(1);
+    expect(within(dlg).getByRole('radio', { name: /SPARE9/ })).toBeInTheDocument();
+    expect(within(dlg).queryByRole('radio', { name: /SPARE8/ })).not.toBeInTheDocument();
+    await userEvent.clear(search);
+    await userEvent.type(search, 'zzz');
+    expect(within(dlg).getByText(/No spare matches “zzz”/)).toBeInTheDocument();
+    await userEvent.clear(search);
+    expect(within(dlg).getAllByRole('radio', { name: /SPARE/ })).toHaveLength(2);
   });
 
   it('R70, R37: picking an occupied tile leads into the occupant step and posts that slot', async () => {

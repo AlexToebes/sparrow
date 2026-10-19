@@ -9,9 +9,6 @@ import type {
 import { formatBytes } from '../lib/format';
 import { AlertTriangleIcon, CheckIcon, HelpCircleIcon, XCircleIcon } from './icons';
 
-/** With more spares than this a search box appears. */
-export const SPARE_SEARCH_THRESHOLD = 6;
-
 interface SparePickerProps {
   spares: Drive[];
   value: string | null;
@@ -112,14 +109,12 @@ export function SparePicker({
 
   return (
     <div className="spare-picker">
-      {offered.length > SPARE_SEARCH_THRESHOLD ? (
-        <TextInput
-          placeholder="Search serial, model or location"
-          aria-label="Search spares"
-          value={query}
-          onChange={(e) => setQuery(e.currentTarget.value)}
-        />
-      ) : null}
+      <TextInput
+        placeholder="Search serial, model or location"
+        aria-label="Search spares"
+        value={query}
+        onChange={(e) => setQuery(e.currentTarget.value)}
+      />
       {offered.length === 0 ? (
         <Text c="dimmed" size="sm">
           {loading ? 'Loading spares…' : 'No spares on the shelf.'}
