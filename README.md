@@ -62,7 +62,7 @@ Notes:
 ## First run
 
 1. A new install opens the **setup wizard** on the Layout page. It walks you through naming your enclosure, adding grids of bays (pick a preset such as "8 bays (4 × 2)" or build a custom grid, and rename any bay) and, if you like, your pools; nothing is saved until you press **Create**. You can skip it ("Skip, I'll set it up later") and run it later from the Layout page or Settings > Layout, or build the layout by hand in Settings.
-2. Open **Discovered** (the Discovered button on the Drives page). Every drive the provider reports appears there. Link each one to an existing spare, or create a new record, and assign it to a slot (with its pool and role).
+2. Open **Discovered** (the Discovered button on the Drives page). Every drive the provider reports appears there. Link each one to an existing drive record (a spare is assigned to a slot, an installed drive stays where it is), or create a new record and assign it to a slot (with its pool and role).
 3. Optional: use **Import retired drives** to create "retired" records from drives the provider has decommissioned (for example archived in Scrutiny). Pick a reason for each: failed, replaced or other.
 
 Sparrow ships a web app manifest and icons, so on a phone you can use "Add to Home Screen" to open it like an app.
