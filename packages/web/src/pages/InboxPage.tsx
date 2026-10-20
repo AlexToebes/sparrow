@@ -37,8 +37,8 @@ export function InboxPage() {
       <h1 className="page-title">Discovered drives</h1>
       <Text c="dimmed" mb="md">
         Drives the NAS reports that Sparrow has not placed yet: new drives, and spares you already
-        track that are now inside the NAS. Resolve each one by linking it to a spare or creating a
-        record, and choose its slot.
+        track that are now inside the NAS. Resolve each one by linking it to a drive record (a spare
+        is then placed in a bay) or creating a record.
       </Text>
 
       {firstRun ? (

@@ -177,7 +177,7 @@ describe('Inbox (R22, R23, R25, R58)', () => {
     });
   });
 
-  it('R22: link to a spare without a suggestion uses a picker of spares', async () => {
+  it('R22: link to a drive without a suggestion uses a picker; a spare continues to the bay step', async () => {
     const calls = setup(
       { 'POST /api/inbox/X1/link': { drive: spare } },
       {
@@ -186,8 +186,8 @@ describe('Inbox (R22, R23, R25, R58)', () => {
       },
     );
     renderApp(<App />, '/drives/discovered');
-    await userEvent.click(await screen.findByRole('button', { name: 'Link to a spare' }));
-    const pickDlg = await screen.findByRole('dialog', { name: 'Link NEW-1 to a spare' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Link to a drive' }));
+    const pickDlg = await screen.findByRole('dialog', { name: 'Link NEW-1 to a drive' });
     expect(within(pickDlg).getByRole('button', { name: 'Next' })).toBeDisabled();
     // F9: the same card picker as the Assign dialog, not a dropdown.
     await userEvent.click(await within(pickDlg).findByRole('radio', { name: /SPARE1/ }));
@@ -200,6 +200,75 @@ describe('Inbox (R22, R23, R25, R58)', () => {
     await next(within(dlg));
     await userEvent.click(within(dlg).getByRole('button', { name: 'Assign' }));
     await waitFor(() => expect(posts(calls, '/api/inbox/X1/link')).toHaveLength(1));
+  });
+
+  it('R22: an installed drive can be linked from the picker; a confirm step, no bay step, drives with live data and retired ones are not offered', async () => {
+    const matched = makeDrive({ id: 'dm', serial: 'MATCHED1', slotId: 's1' });
+    const retired = makeDrive({
+      id: 'dr',
+      serial: 'RETIRED1',
+      status: 'retired',
+      retirementReason: 'failed',
+      retirementDate: '2026-01-01',
+    });
+    const calls = setup(
+      {
+        'GET /api/drives': [installed, spare, matched, retired],
+        'POST /api/inbox/WD-AAA0/link': { drive: installed },
+      },
+      {
+        entries: [{ observationKey: 'WD-AAA0', observation: obs('WD-AAA0'), suggestion: null }],
+        count: 1,
+        matchedDriveIds: ['dm'],
+      },
+    );
+    renderApp(<App />, '/drives/discovered');
+    await userEvent.click(await screen.findByRole('button', { name: 'Link to a drive' }));
+    const pickDlg = await screen.findByRole('dialog', { name: 'Link WD-AAA0 to a drive' });
+    const spareCard = await within(pickDlg).findByRole('radio', { name: /SPARE1/ });
+    expect(spareCard).toHaveTextContent('On the shelf');
+    const installedCard = within(pickDlg).getByRole('radio', { name: /AAA0/ });
+    expect(installedCard).toHaveTextContent('In Front bays · Bay 1');
+    expect(within(pickDlg).queryByRole('radio', { name: /MATCHED1/ })).toBeNull();
+    expect(within(pickDlg).queryByRole('radio', { name: /RETIRED1/ })).toBeNull();
+    // The search box is always there and filters the list.
+    await userEvent.type(within(pickDlg).getByRole('textbox', { name: 'Search drives' }), 'spare');
+    expect(within(pickDlg).queryByRole('radio', { name: /AAA0/ })).toBeNull();
+    await userEvent.clear(within(pickDlg).getByRole('textbox', { name: 'Search drives' }));
+    await userEvent.click(within(pickDlg).getByRole('radio', { name: /AAA0/ }));
+    await userEvent.click(within(pickDlg).getByRole('button', { name: 'Next' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Link to this drive' });
+    expect(confirm).toHaveTextContent('Link WD-AAA0 to AAA0 in Front bays · Bay 1');
+    expect(confirm).toHaveTextContent('It stays in its bay');
+    expect(screen.queryByRole('dialog', { name: 'Assign to a slot' })).toBeNull();
+    expect(posts(calls, '/api/inbox/WD-AAA0/link')).toHaveLength(0);
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Link' }));
+    await waitFor(() => expect(posts(calls, '/api/inbox/WD-AAA0/link')).toHaveLength(1));
+    expect(posts(calls, '/api/inbox/WD-AAA0/link')[0]!.body).toEqual({ driveId: 'd0' });
+  });
+
+  it('R22: a refused link (409) shows the reason and keeps the confirm step open', async () => {
+    setup(
+      {
+        'POST /api/inbox/WD-AAA0/link': () =>
+          new Response(
+            JSON.stringify({ error: { code: 'conflict', message: 'Drive AAA0 already matches' } }),
+            { status: 409 },
+          ),
+      },
+      {
+        entries: [{ observationKey: 'WD-AAA0', observation: obs('WD-AAA0'), suggestion: null }],
+        count: 1,
+      },
+    );
+    renderApp(<App />, '/drives/discovered');
+    await userEvent.click(await screen.findByRole('button', { name: 'Link to a drive' }));
+    const pickDlg = await screen.findByRole('dialog', { name: 'Link WD-AAA0 to a drive' });
+    await userEvent.click(await within(pickDlg).findByRole('radio', { name: /AAA0/ }));
+    await userEvent.click(within(pickDlg).getByRole('button', { name: 'Next' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Link to this drive' });
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Link' }));
+    expect(await within(confirm).findByText(/already matches/)).toBeInTheDocument();
   });
 
   it('R22, R23, R37: create from observation continues to slot, pool and role, with occupant resolution', async () => {

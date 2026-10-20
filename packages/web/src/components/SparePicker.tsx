@@ -3,6 +3,7 @@ import { Text, TextInput } from '@mantine/core';
 import type {
   CompatibilityVerdict,
   Drive,
+  DriveStatus,
   SlotCompatibility,
   SpareCompatibility,
 } from '@sparrow/shared';
@@ -21,7 +22,18 @@ interface SparePickerProps {
    * Leave it out when the picker is not choosing for a bay.
    */
   compatibility?: SlotCompatibility | null;
+  /**
+   * Which statuses are offered (default: spares only). The inbox's "Link to a drive" (R22) also
+   * offers installed drives; retired drives are never offered, whatever is asked.
+   */
+  statuses?: readonly Exclude<DriveStatus, 'retired'>[];
+  /** Where each installed drive sits, by slot id (a card shows "In <bay>"). */
+  bayLabels?: ReadonlyMap<string, string>;
+  /** Plural noun for the search box and the empty states; default "spares". */
+  noun?: string;
 }
+
+const SPARES_ONLY: readonly Exclude<DriveStatus, 'retired'>[] = ['spare'];
 
 const VERDICT_RANK: Record<CompatibilityVerdict, number> = {
   fits: 0,
@@ -62,6 +74,9 @@ export function SparePicker({
   label = 'Spare drive',
   loading = false,
   compatibility = null,
+  statuses = SPARES_ONLY,
+  bayLabels,
+  noun = 'spares',
 }: SparePickerProps) {
   const [query, setQuery] = useState('');
   const refs = useRef(new Map<string, HTMLButtonElement>());
@@ -70,7 +85,7 @@ export function SparePicker({
     [compatibility],
   );
   const offered = useMemo(() => {
-    const list = spares.filter((d) => d.status === 'spare');
+    const list = spares.filter((d) => d.status !== 'retired' && statuses.includes(d.status));
     if (verdictById.size === 0) return list;
     // R12: fits first (closest size first), then unknown, too small, different type; otherwise as given.
     const rank = (d: Drive) => VERDICT_RANK[verdictById.get(d.id)?.verdict ?? 'unknown'];
@@ -83,7 +98,7 @@ export function SparePicker({
           x.i - y.i,
       )
       .map((x) => x.d);
-  }, [spares, verdictById]);
+  }, [spares, verdictById, statuses]);
   const q = query.trim().toLowerCase();
   const shown = q
     ? offered.filter((d) =>
@@ -111,17 +126,21 @@ export function SparePicker({
     <div className="spare-picker">
       <TextInput
         placeholder="Search serial, model or location"
-        aria-label="Search spares"
+        aria-label={`Search ${noun}`}
         value={query}
         onChange={(e) => setQuery(e.currentTarget.value)}
       />
       {offered.length === 0 ? (
         <Text c="dimmed" size="sm">
-          {loading ? 'Loading spares…' : 'No spares on the shelf.'}
+          {loading
+            ? `Loading ${noun}…`
+            : statuses.includes('installed')
+              ? `No ${noun} to link.`
+              : 'No spares on the shelf.'}
         </Text>
       ) : shown.length === 0 ? (
         <Text c="dimmed" size="sm">
-          No spare matches “{query}”.
+          No {noun.replace(/s$/, '')} matches “{query}”.
         </Text>
       ) : (
         <div className="spare-list" role="radiogroup" aria-label={label}>
@@ -163,7 +182,11 @@ export function SparePicker({
                   {[
                     d.model,
                     d.condition,
-                    d.storageLocation ? `On the shelf: ${d.storageLocation}` : 'On the shelf',
+                    d.status === 'installed'
+                      ? `In ${(d.slotId && bayLabels?.get(d.slotId)) || 'a bay'}`
+                      : d.storageLocation
+                        ? `On the shelf: ${d.storageLocation}`
+                        : 'On the shelf',
                   ]
                     .filter(Boolean)
                     .join(' · ')}

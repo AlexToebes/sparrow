@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, Badge, Button, Modal, Text } from '@mantine/core';
 import type { InboxEntry } from '@sparrow/shared';
 import { useCreateFromObservation, useLinkObservation } from '../api/inboxMutations';
-import { useDrives, useSlotStatus } from '../api/hooks';
+import { ApiError } from '../api/client';
+import { useDrives, useInbox, useLayout, useSlotStatus } from '../api/hooks';
 import { formatBytes, formatRelative } from '../lib/format';
-import { HEALTH_WORD } from '../lib/health';
+import { HEALTH_WORD, slotLabel } from '../lib/health';
 import { isObservationStale } from '../lib/observationAge';
 import { AssignDialog } from './AssignDialog';
 import { stateColor } from './DriveDetail';
@@ -12,21 +13,56 @@ import { StateIcon } from './SlotTile';
 import { SparePicker } from './SparePicker';
 import { driveLabel } from './RetireFields';
 
-type Step = null | { kind: 'pick' } | { kind: 'link'; driveId: string } | { kind: 'create' };
+const LINKABLE = ['spare', 'installed'] as const;
+
+type Step =
+  | null
+  | { kind: 'pick' }
+  | { kind: 'link'; driveId: string }
+  | { kind: 'confirm'; driveId: string }
+  | { kind: 'create' };
 
 /** One discovered drive (R22): what the provider reports, a suggested spare if any (R25), and the actions. */
 export function InboxEntryCard({ entry }: { entry: InboxEntry }) {
   const { observation: o, suggestion } = entry;
   const serial = o.serial ?? '';
   const [step, setStep] = useState<Step>(null);
-  const spares = useDrives('spare');
+  const allDrives = useDrives();
+  const inbox = useInbox();
+  const layout = useLayout();
   const staleAfterHours = useSlotStatus().data?.staleAfterHours;
   const stale = isObservationStale(o.lastReportedAt, staleAfterHours);
-  const link = useLinkObservation(entry.observationKey);
   const create = useCreateFromObservation(entry.observationKey);
   const [pick, setPick] = useState<string | null>(suggestion?.id ?? null);
-  const close = () => setStep(null);
-  const noSpares = spares.isSuccess && spares.data.length === 0;
+  const close = () => {
+    setStep(null);
+    setLinkError(null);
+  };
+  // R22: any drive record that is not retired and does not already match an observation (R2). The
+  // server reports the matched ones; the spare this very observation matches (R25) stays offered.
+  const linkable = useMemo(() => {
+    const matched = new Set(inbox.data?.matchedDriveIds ?? []);
+    return (allDrives.data ?? []).filter(
+      (d) =>
+        (d.status === 'spare' || d.status === 'installed') &&
+        (!matched.has(d.id) || d.id === suggestion?.id),
+    );
+  }, [allDrives.data, inbox.data, suggestion?.id]);
+  const bayLabels = useMemo(
+    () =>
+      new Map(
+        (layout.data?.enclosures ?? []).flatMap((e) =>
+          e.grids.flatMap((g) =>
+            g.slots.map((sl) => [sl.id, `${g.name} · ${slotLabel(sl)}`] as const),
+          ),
+        ),
+      ),
+    [layout.data],
+  );
+  const chosen = (id: string) => allDrives.data?.find((d) => d.id === id);
+  const link = useLinkObservation(entry.observationKey);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const noSpares = allDrives.isSuccess && linkable.length === 0;
   const facts = [o.model, o.driveType, formatBytes(o.capacityBytes)].filter(Boolean).join(' · ');
 
   return (
@@ -79,7 +115,7 @@ export function InboxEntryCard({ entry }: { entry: InboxEntry }) {
           disabled={noSpares}
           onClick={() => setStep({ kind: 'pick' })}
         >
-          Link to a spare
+          Link to a drive
         </Button>
         <Button
           size="compact-md"
@@ -91,21 +127,26 @@ export function InboxEntryCard({ entry }: { entry: InboxEntry }) {
       </div>
       {noSpares ? (
         <Text size="sm" c="dimmed" mt="xs">
-          There are no spares on the shelf to link, so create a new record for this drive.
+          There is no drive record to link this to, so create a new record for it.
         </Text>
       ) : null}
 
       {step?.kind === 'pick' ? (
-        <Modal opened onClose={close} title={`Link ${serial} to a spare`} centered>
+        <Modal opened onClose={close} title={`Link ${serial} to a drive`} centered>
           <Text size="sm" c="dimmed" mb="xs">
-            Spares only. The drive record keeps its history and gains the reported details.
+            Pick the record this drive is, for example one added with the serial on its sticker.
+            Drives that already show live data and retired drives are not listed. The record keeps
+            its history and gains the reported details.
           </Text>
           <SparePicker
-            spares={spares.data ?? []}
+            spares={linkable}
             value={pick}
             onChange={setPick}
-            loading={spares.isPending}
-            label="Spare"
+            loading={allDrives.isPending}
+            label="Drive"
+            statuses={LINKABLE}
+            bayLabels={bayLabels}
+            noun="drives"
           />
           <div className="dialog-actions">
             <Button variant="default" onClick={close}>
@@ -113,7 +154,13 @@ export function InboxEntryCard({ entry }: { entry: InboxEntry }) {
             </Button>
             <Button
               disabled={!pick}
-              onClick={() => pick && setStep({ kind: 'link', driveId: pick })}
+              onClick={() =>
+                pick &&
+                setStep({
+                  kind: chosen(pick)?.status === 'installed' ? 'confirm' : 'link',
+                  driveId: pick,
+                })
+              }
             >
               Next
             </Button>
@@ -125,21 +172,55 @@ export function InboxEntryCard({ entry }: { entry: InboxEntry }) {
         <AssignDialog
           onClose={close}
           placement={{
-            incomingSerial: spares.data?.find((d) => d.id === step.driveId)?.serial ?? serial,
+            incomingSerial: chosen(step.driveId)?.serial ?? serial,
             pending: link.isPending,
             summary: (
               <>
                 Link <strong className="mono">{serial}</strong> to spare{' '}
-                <strong className="mono">
-                  {spares.data?.find((d) => d.id === step.driveId)?.serial ?? '…'}
-                </strong>{' '}
-                and put it in
+                <strong className="mono">{chosen(step.driveId)?.serial ?? '…'}</strong> and put it
+                in
               </>
             ),
             run: (input, cb) => link.mutate({ driveId: step.driveId, ...input }, cb),
           }}
           driveId={step.driveId}
         />
+      ) : null}
+      {step?.kind === 'confirm' ? (
+        <Modal opened onClose={close} title="Link to this drive" centered>
+          <Text size="sm">
+            Link <strong className="mono">{serial}</strong> to{' '}
+            <strong className="mono">{chosen(step.driveId)?.serial ?? '…'}</strong> in{' '}
+            <strong>{bayLabels.get(chosen(step.driveId)?.slotId ?? '') ?? 'its bay'}</strong>. It
+            stays in its bay.
+          </Text>
+          {linkError ? (
+            <Alert color="red" mt="sm">
+              {linkError}
+            </Alert>
+          ) : null}
+          <div className="dialog-actions">
+            <Button variant="default" onClick={close}>
+              Cancel
+            </Button>
+            <Button
+              loading={link.isPending}
+              onClick={() => {
+                setLinkError(null);
+                link.mutate(
+                  { driveId: step.driveId },
+                  {
+                    onSuccess: close,
+                    onError: (e) =>
+                      setLinkError(e instanceof ApiError ? e.message : 'Could not link the drive.'),
+                  },
+                );
+              }}
+            >
+              Link
+            </Button>
+          </div>
+        </Modal>
       ) : null}
       {step?.kind === 'create' ? (
         <AssignDialog

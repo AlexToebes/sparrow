@@ -137,9 +137,11 @@ describe('F8, R18, R47: discovered drive health', () => {
   });
 });
 
-describe('F9: linking a discovered drive to a spare', () => {
+const inboxBody = { entries: [], unidentified: [], retiredCandidates: [], count: 0 };
+
+describe('F9: linking a discovered drive to a drive record', () => {
   it('with no spares, Link is disabled with a hint and Create is the primary action', async () => {
-    mockApi({ '/api/drives?status=spare': [], '/api/status': status() });
+    mockApi({ '/api/drives': [], '/api/inbox': inboxBody, '/api/status': status() });
     renderApp(
       <InboxEntryCard
         entry={{
@@ -149,8 +151,8 @@ describe('F9: linking a discovered drive to a spare', () => {
         }}
       />,
     );
-    const link = await screen.findByRole('button', { name: 'Link to a spare' });
-    await screen.findByText(/no spares on the shelf/i);
+    const link = await screen.findByRole('button', { name: 'Link to a drive' });
+    await screen.findByText(/no drive record to link/i);
     expect(link).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Create new record' })).toBeEnabled();
   });
