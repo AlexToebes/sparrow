@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ZodError } from 'zod';
 import type { Observation } from '@sparrow/shared';
 import { buildApp } from '../src/api/app.js';
-import { assignDrive } from '../src/core/assignment.js';
+import { assignDrive, retireDrive } from '../src/core/assignment.js';
 import { createDrive, getDrive, listDrives } from '../src/core/drives.js';
 import { DomainError } from '../src/core/errors.js';
 import {
@@ -17,7 +17,8 @@ import { matchObservations } from '../src/core/matching.js';
 import type { DriveDataProvider } from '../src/core/provider-port.js';
 import { openDatabase, type OpenedDatabase } from '../src/db/client.js';
 import { createRepositories } from '../src/db/repositories.js';
-import { events } from '../src/db/schema.js';
+import { drives, events } from '../src/db/schema.js';
+import { eq } from 'drizzle-orm';
 import { activitiesOf, eventsOfDrive, lastActivity, shape } from './activity-helpers.js';
 
 const fakeProvider: DriveDataProvider = {
@@ -87,6 +88,7 @@ describe('inbox queries', () => {
       unidentified: [],
       retiredCandidates: [],
       count: 0,
+      matchedDriveIds: [],
     });
   });
 
@@ -383,16 +385,15 @@ describe('resolving an inbox entry (R22, R23)', () => {
     expect(result.occupant?.status).toBe('spare');
   });
 
-  it('rejects linking to a non-spare, a missing drive, or a drive the observation cannot match', () => {
+  it('rejects linking to a missing drive or a drive the observation cannot match', () => {
     const [slot, slot2] = slots();
     const installed = createDrive(db(), { serial: 'INS' });
     assignDrive(db(), { driveId: installed.id, slotId: slot! });
     const other = createDrive(db(), { serial: 'OTHER' });
     snapshot([obs('NEW1'), obs('NEW2', { wwn: '0x9' })]);
-    expect(
-      thrown(() => linkObservation(db(), P, 'NEW1', { driveId: installed.id, slotId: slot2! }))
-        .code,
-    ).toBe('conflict');
+    expect(thrown(() => linkObservation(db(), P, 'NEW1', { driveId: installed.id })).code).toBe(
+      'conflict',
+    );
     expect(
       thrown(() => linkObservation(db(), P, 'NEW1', { driveId: 'nope', slotId: slot2! })).code,
     ).toBe('not-found');
@@ -419,6 +420,138 @@ describe('resolving an inbox entry (R22, R23)', () => {
     expect(thrown(() => createFromObservation(db(), P, 'UNKNOWN', { slotId: slot! })).code).toBe(
       'not-found',
     );
+  });
+});
+
+describe('R22: linking to any drive without live data', () => {
+  /** The owner's case: added with the sticker serial, installed in a bay, the NAS reports "WD-<serial>". */
+  function stickerDrive(extra: Record<string, unknown> = {}) {
+    const [slot] = slots();
+    const d = createDrive(db(), { serial: 'STICK1', ...extra });
+    assignDrive(db(), { driveId: d.id, slotId: slot!, installedOn: '2024-01-01' });
+    return { d, slot: slot! };
+  }
+  const inboxObs = () => obs('WD-STICK1', { wwn: '0xabc', model: 'WD Red', capacityBytes: 4e12 });
+
+  it('links an installed drive: it keeps its bay and date, ONE discovered-linked activity holds only drive-linked', () => {
+    const { d, slot } = stickerDrive();
+    snapshot([inboxObs()]);
+    const before = activitiesOf(db()).length;
+    const result = linkObservation(db(), P, 'WD-STICK1', { driveId: d.id });
+    expect(result.drive).toMatchObject({
+      status: 'installed',
+      slotId: slot,
+      installedOn: '2024-01-01',
+      wwn: '0xabc',
+      model: 'WD Red',
+      capacityBytes: 4e12,
+    });
+    expect(activitiesOf(db())).toHaveLength(before + 1);
+    const act = lastActivity(db());
+    expect(act.kind).toBe('discovered-linked');
+    expect(act.events.map((e) => e.type)).toEqual(['drive-linked']);
+    expect(act.events[0]!.payload).toMatchObject({
+      observationSerial: 'WD-STICK1',
+      filled: { wwn: { from: null, to: '0xabc' }, model: { from: null, to: 'WD Red' } },
+    });
+    expect(getInbox(db(), P).entries).toEqual([]);
+  });
+
+  it('an installed drive refuses placement fields (400), and nothing is applied', () => {
+    const { d } = stickerDrive();
+    snapshot([inboxObs()]);
+    const [, other] = slots();
+    for (const extra of [{ slotId: other! }, { installedOn: '2024-02-02' }, { role: 'data' }]) {
+      const err = thrown(() =>
+        linkObservation(db(), P, 'WD-STICK1', { driveId: d.id, ...extra } as never),
+      );
+      expect(err.code).toBe('invalid');
+    }
+    expect(getDrive(db(), d.id)).toMatchObject({ wwn: null, model: null });
+  });
+
+  it('a spare still needs a slot (400) and is installed there as before', () => {
+    const [slot] = slots();
+    const spare = createDrive(db(), { serial: 'WD-STICK1' });
+    snapshot([inboxObs()]);
+    expect(thrown(() => linkObservation(db(), P, 'WD-STICK1', { driveId: spare.id })).code).toBe(
+      'invalid',
+    );
+    const r = linkObservation(db(), P, 'WD-STICK1', { driveId: spare.id, slotId: slot! });
+    expect(r.drive).toMatchObject({ status: 'installed', slotId: slot });
+    expect(lastActivity(db()).events.map((e) => e.type)).toEqual([
+      'drive-linked',
+      'drive-installed',
+    ]);
+  });
+
+  it('refuses a retired drive (409)', () => {
+    const d = createDrive(db(), { serial: 'STICK1' });
+    retireDrive(db(), d.id, { reason: 'failed' });
+    snapshot([inboxObs()]);
+    const before = eventCount();
+    expect(thrown(() => linkObservation(db(), P, 'WD-STICK1', { driveId: d.id })).code).toBe(
+      'conflict',
+    );
+    expect(eventCount()).toBe(before);
+  });
+
+  it('refuses a drive that already matches another observation, naming its serial (409)', () => {
+    const { d } = stickerDrive();
+    db().update(drives).set({ wwn: '0x1' }).where(eq(drives.id, d.id)).run();
+    snapshot([obs('STICK1', { wwn: '0x1' }), obs('WD-STICK1', { wwn: '0xabc' })]);
+    const before = eventCount();
+    const err = thrown(() => linkObservation(db(), P, 'WD-STICK1', { driveId: d.id }));
+    expect(err.code).toBe('conflict');
+    expect(err.message).toMatch(/already matches the observation STICK1/);
+    expect(eventCount()).toBe(before);
+  });
+
+  it('refuses an installed drive when the observation would stay unmatched (409)', () => {
+    const { d } = stickerDrive();
+    snapshot([obs('WD-STICK1')]); // no WWN to fill, serial differs
+    expect(thrown(() => linkObservation(db(), P, 'WD-STICK1', { driveId: d.id })).code).toBe(
+      'conflict',
+    );
+  });
+
+  it('refuses to copy a WWN another record holds (409)', () => {
+    const { d } = stickerDrive();
+    const holder = createDrive(db(), { serial: 'HOLDER' });
+    db().update(drives).set({ wwn: '0xabc' }).where(eq(drives.id, holder.id)).run();
+    snapshot([inboxObs()]);
+    expect(thrown(() => linkObservation(db(), P, 'WD-STICK1', { driveId: d.id })).code).toBe(
+      'conflict',
+    );
+  });
+
+  it('GET /api/inbox lists the drives that currently match an observation', () => {
+    const { d } = stickerDrive();
+    const free = createDrive(db(), { serial: 'FREE' });
+    snapshot([obs('STICK1'), inboxObs()]);
+    const ids = getInbox(db(), P).matchedDriveIds;
+    expect(ids).toContain(d.id);
+    expect(ids).not.toContain(free.id);
+  });
+
+  it('API: 400 for placement on an installed drive, 409 for a retired one, 200 for the link', async () => {
+    const { d } = stickerDrive();
+    const retired = createDrive(db(), { serial: 'OLD' });
+    retireDrive(db(), retired.id, { reason: 'failed' });
+    snapshot([inboxObs()]);
+    const app = await buildApp({ db: db(), provider: fakeProvider });
+    const url = '/api/inbox/WD-STICK1/link';
+    const bad = await app.inject({
+      method: 'POST',
+      url,
+      payload: { driveId: d.id, slotId: slots()[1] },
+    });
+    expect(bad.statusCode).toBe(400);
+    const gone = await app.inject({ method: 'POST', url, payload: { driveId: retired.id } });
+    expect(gone.statusCode).toBe(409);
+    const ok = await app.inject({ method: 'POST', url, payload: { driveId: d.id } });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().drive).toMatchObject({ id: d.id, wwn: '0xabc' });
   });
 });
 

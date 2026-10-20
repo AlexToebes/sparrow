@@ -38,6 +38,7 @@ export function getInbox(db: AppDb, providerId: string): InboxResponse {
     unidentified: state.unidentified,
     retiredCandidates: state.retiredCandidates.map(toRetiredCandidate),
     count: state.inbox.length,
+    matchedDriveIds: [...state.matchedByDriveId.keys()],
   };
 }
 
@@ -111,7 +112,11 @@ function createDriveFromObservation(
   }
 }
 
-const placementOf = (input: LinkObservationInput | CreateFromObservationInput) => ({
+const PLACEMENT_FIELDS = ['slotId', 'poolId', 'role', 'occupant', 'installedOn'] as const;
+
+type Placed = CreateFromObservationInput | (LinkObservationInput & { slotId: string });
+
+const placementOf = (input: Placed) => ({
   slotId: input.slotId,
   poolId: input.poolId,
   role: input.role,
@@ -121,8 +126,11 @@ const placementOf = (input: LinkObservationInput | CreateFromObservationInput) =
 });
 
 /**
- * Links an inbox observation to an existing spare, fills what the spare lacks, logs drive-linked
- * and installs it into the chosen slot (R22, R23, R25).
+ * Links an inbox observation to an existing drive record (R22, R25): a spare, which is then
+ * installed into the chosen slot (R23, placement required), or an installed drive, which keeps its
+ * bay, pool, role and date (placement refused, 400). Retired drives and drives that already match
+ * an observation are refused (409). Fills what the record lacks and logs ONE discovered-linked
+ * activity (drive-linked, plus the install events for a spare).
  */
 export function linkObservation(
   db: AppDb,
@@ -135,8 +143,28 @@ export function linkObservation(
     const found = tx.select().from(drives).where(eq(drives.id, input.driveId)).get();
     if (!found) throw notFound(`Drive ${input.driveId} not found`);
     const drive = getDrive(tx, found.id);
-    if (drive.status !== 'spare') {
-      throw conflict(`Drive ${drive.id} is ${drive.status}; only a spare can be linked`);
+    if (drive.status === 'retired') {
+      throw conflict(`Drive ${drive.serial} is retired; a retired drive cannot be linked`, {
+        driveId: drive.id,
+      });
+    }
+    const given = PLACEMENT_FIELDS.filter((f) => input[f] !== undefined);
+    if (drive.status === 'installed' && given.length > 0) {
+      throw invalid(
+        `Drive ${drive.serial} is installed and stays where it is; remove ${given.join(', ')} from the request`,
+      );
+    }
+    if (drive.status === 'spare' && input.slotId === undefined) {
+      throw invalid(`Drive ${drive.serial} is a spare; slotId is required to install it`);
+    }
+    // R2: a record that already matches an observation (serial, then WWN) has live data of its own.
+    // The one allowed match is a spare matching THIS observation (the R25 suggestion).
+    const current = getMatchState(db, providerId).matchedByDriveId.get(drive.id);
+    if (current && observationKeyOf(current.observation) !== entry.observationKey) {
+      throw conflict(
+        `Drive ${drive.serial} already matches the observation ${current.observation.serial ?? ''}; only a drive without live data can be linked`,
+        { driveId: drive.id },
+      );
     }
     const filled = missingFrom(drive, entry.observation);
     const linked: Drive = { ...drive, ...filled };
@@ -187,7 +215,22 @@ export function linkObservation(
         },
       },
     ];
-    return placeAndRecord(tx, 'discovered-linked', drive.id, input, evs);
+    if (drive.status === 'installed') {
+      // Nothing moves: the activity holds the drive-linked event alone.
+      recordActivity(tx, {
+        kind: 'discovered-linked',
+        occurredOn: installedOnOf(undefined, new Date()),
+        events: evs,
+      });
+      return { drive: getDrive(tx, drive.id) };
+    }
+    return placeAndRecord(
+      tx,
+      'discovered-linked',
+      drive.id,
+      { ...input, slotId: input.slotId! },
+      evs,
+    );
   });
 }
 
@@ -196,7 +239,7 @@ function placeAndRecord(
   tx: DbTransaction,
   kind: 'discovered-linked' | 'discovered-created',
   driveId: string,
-  input: LinkObservationInput | CreateFromObservationInput,
+  input: Placed,
   evs: EventInput[],
 ): AssignDriveResult {
   const placement = placementOf(input);

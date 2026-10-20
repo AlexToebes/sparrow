@@ -172,6 +172,17 @@ function runScenario(): { states: ReturnType<typeof plain>[]; counts: number[] }
     }),
   ); // discovered-created
   step(() => importRetired(db(), P, { items: [{ observationKey: 'DEAD-1', reason: 'other' }] })); // retired-imported
+  step(() => {
+    // R22: an installed drive added by its sticker serial is linked to the NAS's "WD-" serial; it
+    // stays in its bay, so the activity holds the drive-linked event alone.
+    ids.g = createDrive(db(), { serial: 'G' }).id;
+    assignDrive(db(), { driveId: ids.g, slotId: s[6]!, installedOn: '2024-06-06' });
+    snapshot([
+      obs('WD-G', { wwn: '0x77', model: 'Sticker' }),
+      obs('A-1', { model: 'M1-renamed', capacityBytes: 4e12 }),
+    ]);
+    linkObservation(db(), P, 'WD-G', { driveId: ids.g });
+  }); // discovered-linked (installed drive)
   step(() => applySuggestions(db(), P, ids.a!, ['model'])); // suggestions-applied
   step(() => {
     // The provider now reports a different model for F: a "differs" suggestion, which is dismissed.

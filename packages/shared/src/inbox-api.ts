@@ -26,8 +26,17 @@ const placement = {
   installedOn: installedOnSchema.optional(),
 };
 
-/** POST /api/inbox/:key/link. Links the observation to an existing spare and installs it. */
-export const linkObservationInputSchema = z.strictObject({ driveId: idSchema, ...placement });
+/**
+ * POST /api/inbox/:key/link (R22). Links the observation to a drive record that is not retired and
+ * does not already match an observation. The placement fields depend on the record's status, which
+ * only the server knows: for a spare `slotId` is required (it is installed there, R23); for an
+ * installed drive no placement field may be sent (400), it keeps its bay, pool, role and date.
+ */
+export const linkObservationInputSchema = z.strictObject({
+  driveId: idSchema,
+  ...placement,
+  slotId: idSchema.optional(),
+});
 export type LinkObservationInput = z.infer<typeof linkObservationInputSchema>;
 
 /** POST /api/inbox/:key/create. R11 fields the observation cannot supply may be given too. */
@@ -86,5 +95,10 @@ export const inboxResponseSchema = z.object({
   unidentified: z.array(observationSchema),
   retiredCandidates: z.array(retiredCandidateSchema),
   count: z.number().int().min(0),
+  /**
+   * R22: ids of the drive records that currently match an observation (R2). The "Link to a drive"
+   * picker does not offer them. Computed on every read, never stored (R54).
+   */
+  matchedDriveIds: z.array(idSchema).default([]),
 });
 export type InboxResponse = z.infer<typeof inboxResponseSchema>;
