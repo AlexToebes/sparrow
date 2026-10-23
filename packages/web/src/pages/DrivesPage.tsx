@@ -3,6 +3,8 @@ import {
   Alert,
   Badge,
   Button,
+  ActionIcon,
+  Select,
   SegmentedControl,
   Skeleton,
   Table,
@@ -16,7 +18,16 @@ import type { Drive, DriveStatus, SlotStatus } from '@sparrow/shared';
 import { useDrives, useInbox, useLayout, useSlotStatus, useSuggestionSummary } from '../api/hooks';
 import { DriveDetail } from '../components/DriveDetail';
 import { DriveFormDialog } from '../components/DriveFormDialog';
-import { InboxIcon, PlusIcon, UpdateIcon } from '../components/icons';
+import { ArrowDownIcon, ArrowUpIcon, InboxIcon, PlusIcon, UpdateIcon } from '../components/icons';
+import {
+  DEFAULT_SORT,
+  nextSort,
+  parseSort,
+  slotRanks,
+  sortDrives,
+  type SortKey,
+  type SortState,
+} from '../lib/driveSort';
 import { formatBytes } from '../lib/format';
 import { HEALTH_WORD, slotLabel } from '../lib/health';
 import { StateIcon } from '../components/SlotTile';
@@ -43,6 +54,42 @@ export function matchesSearch(d: Drive, query: string): boolean {
     d.serial.toLowerCase().includes(q) ||
     (squash(q) !== '' && d.serialNormalized.includes(squash(q))) ||
     (d.model ?? '').toLowerCase().includes(q)
+  );
+}
+
+const SORT_LABEL: Record<SortKey, string> = {
+  serial: 'Serial',
+  model: 'Model',
+  capacity: 'Capacity',
+  status: 'Status',
+  where: 'Where',
+  health: 'Health',
+};
+
+/** A column header that sorts: icon plus aria-sort show the direction, never color alone. */
+function SortHeader({
+  col,
+  sort,
+  onSort,
+}: {
+  col: SortKey;
+  sort: SortState;
+  onSort: (key: SortKey) => void;
+}) {
+  const active = sort.key === col;
+  return (
+    <Table.Th aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      <button type="button" className="sort-button" onClick={() => onSort(col)}>
+        {SORT_LABEL[col]}
+        {active ? (
+          sort.dir === 'asc' ? (
+            <ArrowUpIcon size={14} />
+          ) : (
+            <ArrowDownIcon size={14} />
+          )
+        ) : null}
+      </button>
+    </Table.Th>
   );
 }
 
@@ -121,6 +168,25 @@ export function DrivesPage() {
       },
       { replace: true },
     );
+  // The sort lives in the URL too (?sort=capacity&dir=desc); the default (serial, ascending) is omitted.
+  const sort = parseSort(params.get('sort'), params.get('dir'));
+  const setSort = (s: SortState) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (s.key === DEFAULT_SORT.key && s.dir === DEFAULT_SORT.dir) {
+          next.delete('sort');
+          next.delete('dir');
+        } else {
+          next.set('sort', s.key);
+          next.set('dir', s.dir);
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  const onSort = (key: SortKey) => setSort(nextSort(sort, key));
+  const ranks = useMemo(() => slotRanks(layout.data), [layout.data]);
   const [search, setSearch] = useState('');
   // The open drive lives in the URL too (/drives?drive=ID), so the Inbox can link to a drive.
   const selectedId = params.get('drive');
@@ -151,10 +217,11 @@ export function DrivesPage() {
     installed: all.filter((d) => d.status === 'installed').length,
     retired: all.filter((d) => d.status === 'retired').length,
   };
-  const shown = all
-    .filter((d) => filter === 'all' || d.status === filter)
-    .filter((d) => matchesSearch(d, search))
-    .sort((a, b) => a.serial.localeCompare(b.serial));
+  const shown = sortDrives(
+    all.filter((d) => (filter === 'all' || d.status === filter) && matchesSearch(d, search)),
+    sort,
+    { ranks, statusBySlot },
+  );
   const selected = selectedId ? (all.find((d) => d.id === selectedId) ?? null) : null;
   const whereOf = (d: Drive) =>
     d.status === 'installed' && d.slotId
@@ -218,6 +285,31 @@ export function DrivesPage() {
           value={search}
           onChange={(e) => setSearch(e.currentTarget.value)}
         />
+        {phone ? (
+          <div className="sort-row">
+            <Select
+              className="toolbar-grow"
+              aria-label="Sort by"
+              allowDeselect={false}
+              data={(Object.keys(SORT_LABEL) as SortKey[]).map((k) => ({
+                value: k,
+                label: `Sort: ${SORT_LABEL[k]}`,
+              }))}
+              value={sort.key}
+              onChange={(v) => v && setSort({ key: v as SortKey, dir: sort.dir })}
+            />
+            <ActionIcon
+              variant="default"
+              size="lg"
+              aria-label={
+                sort.dir === 'asc' ? 'Ascending, tap to reverse' : 'Descending, tap to reverse'
+              }
+              onClick={() => setSort({ key: sort.key, dir: sort.dir === 'asc' ? 'desc' : 'asc' })}
+            >
+              {sort.dir === 'asc' ? <ArrowUpIcon /> : <ArrowDownIcon />}
+            </ActionIcon>
+          </div>
+        ) : null}
       </div>
 
       {drives.isPending ? <Skeleton height={200} radius="lg" aria-label="Loading drives" /> : null}
@@ -276,12 +368,9 @@ export function DrivesPage() {
               <Table verticalSpacing="xs" horizontalSpacing="sm">
                 <Table.Thead>
                   <Table.Tr>
-                    <Table.Th>Serial</Table.Th>
-                    <Table.Th>Model</Table.Th>
-                    <Table.Th>Capacity</Table.Th>
-                    <Table.Th>Status</Table.Th>
-                    <Table.Th>Where</Table.Th>
-                    <Table.Th>Health</Table.Th>
+                    {(Object.keys(SORT_LABEL) as SortKey[]).map((c) => (
+                      <SortHeader key={c} col={c} sort={sort} onSort={onSort} />
+                    ))}
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>

@@ -1,21 +1,24 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button, Drawer, Table, Text } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { Link } from 'react-router';
 import type { Drive } from '@sparrow/shared';
+import { sortSpares } from '../lib/driveSort';
 import { formatBytes } from '../lib/format';
 import { AssignDialog } from './AssignDialog';
 import { DriveDetail } from './DriveDetail';
 
 /** Spares on the shelf (from C). Each row has an Assign action. */
 export function SparesShelf({
-  spares,
+  spares: unsorted,
   retiredCount = 0,
 }: {
   spares: Drive[];
   /** Shown as a link to the Drives page filtered to retired drives. */
   retiredCount?: number;
 }) {
+  // Largest first, then shelf location, then serial (the server's order is by serial only).
+  const spares = useMemo(() => sortSpares(unsorted), [unsorted]);
   const phone = useMediaQuery('(max-width: 48em)') ?? false;
   const [assigning, setAssigning] = useState<string | null>(null);
   // A row opens the drive's detail drawer, with its history; Assign stays its own button.

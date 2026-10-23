@@ -1568,3 +1568,26 @@ body {
 :root[data-mantine-color-scheme='dark'] .brand-mark {
   color: var(--mantine-color-indigo-3);
 }
+
+/* Sortable table headers and the phone sort row (direction is an icon plus aria-sort) */
+.sort-button {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sort-button:hover {
+  text-decoration: underline;
+}
+.sort-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
