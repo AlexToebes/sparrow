@@ -2,7 +2,7 @@
 # R66: multi-stage, non-root, listens on PORT, data in the /data volume.
 
 # ---- build: all workspaces, compile shared + server, bundle the web UI -------------------------
-FROM node:24.21.0-slim AS build
+FROM node:26.11.1-slim AS build
 WORKDIR /repo
 
 # Install the pnpm version pinned in package.json ("packageManager"), so there is one source of truth.
@@ -27,7 +27,7 @@ RUN find packages/web/dist -name '*.map' -delete
 RUN pnpm --filter @sparrow/server deploy --prod /out
 
 # ---- runtime: production dependencies only ------------------------------------------------------
-FROM node:24.21.0-slim AS runtime
+FROM node:26.11.1-slim AS runtime
 # Build info shown by /api/health and Settings (the version comes from package.json). CI passes the commit.
 ARG GIT_COMMIT=unknown
 ENV GIT_COMMIT=$GIT_COMMIT \
