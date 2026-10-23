@@ -250,6 +250,9 @@ Backend steps 2 to 10 expose their behavior through API routes as they go, so th
 - [x] **Post-MVP 21: Versioning and build info**
   - What changed: all package versions are 1.0.0 (releases are hand-pushed `vX.Y.Z` tags, owner decision 2026-10-23). `server/src/build-info.ts` reads the version from the server `package.json` and the commit from `GIT_COMMIT` (default `unknown`, no git calls). The Dockerfile takes `ARG GIT_COMMIT` into an env var in the runtime stage and `build.yml` passes `github.sha`. `GET /api/health` now returns `{ status, version, commit }` (shared `healthResponseSchema`); startup logs both; Settings has an About card ("Sparrow 1.0.0 · commit 4f9feb7"). README has a "Versions and upgrades" section.
   - Done when: a server test covers version, commit from env and the default; a web test covers the About line. No schema change.
+- [x] **Post-MVP 22: Drive sorting and spares order**
+  - What changed: owner decision 2026-10-23. Web only (`lib/driveSort.ts`, no server, schema or dependency change). The Drives page columns sort (header buttons with arrow icon and `aria-sort`; a phone "Sort by" select and direction button; state in `?sort=&dir=`): capacity numeric with unknown last, status installed/spare/retired, where by layout grid then bay position (spares by location), health by severity, natural case-insensitive text, serial as tie-break; default serial ascending. The Layout spares shelf is ordered by capacity (largest first), shelf location, serial.
+  - Done when: unit tests cover capacity unknowns, natural order, where, health, status and ties for both helpers; web tests cover header clicks and `aria-sort`, the URL state, the phone control and the shelf order.
 
 ## Parking lot (not in the MVP)
 
@@ -265,6 +268,7 @@ Copy from `REQUIREMENTS.md` section 6 and add new ideas here. Do not build these
 
 Short, dated notes from each session (surprises, decisions, deviations). Newest first.
 
+- 2026-10-23, Post-MVP 22 (sorting): the default serial order is now natural and case-insensitive (`A9` before `a10`) instead of `localeCompare`, so it matches the other text columns. Descending keeps unknown values (no capacity, no location, retired in Where) last, so only known values flip.
 - 2026-10-23, Post-MVP 21 (versioning): no schema or dependency change. The version lives only in package.json files (root and packages bumped together by hand at release time); the server reads its own at startup. Docker could not be run here (no daemon), so the image build was checked by reading only.
 - 2026-10-23, production: the owner deployed Sparrow on the real NAS and declared it in production. From now on the database is never wiped: existing migrations (including the baseline `0000_*` and its snapshot) are never edited, and every schema change is a new numbered migration with a data backfill, tested by migrating a database created at the previous migration (rule added to `AGENTS.md`; README no longer says pre-release). Step 16 stays unticked: its "done when" (live health on the real layout, export/import round trip on real data) was not verified in this session, so the owner should tick it.
 - 2026-10-23, Post-MVP 20 (linking takes over the reported serial, R22): no schema or dependency change. A serial longer than the 100-character record limit cannot be taken over and fails as a plain error (500), like create-from-observation. Supersedes the Post-MVP 19 note that a differing serial without a WWN gives 409 "would stay unmatched": that case now links and renames the record.

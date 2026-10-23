@@ -52,7 +52,14 @@ material, not code to copy: build with Mantine components, the shared zod types 
 ## From C (`c-ops`)
 - **Spares shelf**: below the grids on the Layout page, a compact list/table of spares (serial, model,
   capacity, condition, location) with an "Assign" action — makes replacing a failed drive one screen.
+- The shelf is ordered in the web: capacity largest first (unknown last), then shelf location (missing last), then serial.
 - Monospace for serials and numbers. Keyboard shortcuts go to the parking lot.
+
+## Drive sorting
+- Drives page: every column header (Serial, Model, Capacity, Status, Where, Health) is a button that sorts; a second click reverses. The sorted column shows an up or down arrow and `aria-sort` on its `th` (never color alone). Default is serial ascending; capacity's first click is largest first.
+- Orders: capacity numeric, unknown always last (both directions); status installed, spare, retired; where = installed drives in the layout's grid then bay position (not the label), then spares by shelf location, retired last; health by severity (failed, missing, warning, ok, no data), non-installed last; text is case-insensitive natural order ("Bay 2" before "Bay 10"). Ties fall back to the serial.
+- On a phone the list is cards without headers, so the toolbar gets a "Sort by" select (`Sort: Capacity`) and a direction button (arrow icon, label "Ascending/Descending, tap to reverse").
+- The choice lives in the URL (`?sort=capacity&dir=desc`, omitted for the default) beside `status` and `drive`.
 
 ## Choosing a slot (R70)
 - Never offer a slot in a dropdown. Any flow that needs a slot shows the bay grids with `SlotPicker`: it renders
