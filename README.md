@@ -107,6 +107,18 @@ A GitHub Actions workflow (`.github/workflows/build.yml`) runs lint, type checks
 
 Images are published to `ghcr.io/alextoebes/sparrow`. Use `latest` to follow `main`, or a `sha-<short commit>` tag (for example `sha-250db1a`) to pin a specific build.
 
+## Versions and upgrades
+
+Sparrow uses [semantic versioning](https://semver.org). A release is made by pushing a git tag `vX.Y.Z`.
+
+- **Patch** (1.0.1): fixes only.
+- **Minor** (1.1.0): new features, no action needed.
+- **Major** (2.0.0): breaking changes to the data or the export format. Read the release notes first and take an export before upgrading.
+
+Image tags: `:1.0.0` (an exact release), `:1.0` (the latest 1.0.x patch), `:latest` (the newest build of `main`, not necessarily a release) and `:sha-xxxxxxx` (one exact build). For a NAS, pin your compose file to `:1.0` (or a full version such as `:1.0.0`) and upgrade deliberately by changing the tag, rather than following `:latest`.
+
+Settings > About shows the running version and the commit it was built from, for example "Sparrow 1.0.0 · commit 4f9feb7". Database migrations run at startup and upgrade the database in place, so an upgrade is: change the tag, pull, restart. Downgrading is not supported; restore an export or a copy of `/data` instead.
+
 ## Development
 
 Requirements: Node.js 22.12 or newer (the image uses Node 24) and pnpm (the version is pinned in `package.json`; `corepack enable` picks it up).
