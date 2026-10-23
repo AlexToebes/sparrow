@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import {
+  healthResponseSchema,
   type CreateEnclosureInput,
   type CreateGridInput,
   type UpdateGridInput,
@@ -26,6 +27,10 @@ export type ImportResult = z.infer<typeof importResultSchema>;
 
 export const useConfig = () =>
   useQuery({ queryKey: ['config'], queryFn: () => apiGet('/api/config', configInfoSchema) });
+
+/** GET /api/health: version and commit of the running build. */
+export const useHealth = () =>
+  useQuery({ queryKey: ['health'], queryFn: () => apiGet('/api/health', healthResponseSchema) });
 
 const anything = z.unknown();
 

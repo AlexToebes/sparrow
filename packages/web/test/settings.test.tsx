@@ -42,6 +42,9 @@ function mock(extra: Record<string, Handler> = {}) {
   const base: Record<string, Handler> = {
     'GET /api/layout': () => ({ body: layout() }),
     'GET /api/drives': () => ({ body: [makeDrive({ id: 'd0', serial: 'SER-0', slotId: 's0' })] }),
+    'GET /api/health': () => ({
+      body: { status: 'ok', version: '1.0.0', commit: '4f9feb7a1b2c3d4e' },
+    }),
     'GET /api/inbox': () => ({ body: { count: 0, items: [] } }),
     'GET /api/provider/status': () => ({
       body: {
@@ -258,6 +261,26 @@ describe('R38, R40: layout editor', () => {
         orientation: 'landscape',
       }),
     );
+  });
+});
+
+describe('versioning: About', () => {
+  it('shows the version and the short commit', async () => {
+    mock();
+    renderApp(<App />, '/settings');
+    const about = await screen.findByRole('region', { name: 'About' });
+    await waitFor(() => expect(about).toHaveTextContent('Sparrow 1.0.0 · commit 4f9feb7'));
+    expect(about).not.toHaveTextContent('4f9feb7a');
+  });
+
+  it('leaves out the commit when it is unknown', async () => {
+    mock({
+      'GET /api/health': () => ({ body: { status: 'ok', version: '1.0.0', commit: 'unknown' } }),
+    });
+    renderApp(<App />, '/settings');
+    const about = await screen.findByRole('region', { name: 'About' });
+    await waitFor(() => expect(about).toHaveTextContent('Sparrow 1.0.0'));
+    expect(about).not.toHaveTextContent('commit');
   });
 });
 

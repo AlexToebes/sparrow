@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadBuildInfo } from './build-info.js';
 import { buildApp } from './api/app.js';
 import { loadConfig } from './config.js';
 import { createPoller } from './core/poller.js';
@@ -13,10 +14,12 @@ export const SERVICE_NAME = 'sparrow-server';
 
 export async function start(env: Record<string, string | undefined> = process.env) {
   const config = loadConfig(env);
+  const buildInfo = loadBuildInfo(env);
   const { db } = openDataDatabase(config.DATA_DIR);
   const provider = createProvider(config.PROVIDER, env);
   const app = buildApp({
     db,
+    buildInfo,
     provider,
     staleAfterHours: config.STALE_AFTER_HOURS,
     pollIntervalMinutes: config.POLL_INTERVAL_MINUTES,
@@ -34,6 +37,7 @@ export async function start(env: Record<string, string | undefined> = process.en
   });
   app.addHook('onClose', async () => poller.stop());
   await app.listen({ port: config.PORT, host: config.HOST });
+  app.log.info(`Sparrow ${buildInfo.version} (commit ${buildInfo.commit})`);
   poller.start();
   return app;
 }

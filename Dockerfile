@@ -28,7 +28,10 @@ RUN pnpm --filter @sparrow/server deploy --prod /out
 
 # ---- runtime: production dependencies only ------------------------------------------------------
 FROM node:24.21.0-slim AS runtime
-ENV NODE_ENV=production \
+# Build info shown by /api/health and Settings (the version comes from package.json). CI passes the commit.
+ARG GIT_COMMIT=unknown
+ENV GIT_COMMIT=$GIT_COMMIT \
+    NODE_ENV=production \
     PORT=3000 \
     DATA_DIR=/data \
     WEB_DIST_DIR=/app/web

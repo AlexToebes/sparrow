@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { AboutSection } from '../components/AboutSection';
 import { BackupSection } from '../components/BackupSection';
 import { ConfigSection } from '../components/ConfigSection';
 import { LayoutEditor } from '../components/LayoutEditor';
@@ -13,6 +14,7 @@ export function SettingsPage() {
       <LayoutEditor />
       <BackupSection />
       <ConfigSection />
+      <AboutSection />
     </>
   );
 }

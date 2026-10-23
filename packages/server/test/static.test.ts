@@ -51,7 +51,7 @@ describe('R16: serving the web bundle', () => {
 
     const health = await app.inject('/api/health');
     expect(health.statusCode).toBe(200);
-    expect(health.json()).toEqual({ status: 'ok' });
+    expect(health.json()).toMatchObject({ status: 'ok' });
     await app.close();
   });
 

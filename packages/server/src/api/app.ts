@@ -1,6 +1,7 @@
 import path from 'node:path';
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply } from 'fastify';
 import { ZodError } from 'zod';
+import { loadBuildInfo, type BuildInfo } from '../build-info.js';
 import { DomainError } from '../core/errors.js';
 import { defaultStaleAfterHours } from '../core/health-status.js';
 import type { DriveDataProvider } from '../core/provider-port.js';
@@ -11,6 +12,8 @@ import { isClientRoute, registerWebBundle } from './static.js';
 
 export interface AppDeps {
   db: AppDb;
+  /** Reported by GET /api/health. Defaults to the package version with commit "unknown". */
+  buildInfo?: BuildInfo | undefined;
   /** Active provider (defaults to the none adapter); used by the status route. */
   provider?: DriveDataProvider;
   /** R28: stale threshold in hours. Defaults to 1.5 x the provider's update interval. */
@@ -136,7 +139,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   });
 
   // R67: liveness only. Must never touch a provider.
-  app.get('/api/health', async () => ({ status: 'ok' }));
+  const buildInfo = deps.buildInfo ?? loadBuildInfo({});
+  app.get('/api/health', async () => ({ status: 'ok', ...buildInfo }));
 
   for (const register of routeModules) {
     app.register(register, { db: deps.db });

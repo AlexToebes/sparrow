@@ -35,6 +35,15 @@ export const statusResponseSchema = z.object({
 });
 export type StatusResponse = z.infer<typeof statusResponseSchema>;
 
+/** GET /api/health: liveness (R67) plus the build info (version from package.json, commit from the image build). */
+export const healthResponseSchema = z.object({
+  status: z.literal('ok'),
+  version: z.string().min(1),
+  /** Commit the image was built from; "unknown" outside a CI image build. */
+  commit: z.string().min(1),
+});
+export type HealthResponse = z.infer<typeof healthResponseSchema>;
+
 /** GET /api/provider/status (R19, R56). `capabilities` is the provider's own flags, shown as-is. */
 export const providerStatusSchema = z.object({
   providerId: idSchema,
