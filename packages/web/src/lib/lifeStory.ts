@@ -152,6 +152,20 @@ function poolText(e: ActivityEvent | undefined): string | null {
   return role ? `${name} (${role})` : name;
 }
 
+/** R22: the serial a link replaced, from the drive-linked event's `filled.serial`. */
+export function linkedSerialChange(
+  e: ActivityEvent | undefined,
+): { from: string; to: string } | null {
+  const filled = e?.payload.filled;
+  const change =
+    typeof filled === 'object' && filled !== null
+      ? (filled as Record<string, { from?: unknown; to?: unknown }>).serial
+      : undefined;
+  const from = str(change?.from);
+  const to = str(change?.to);
+  return from && to ? { from, to } : null;
+}
+
 const join = (...parts: (string | null)[]): string | null =>
   parts.filter(Boolean).join(' · ') || null;
 
@@ -315,10 +329,15 @@ function describe(s: Side): { title: string; detail: string | null } {
       };
     }
     case 'discovered-linked': {
+      const serial = linkedSerialChange(s.linked);
       const placed = s.installed ? describeSlotChange(s) : null;
       return {
         title: join('Linked to a drive in the NAS', placed ? lowerFirst(placed.title) : null)!,
-        detail: join(str(s.linked?.payload.observationSerial), placed?.detail ?? null),
+        detail: join(
+          str(s.linked?.payload.observationSerial),
+          serial && `serial ${serial.from} → ${serial.to}`,
+          placed?.detail ?? null,
+        ),
       };
     }
     case 'retired-imported': {

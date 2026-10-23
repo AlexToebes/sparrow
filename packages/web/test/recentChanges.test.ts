@@ -225,6 +225,16 @@ describe('R75: neutral wording of the recent changes feed', () => {
     expect(parts).toContainEqual({ text: 'Front bays, 3', to: '/?slot=s3&view=slot' });
   });
 
+  it('R22: a link that took over the serial says "serial X → Y"', () => {
+    const a = act('discovered-linked', R, null, [
+      ev('drive-linked', {
+        drive: d('d1', 'WD-ZL1'),
+        payload: { filled: { serial: { from: 'ZL1', to: 'WD-ZL1' } } },
+      }),
+    ]);
+    expect(feedItem(a).text).toBe('WD-ZL1 linked to a drive in the NAS (serial ZL1 → WD-ZL1)');
+  });
+
   it('R75: a Move to another bay with a spare taking the vacated bay reads as one sentence each', () => {
     const a = act('moved', R, null, [
       ev('drive-uninstalled', { drive: d('d1', 'ZL1'), slot: bayAt('1') }),

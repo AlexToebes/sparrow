@@ -1,7 +1,7 @@
 import type { Activity, ActivityEvent, ActivityKind, Health } from '@sparrow/shared';
 import { formatBytes, formatDate } from './format';
 import { formatGridSize } from './grid';
-import { HEALTH_SHORT, healthOf } from './lifeStory';
+import { HEALTH_SHORT, healthOf, linkedSerialChange } from './lifeStory';
 import { FIELD_LABEL } from './suggestions';
 
 // R75: the enclosure-wide feed of recent changes. One plain-language sentence per ACTIVITY, written from a
@@ -349,8 +349,17 @@ function describeDrive(a: Activity): Part[] {
         sentence(drive(first, true), ' found in the NAS and added'),
         placedText,
       ]);
-    case 'discovered-linked':
-      return joinSentences([sentence(drive(first), ' linked to a drive in the NAS'), placedText]);
+    case 'discovered-linked': {
+      const serial = linkedSerialChange(ofType(a, 'drive-linked')[0]);
+      return joinSentences([
+        sentence(
+          drive(first),
+          ' linked to a drive in the NAS',
+          serial && ` (serial ${serial.from} → ${serial.to})`,
+        ),
+        placedText,
+      ]);
+    }
     case 'retired-imported': {
       const reason = str(ofType(a, 'drive-retired')[0]?.payload.reason);
       return sentence(drive(first, true), ' imported as retired', reason ? ` (${reason})` : '');

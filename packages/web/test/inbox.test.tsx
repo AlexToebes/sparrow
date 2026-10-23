@@ -194,6 +194,8 @@ describe('Inbox (R22, R23, R25, R58)', () => {
     await userEvent.click(within(pickDlg).getByRole('button', { name: 'Next' }));
     const dlg = await screen.findByRole('dialog', { name: 'Assign to a slot' });
     expect(within(dlg).getByText(/Step 1 of 3 · Choose the slot/)).toBeInTheDocument();
+    // R22 (2026-10-23): the spare's serial becomes the reported one, and the summary says so.
+    expect(dlg).toHaveTextContent('Serial SPARE1 becomes NEW-1.');
     await pickSlot(within(dlg), /Bay 2, empty/);
     await next(within(dlg));
     await waitFor(() => expect(field(within(dlg), 'Pool')).toHaveValue('tank · raidz2'));
@@ -240,6 +242,8 @@ describe('Inbox (R22, R23, R25, R58)', () => {
     const confirm = await screen.findByRole('dialog', { name: 'Link to this drive' });
     expect(confirm).toHaveTextContent('Link WD-AAA0 to AAA0 in Front bays · Bay 1');
     expect(confirm).toHaveTextContent('It stays in its bay');
+    // R22 (2026-10-23): the confirm says the serial changes.
+    expect(confirm).toHaveTextContent('Serial AAA0 becomes WD-AAA0.');
     expect(screen.queryByRole('dialog', { name: 'Assign to a slot' })).toBeNull();
     expect(posts(calls, '/api/inbox/WD-AAA0/link')).toHaveLength(0);
     await userEvent.click(within(confirm).getByRole('button', { name: 'Link' }));

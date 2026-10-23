@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Alert, Badge, Button, Modal, Text } from '@mantine/core';
-import type { InboxEntry } from '@sparrow/shared';
+import { normalizeSerial, type InboxEntry } from '@sparrow/shared';
 import { useCreateFromObservation, useLinkObservation } from '../api/inboxMutations';
 import { ApiError } from '../api/client';
 import { useDrives, useInbox, useLayout, useSlotStatus } from '../api/hooks';
@@ -60,6 +60,17 @@ export function InboxEntryCard({ entry }: { entry: InboxEntry }) {
     [layout.data],
   );
   const chosen = (id: string) => allDrives.data?.find((d) => d.id === id);
+  // R22 (2026-10-23): linking takes over the reported serial when it differs from the record's.
+  const reportedSerial = serial.trim();
+  const serialNote = (driveId: string) => {
+    const current = chosen(driveId)?.serial;
+    return current && normalizeSerial(current) !== normalizeSerial(reportedSerial) ? (
+      <>
+        Serial <strong className="mono">{current}</strong> becomes{' '}
+        <strong className="mono">{reportedSerial}</strong>.{' '}
+      </>
+    ) : null;
+  };
   const link = useLinkObservation(entry.observationKey);
   const [linkError, setLinkError] = useState<string | null>(null);
   const noSpares = allDrives.isSuccess && linkable.length === 0;
@@ -136,7 +147,7 @@ export function InboxEntryCard({ entry }: { entry: InboxEntry }) {
           <Text size="sm" c="dimmed" mb="xs">
             Pick the record this drive is, for example one added with the serial on its sticker.
             Drives that already show live data and retired drives are not listed. The record keeps
-            its history and gains the reported details.
+            its history, gains the reported details and takes over the serial the NAS reports.
           </Text>
           <SparePicker
             spares={linkable}
@@ -176,7 +187,7 @@ export function InboxEntryCard({ entry }: { entry: InboxEntry }) {
             pending: link.isPending,
             summary: (
               <>
-                Link <strong className="mono">{serial}</strong> to spare{' '}
+                {serialNote(step.driveId)}Link <strong className="mono">{serial}</strong> to spare{' '}
                 <strong className="mono">{chosen(step.driveId)?.serial ?? '…'}</strong> and put it
                 in
               </>
@@ -194,6 +205,11 @@ export function InboxEntryCard({ entry }: { entry: InboxEntry }) {
             <strong>{bayLabels.get(chosen(step.driveId)?.slotId ?? '') ?? 'its bay'}</strong>. It
             stays in its bay.
           </Text>
+          {serialNote(step.driveId) ? (
+            <Text size="sm" mt="xs">
+              {serialNote(step.driveId)}
+            </Text>
+          ) : null}
           {linkError ? (
             <Alert color="red" mt="sm">
               {linkError}

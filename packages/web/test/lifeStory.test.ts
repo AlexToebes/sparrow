@@ -610,6 +610,22 @@ describe('life story of discovered drives, suggestions and pool changes', () => 
     });
   });
 
+  it('R22: a link that took over the serial says "serial X → Y"', () => {
+    const linked = act('discovered-linked', '2026-10-11T09:00:00.000Z', null, [
+      ev('drive-linked', {
+        drive: d1(),
+        payload: {
+          observationSerial: 'WD-ZL1',
+          filled: { serial: { from: 'ZL1', to: 'WD-ZL1' } },
+        },
+      }),
+    ]);
+    expect(buildStory([linked])[0]).toMatchObject({
+      title: 'Linked to a drive in the NAS',
+      detail: 'WD-ZL1 · serial ZL1 → WD-ZL1',
+    });
+  });
+
   it('R72: applied, dismissed and restored suggestions use our labels, one entry per activity', () => {
     const applied = act('suggestions-applied', '2026-10-11T09:00:00.000Z', null, [
       ev('drive-updated', {
