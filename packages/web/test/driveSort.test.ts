@@ -192,7 +192,7 @@ describe('Post-MVP 22: drive sorting helpers', () => {
       st('ok', { health: 'ok' }),
       st('warn', { health: 'warning' }),
       st('fail', { health: 'failed' }),
-      st('miss', { flag: { reason: 'stale', since: T } as SlotStatus['flag'] }),
+      st('miss', { flag: { kind: 'missing', reason: 'stale' } }),
       st('unk', { health: 'unknown' }),
     ];
     const list = [
