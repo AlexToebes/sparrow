@@ -385,24 +385,18 @@ describe('resolving an inbox entry (R22, R23)', () => {
     expect(result.occupant?.status).toBe('spare');
   });
 
-  it('rejects linking to a missing drive or a drive the observation cannot match', () => {
+  it('rejects linking to a missing drive and takes over the serial of a differently numbered spare', () => {
     const [slot, slot2] = slots();
     const installed = createDrive(db(), { serial: 'INS' });
     assignDrive(db(), { driveId: installed.id, slotId: slot! });
     const other = createDrive(db(), { serial: 'OTHER' });
     snapshot([obs('NEW1'), obs('NEW2', { wwn: '0x9' })]);
-    expect(thrown(() => linkObservation(db(), P, 'NEW1', { driveId: installed.id })).code).toBe(
-      'conflict',
-    );
     expect(
       thrown(() => linkObservation(db(), P, 'NEW1', { driveId: 'nope', slotId: slot2! })).code,
     ).toBe('not-found');
-    expect(
-      thrown(() => linkObservation(db(), P, 'NEW1', { driveId: other.id, slotId: slot2! })).code,
-    ).toBe('conflict');
-    // With a WWN the observation can be linked to a differently numbered spare.
+    // R22 (2026-10-23): a differently numbered spare is linked and takes over the reported serial.
     const linked = linkObservation(db(), P, 'NEW2', { driveId: other.id, slotId: slot2! });
-    expect(linked.drive).toMatchObject({ serial: 'OTHER', wwn: '0x9', status: 'installed' });
+    expect(linked.drive).toMatchObject({ serial: 'NEW2', wwn: '0x9', status: 'installed' });
     expect(getInbox(db(), P).entries.map((e) => e.observationKey)).toEqual(['NEW1']);
   });
 
@@ -507,12 +501,78 @@ describe('R22: linking to any drive without live data', () => {
     expect(eventCount()).toBe(before);
   });
 
-  it('refuses an installed drive when the observation would stay unmatched (409)', () => {
+  it('R22: an installed drive takes over the reported serial; ONE activity, drive-linked carries serial from/to', () => {
+    const { d, slot } = stickerDrive();
+    snapshot([obs('WD-STICK1')]); // no WWN to fill: the serial alone makes the link
+    const before = activitiesOf(db()).length;
+    const result = linkObservation(db(), P, 'WD-STICK1', { driveId: d.id });
+    expect(result.drive).toMatchObject({ serial: 'WD-STICK1', status: 'installed', slotId: slot });
+    expect(getDrive(db(), d.id).serialNormalized).toBe('WD-STICK1');
+    expect(activitiesOf(db())).toHaveLength(before + 1);
+    expect(lastActivity(db()).events.map((e) => e.type)).toEqual(['drive-linked']);
+    expect(lastActivity(db()).events[0]!.payload).toMatchObject({
+      filled: { serial: { from: 'STICK1', to: 'WD-STICK1' } },
+    });
+    expect(getInbox(db(), P).entries).toEqual([]);
+  });
+
+  it('R22: a spare takes over the reported serial (trimmed, as reported) when it is installed', () => {
+    const [slot] = slots();
+    const spare = createDrive(db(), { serial: 'stick1' });
+    snapshot([obs('  WD-Stick1 ')]);
+    const r = linkObservation(db(), P, 'WD-STICK1', { driveId: spare.id, slotId: slot! });
+    expect(r.drive).toMatchObject({ serial: 'WD-Stick1', status: 'installed' });
+    expect(lastActivity(db()).events[0]!.payload).toMatchObject({
+      filled: { serial: { from: 'stick1', to: 'WD-Stick1' } },
+    });
+  });
+
+  it('R22: a case-only difference changes nothing about the serial (normalized equal)', () => {
+    const [slot] = slots();
+    const spare = createDrive(db(), { serial: 'Case-1' });
+    snapshot([obs('CASE-1', { wwn: '0xabc' })]); // the R25 suggestion: same normalized serial
+    const r = linkObservation(db(), P, 'CASE-1', { driveId: spare.id, slotId: slot! });
+    expect(r.drive.serial).toBe('Case-1');
+    const payload = lastActivity(db()).events[0]!.payload as { filled: Record<string, unknown> };
+    expect(payload.filled).not.toHaveProperty('serial');
+    expect(payload.filled).toHaveProperty('wwn');
+  });
+
+  it('R22: refuses when another record (even retired) holds the reported serial; nothing written', () => {
     const { d } = stickerDrive();
-    snapshot([obs('WD-STICK1')]); // no WWN to fill, serial differs
-    expect(thrown(() => linkObservation(db(), P, 'WD-STICK1', { driveId: d.id })).code).toBe(
-      'conflict',
-    );
+    const old = createDrive(db(), { serial: 'WD-STICK1' });
+    retireDrive(db(), old.id, { reason: 'failed' });
+    snapshot([obs('WD-STICK1', { wwn: '0xabc' })]);
+    const before = eventCount();
+    const err = thrown(() => linkObservation(db(), P, 'WD-STICK1', { driveId: d.id }));
+    expect(err.code).toBe('conflict');
+    expect(err.message).toMatch(/WD-STICK1/);
+    expect(getDrive(db(), d.id)).toMatchObject({ serial: 'STICK1', wwn: null });
+    expect(eventCount()).toBe(before);
+  });
+
+  it('API: the link takes the serial over (200) or names the holder (409)', async () => {
+    const { d } = stickerDrive();
+    const app = await buildApp({ db: db(), provider: fakeProvider });
+    snapshot([obs('WD-STICK1')]);
+    const ok = await app.inject({
+      method: 'POST',
+      url: '/api/inbox/WD-STICK1/link',
+      payload: { driveId: d.id },
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().drive).toMatchObject({ id: d.id, serial: 'WD-STICK1' });
+    const other = createDrive(db(), { serial: 'MINE2' });
+    createDrive(db(), { serial: 'TAKEN' });
+    snapshot([obs('TAKEN')]);
+    const [, slot] = slots();
+    const clash = await app.inject({
+      method: 'POST',
+      url: '/api/inbox/TAKEN/link',
+      payload: { driveId: other.id, slotId: slot },
+    });
+    expect(clash.statusCode).toBe(409);
+    expect(clash.json().error.message ?? clash.body).toMatch(/TAKEN/);
   });
 
   it('refuses to copy a WWN another record holds (409)', () => {
@@ -556,18 +616,18 @@ describe('R22: linking to any drive without live data', () => {
 });
 
 describe('R22, R26, R2: linking must leave the observation matched to the linked drive', () => {
-  it('rejects a spare with a different serial and a different WWN, changing nothing', () => {
+  it('takes over the serial of a spare with a different serial and WWN', () => {
     const [slot] = slots();
     const spare = createDrive(db(), { serial: 'DIFFERENT' }, { wwn: '0x111' });
     snapshot([obs('OBS-1', { wwn: '0xabc', model: 'M' })]);
-    const eventsBefore = eventCount();
-    const err = thrown(() =>
-      linkObservation(db(), P, 'OBS-1', { driveId: spare.id, slotId: slot! }),
-    );
-    expect(err.code).toBe('conflict');
-    expect(err.message).toMatch(/stay unmatched/);
-    expect(getDrive(db(), spare.id)).toMatchObject({ status: 'spare', model: null, wwn: '0x111' });
-    expect(eventCount()).toBe(eventsBefore);
+    const r = linkObservation(db(), P, 'OBS-1', { driveId: spare.id, slotId: slot! });
+    expect(r.drive).toMatchObject({
+      serial: 'OBS-1',
+      model: 'M',
+      wwn: '0x111',
+      status: 'installed',
+    });
+    expect(getInbox(db(), P).entries).toEqual([]);
   });
 
   it('rejects when the WWN is already held by another record (case-insensitive), changing nothing', () => {
@@ -584,9 +644,9 @@ describe('R22, R26, R2: linking must leave the observation matched to the linked
     expect(eventCount()).toBe(eventsBefore);
   });
 
-  it('rejects when the observation would still resolve to a different record', () => {
+  it('rejects when another record already holds the reported serial (409, never a 500), changing nothing', () => {
     const [slot] = slots();
-    // OBS-3 matches a record by serial, so linking it to another spare (even with a WWN) cannot work.
+    // OBS-3 matches a record by serial, so linking it to another spare cannot take the serial over.
     createDrive(db(), { serial: 'OBS-3' });
     const other = createDrive(db(), { serial: 'OTHER-3' });
     snapshot([obs('OBS-3', { wwn: '0xdef' })]);
@@ -595,8 +655,12 @@ describe('R22, R26, R2: linking must leave the observation matched to the linked
       linkObservation(db(), P, 'OBS-3', { driveId: other.id, slotId: slot! }),
     );
     expect(err.code).toBe('conflict');
-    expect(err.message).toMatch(/unmatched|match/);
-    expect(getDrive(db(), other.id)).toMatchObject({ status: 'spare', wwn: null });
+    expect(err.message).toMatch(/OBS-3/);
+    expect(getDrive(db(), other.id)).toMatchObject({
+      serial: 'OTHER-3',
+      status: 'spare',
+      wwn: null,
+    });
     expect(eventCount()).toBe(eventsBefore);
   });
 });

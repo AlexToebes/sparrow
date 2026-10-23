@@ -1,13 +1,14 @@
 import { eq } from 'drizzle-orm';
 import { ZodError } from 'zod';
-import type {
-  CreateFromObservationInput,
-  Drive,
-  ImportRetiredInput,
-  InboxResponse,
-  LinkObservationInput,
-  Observation,
-  RetiredCandidate,
+import {
+  normalizeSerial,
+  type CreateFromObservationInput,
+  type Drive,
+  type ImportRetiredInput,
+  type InboxResponse,
+  type LinkObservationInput,
+  type Observation,
+  type RetiredCandidate,
 } from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
 import { drives } from '../db/schema.js';
@@ -71,7 +72,9 @@ function requireInboxEntry(db: AppDb, providerId: string, key: string) {
   throw notFound(`No observation with serial ${key}`);
 }
 
-type Filled = Partial<Pick<Drive, 'wwn' | 'model' | 'capacityBytes' | 'driveType' | 'formFactor'>>;
+type Filled = Partial<
+  Pick<Drive, 'serial' | 'wwn' | 'model' | 'capacityBytes' | 'driveType' | 'formFactor'>
+>;
 
 /** Fields the observation can supply that the drive lacks (R22). */
 function missingFrom(drive: Drive, o: Observation): Filled {
@@ -112,6 +115,8 @@ function createDriveFromObservation(
   }
 }
 
+const DRIVE_SERIAL_MAX = 100; // driveSchema.serial
+
 const PLACEMENT_FIELDS = ['slotId', 'poolId', 'role', 'occupant', 'installedOn'] as const;
 
 type Placed = CreateFromObservationInput | (LinkObservationInput & { slotId: string });
@@ -129,7 +134,8 @@ const placementOf = (input: Placed) => ({
  * Links an inbox observation to an existing drive record (R22, R25): a spare, which is then
  * installed into the chosen slot (R23, placement required), or an installed drive, which keeps its
  * bay, pool, role and date (placement refused, 400). Retired drives and drives that already match
- * an observation are refused (409). Fills what the record lacks and logs ONE discovered-linked
+ * an observation are refused (409). Takes over the reported serial when it differs (409 when another
+ * record holds it), fills what the record lacks and logs ONE discovered-linked
  * activity (drive-linked, plus the install events for a spare).
  */
 export function linkObservation(
@@ -167,7 +173,33 @@ export function linkObservation(
       );
     }
     const filled = missingFrom(drive, entry.observation);
-    const linked: Drive = { ...drive, ...filled };
+    // R22 (changed 2026-10-23): linking takes over the serial as the provider reports it, so a
+    // sticker serial or a typo is replaced by the real one. Only when the normalized serials differ.
+    const reported = (entry.observation.serial ?? '').trim();
+    if (normalizeSerial(reported) !== drive.serialNormalized) {
+      if (reported.length > DRIVE_SERIAL_MAX) {
+        throw new Error(`The reported serial is longer than ${DRIVE_SERIAL_MAX} characters`);
+      }
+      const holder = tx
+        .select()
+        .from(drives)
+        .where(eq(drives.serialNormalized, normalizeSerial(reported)))
+        .get();
+      if (holder) {
+        // Normally such an observation matches that record and is not in the inbox; the unique
+        // index must still never surface as a 500.
+        throw conflict(
+          `Serial ${holder.serial} is already used by drive ${holder.id}; it cannot be taken over by ${drive.serial}`,
+          { driveId: holder.id },
+        );
+      }
+      filled.serial = reported;
+    }
+    const linked: Drive = {
+      ...drive,
+      ...filled,
+      ...(filled.serial === undefined ? {} : { serialNormalized: normalizeSerial(filled.serial) }),
+    };
     // Never copy a WWN that another record already holds: it would make the WWN ambiguous (R2).
     if (filled.wwn !== undefined) {
       const wanted = normalizeWwn(filled.wwn);
@@ -183,8 +215,8 @@ export function linkObservation(
         );
       }
     }
-    // Run the real matching over ALL records with the filled values applied: once linked, the
-    // observation must resolve to this very record, or it would stay in the inbox (R22, R26).
+    // Defensive: with the serial taken over this cannot fail for an observation with a serial (R58),
+    // but the real matching over ALL records, filled values applied, must resolve to this record.
     const all = listDrives(tx).map((d) => (d.id === drive.id ? linked : d));
     const after = matchObservations(all, [entry.observation]).matchedByDriveId.get(drive.id);
     if (!after) {
@@ -195,7 +227,13 @@ export function linkObservation(
     }
     if (Object.keys(filled).length > 0) {
       tx.update(drives)
-        .set({ ...filled, updatedAt: new Date().toISOString() })
+        .set({
+          ...filled,
+          ...(filled.serial === undefined
+            ? {}
+            : { serialNormalized: normalizeSerial(filled.serial) }),
+          updatedAt: new Date().toISOString(),
+        })
         .where(eq(drives.id, drive.id))
         .run();
     }

@@ -261,6 +261,25 @@ describe('R14: the activity log is complete and reversible', () => {
     });
   });
 
+  it('R22: a link that takes over the reported serial replays forward and undoes back (serial and serialNormalized)', () => {
+    runScenario();
+    const acts = activities();
+    const linked = acts.find((a) =>
+      a.events.some(
+        (e) =>
+          e.type === 'drive-linked' && 'serial' in (e.payload.filled as Record<string, unknown>),
+      ),
+    )!;
+    expect(linked).toBeDefined();
+    const driveId = linked.events.find((e) => e.type === 'drive-linked')!.driveId!;
+    const after = replay(acts.filter((a) => a.seq <= linked.seq)).drives.get(driveId)!;
+    expect(after).toMatchObject({ serial: 'WD-G', serialNormalized: 'WD-G' });
+    const before = undoAll(replay(acts.filter((a) => a.seq <= linked.seq)), [linked]).drives.get(
+      driveId,
+    )!;
+    expect(before).toMatchObject({ serial: 'G', serialNormalized: 'G' });
+  });
+
   it('an exported log replays to the exported tables (the file carries everything)', () => {
     runScenario();
     const file = exportData(db());
