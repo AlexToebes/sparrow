@@ -89,7 +89,8 @@ pnpm dev          # server with watch + Vite dev server proxying /api
 - **Small commits**, one logical change each, imperative subject line, body explains why.
 - **Do not change scope.** New ideas go to the "Parking lot" section at the bottom of `IMPLEMENTATION_PLAN.md`, not into code.
 - **Definition of done** for a step: acceptance criteria met, `lint`, `typecheck` and `test` green, plan step ticked with a one-line note of anything surprising, no TODOs left in code without a plan entry.
-- **Ask before** changing a requirement, adding a dependency, changing the DB schema after step 1 without a migration, or touching `.github/workflows/build.yml` beyond what a step says.
+- **Ask before** changing a requirement, adding a dependency, changing the DB schema (any change is a new migration, see the next rule), or touching `.github/workflows/build.yml` beyond what a step says.
+- **The database is in production (since 2026-10-23).** Never edit an existing migration, including the baseline `drizzle/0000_*.sql` and its snapshot. Every schema change is a NEW numbered migration generated with drizzle-kit (`pnpm --filter @sparrow/server db:generate`). Hand-edit the generated SQL when drizzle's table rebuild is unsafe (see the Post-MVP 1 note in `IMPLEMENTATION_PLAN.md`: `PRAGMA foreign_keys` is a no-op inside drizzle's migration transaction). A migration must preserve existing data with an explicit backfill, and is tested by migrating a database created at the previous migration with data in it. Changes to the export schema keep old versions importable, or bump the version with an upgrade path.
 - **Never** commit secrets, real serial numbers beyond the sanitized test fixture, or the contents of `/data`.
 
 ## 7. Test data

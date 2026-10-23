@@ -2,8 +2,6 @@
 
 *Your spares, in rows.*
 
-> **Status: pre-release.** This README describes the planned MVP (see `REQUIREMENTS.md`). Names, ports and options may change before the first release.
-
 A small self-hosted web app, run as one Docker container on your NAS, that:
 
 - shows **where each drive physically sits**, using named grids of slots (for example "Front bays" as a 4x2 grid, "Internal SSDs", "Boot");
@@ -54,7 +52,7 @@ docker compose up -d
 Notes:
 
 - **Data directory.** On a NAS, point the volume at a dataset or share (for example `/mnt/<pool>/apps/sparrow/data:/data`) and make sure the container user can write to it. The image runs as the non-root `node` user (uid and gid 1000), so a bind-mounted directory needs `chown 1000:1000 data` (or set `user:` in the compose file to the owner of the directory). On TrueNAS, if the dataset is owned by the `apps` user, set `user: "568:568"` instead. A named volume works without this. If the directory is not writable, the app exits at startup with a message naming the path and the uid it runs as.
-- **Upgrading from an early build.** The database migrations are a single baseline that was edited in place before the first release (most recently for the activity model: a drive installed in a bay is an installation row that carries its pool, and history is a log of activities made of atomic events), so a database created by an earlier build cannot be upgraded. This build needs a fresh data directory again: delete the data directory's `app.db`, `app.db-wal` and `app.db-shm` before starting this version. Exports made by earlier builds (schema version 1 or 2) use the old format and cannot be imported into this one (they are rejected with a clear message), so there is no way to carry that data over.
+- **Upgrading.** From the 2026-10-23 release on, databases are upgraded in place: new versions bring numbered migrations that run at startup and keep your data. Back up the data directory (or use Export) before upgrading if you want a way back. Databases created by pre-release builds (before 2026-10-23) cannot be upgraded and need a fresh data directory: delete `app.db`, `app.db-wal` and `app.db-shm` before starting this version. Exports made by builds before the activity model (schema version 1 or 2) cannot be imported.
 - **"This database was created by an incompatible pre-release build".** The same rule, enforced at startup: if `app.db` lacks tables or columns the current build needs, Sparrow exits with that message instead of failing later. Stop the container, delete `app.db`, `app.db-wal` and `app.db-shm` in the data directory and start again.
 - **Image access.** A newly published package on GitHub Container Registry may be private. If your NAS cannot pull it, set the package to public in its GitHub settings, or run `docker login ghcr.io` with a personal access token that has `read:packages`.
 - **No authentication.** The app has no login by design. Run it on a trusted LAN only, and do not expose it to the internet.
