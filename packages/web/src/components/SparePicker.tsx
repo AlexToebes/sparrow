@@ -7,6 +7,7 @@ import type {
   SlotCompatibility,
   SpareCompatibility,
 } from '@sparrow/shared';
+import { spareConflictText } from '@sparrow/shared';
 import { formatBytes } from '../lib/format';
 import { AlertTriangleIcon, CheckIcon, HelpCircleIcon, XCircleIcon } from './icons';
 
@@ -24,16 +25,17 @@ interface SparePickerProps {
   compatibility?: SlotCompatibility | null;
   /**
    * Which statuses are offered (default: spares only). The inbox's "Link to a drive" (R22) also
-   * offers installed drives; retired drives are never offered, whatever is asked.
+   * offers installed drives; only the pairing of drives not recommended together (R78) asks for
+   * retired ones too.
    */
-  statuses?: readonly Exclude<DriveStatus, 'retired'>[];
+  statuses?: readonly DriveStatus[];
   /** Where each installed drive sits, by slot id (a card shows "In <bay>"). */
   bayLabels?: ReadonlyMap<string, string>;
   /** Plural noun for the search box and the empty states; default "spares". */
   noun?: string;
 }
 
-const SPARES_ONLY: readonly Exclude<DriveStatus, 'retired'>[] = ['spare'];
+const SPARES_ONLY: readonly DriveStatus[] = ['spare'];
 
 const VERDICT_RANK: Record<CompatibilityVerdict, number> = {
   fits: 0,
@@ -85,15 +87,18 @@ export function SparePicker({
     [compatibility],
   );
   const offered = useMemo(() => {
-    const list = spares.filter((d) => d.status !== 'retired' && statuses.includes(d.status));
+    const list = spares.filter((d) => statuses.includes(d.status));
     if (verdictById.size === 0) return list;
     // R12: fits first (closest size first), then unknown, too small, different type; otherwise as given.
+    // R78: within one verdict, spares not recommended with a pool member come after the others.
     const rank = (d: Drive) => VERDICT_RANK[verdictById.get(d.id)?.verdict ?? 'unknown'];
+    const conflicting = (d: Drive) => ((verdictById.get(d.id)?.conflicts.length ?? 0) > 0 ? 1 : 0);
     return list
       .map((d, i) => ({ d, i }))
       .sort(
         (x, y) =>
           rank(x.d) - rank(y.d) ||
+          conflicting(x.d) - conflicting(y.d) ||
           (rank(x.d) === 0 ? (x.d.capacityBytes ?? 0) - (y.d.capacityBytes ?? 0) : 0) ||
           x.i - y.i,
       )
@@ -184,9 +189,11 @@ export function SparePicker({
                     d.condition,
                     d.status === 'installed'
                       ? `In ${(d.slotId && bayLabels?.get(d.slotId)) || 'a bay'}`
-                      : d.storageLocation
-                        ? `On the shelf: ${d.storageLocation}`
-                        : 'On the shelf',
+                      : d.status === 'retired'
+                        ? 'Retired'
+                        : d.storageLocation
+                          ? `On the shelf: ${d.storageLocation}`
+                          : 'On the shelf',
                   ]
                     .filter(Boolean)
                     .join(' · ')}
@@ -196,6 +203,12 @@ export function SparePicker({
                     <BadgeIcon kind={badge.kind} /> {badge.text}
                   </span>
                 ) : null}
+                {/* R78: advice beside the verdict (icon and words), never part of it. */}
+                {verdict?.conflicts.map((c) => (
+                  <span key={c.driveId} className="spare-conflict">
+                    <AlertTriangleIcon size={12} /> {spareConflictText(c)}
+                  </span>
+                ))}
               </button>
             );
           })}

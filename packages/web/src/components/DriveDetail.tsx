@@ -7,6 +7,7 @@ import { formatBytes, formatRelative } from '../lib/format';
 import { HEALTH_WORD, type SlotView } from '../lib/health';
 import { AssignDialog } from './AssignDialog';
 import { ConfirmDialog } from './ConfirmDialog';
+import { ConflictsSection } from './ConflictsSection';
 import { DriveFormDialog } from './DriveFormDialog';
 import { InstalledOnDialog } from './InstalledOnDialog';
 import { HistorySection, type HistoryTab } from './HistorySection';
@@ -226,6 +227,7 @@ export function DriveDetail({ drive, view = null, where = null, historyTab }: Dr
       <SuggestedUpdates drive={drive} />
 
       {drive.status === 'installed' ? <MembershipSection drive={drive} /> : null}
+      <ConflictsSection drive={drive} />
       <HistorySection
         drive={drive}
         slotId={drive.status === 'installed' ? drive.slotId : null}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { EXPORT_FORMAT, EXPORT_SCHEMA_VERSION } from '@sparrow/shared';
+import { EXPORT_FORMAT, EXPORT_SCHEMA_VERSION, MIN_IMPORT_SCHEMA_VERSION } from '@sparrow/shared';
 import { Alert, Button, Group, Modal, Text } from '@mantine/core';
 import { useDrives, useLayout } from '../api/hooks';
 import { useConfig, useImport, type ImportResult } from '../api/settings';
@@ -60,10 +60,10 @@ export function exportFileProblem(file: unknown, name: string): string | null {
   const v = o.schemaVersion;
   if (typeof v !== 'number') return `${name} has no export version, so it cannot be imported.`;
   if (v > EXPORT_SCHEMA_VERSION) {
-    return `${name} was made by a newer Sparrow (export version ${v}); this one imports version ${EXPORT_SCHEMA_VERSION}. Update Sparrow first.`;
+    return `${name} was made by a newer Sparrow (export version ${v}); this one imports up to version ${EXPORT_SCHEMA_VERSION}. Update Sparrow first.`;
   }
-  if (v < EXPORT_SCHEMA_VERSION) {
-    return `${name} is an old export (version ${v}) from a pre-release build; this Sparrow imports version ${EXPORT_SCHEMA_VERSION} only.`;
+  if (v < MIN_IMPORT_SCHEMA_VERSION) {
+    return `${name} is an old export (version ${v}) from a pre-release build; this Sparrow imports versions ${MIN_IMPORT_SCHEMA_VERSION} to ${EXPORT_SCHEMA_VERSION}.`;
   }
   return null;
 }

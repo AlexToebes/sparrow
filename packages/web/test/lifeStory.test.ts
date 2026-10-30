@@ -733,3 +733,41 @@ describe('life story health entries (R20)', () => {
     );
   });
 });
+
+describe('life story with drives not recommended together (R78)', () => {
+  const pair = (kind: 'conflict-added' | 'conflict-removed', reason: string | null) =>
+    act(kind, '2026-10-30T09:00:00.000Z', null, [
+      ev(kind, {
+        drive: d1(),
+        payload: { otherDriveId: 'd2', otherSerial: 'ZL2', reason },
+      }),
+      ev(kind, {
+        drive: ['d2', 'ZL2', null],
+        payload: { otherDriveId: 'd1', otherSerial: 'ZL1', reason },
+      }),
+    ]);
+
+  it('reads the activity from this drive: who it was paired with, and why', () => {
+    const story = buildStory(
+      newestFirst(added('2026-10-11T08:00:00.000Z'), pair('conflict-added', 'Same batch')),
+    );
+    expect(story.map((i) => [i.title, i.detail])).toEqual([
+      ['Added to Sparrow', null],
+      ['Marked as not recommended with ZL2', 'Same batch'],
+    ]);
+  });
+
+  it('shows the removal, with the reason that was removed', () => {
+    const story = buildStory(
+      newestFirst(
+        added('2026-10-11T08:00:00.000Z'),
+        pair('conflict-added', 'Same batch'),
+        pair('conflict-removed', 'Same batch'),
+      ),
+    );
+    expect(story.at(-1)).toMatchObject({
+      title: 'No longer marked as not recommended with ZL2',
+      detail: 'Same batch',
+    });
+  });
+});

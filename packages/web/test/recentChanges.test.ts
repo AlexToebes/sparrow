@@ -195,6 +195,32 @@ const SAMPLES: Record<ActivityKind, { activity: Activity; text: string }> = {
     ]),
     text: "Grid 'Front bays' resized 4 × 2 → 4 × 3",
   },
+  'conflict-added': {
+    activity: act('conflict-added', R, null, [
+      ev('conflict-added', {
+        drive: d('d1', 'ZL1'),
+        payload: { otherDriveId: 'd2', otherSerial: 'ZL2', reason: 'Same batch' },
+      }),
+      ev('conflict-added', {
+        drive: d('d2', 'ZL2'),
+        payload: { otherDriveId: 'd1', otherSerial: 'ZL1', reason: 'Same batch' },
+      }),
+    ]),
+    text: 'ZL1 and ZL2 marked as not recommended together (same batch)',
+  },
+  'conflict-removed': {
+    activity: act('conflict-removed', R, null, [
+      ev('conflict-removed', {
+        drive: d('d1', 'ZL1'),
+        payload: { otherDriveId: 'd2', otherSerial: 'ZL2', reason: null },
+      }),
+      ev('conflict-removed', {
+        drive: d('d2', 'ZL2'),
+        payload: { otherDriveId: 'd1', otherSerial: 'ZL1', reason: null },
+      }),
+    ]),
+    text: 'ZL1 and ZL2 no longer marked as not recommended together',
+  },
   'pool-edited': {
     activity: act('pool-edited', R, null, [ev('pool-created', { pool: ['p1', 'tank'] })]),
     text: 'Pool tank created',

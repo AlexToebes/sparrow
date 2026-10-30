@@ -3,6 +3,7 @@ import { Alert, Badge, Button, Drawer, Skeleton, Text } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
+import { poolConflictText } from '@sparrow/shared';
 import { apiGet } from '../api/client';
 import { useDrives, useLayout, usePools } from '../api/hooks';
 import { poolDetailSchema, type PoolSummary } from '../api/schemas';
@@ -79,6 +80,17 @@ function PoolCard({
           </span>
         ) : null}
       </div>
+      {/* R78: pairs of current members that are not recommended together (icon and words). */}
+      {pool.conflicts.length > 0 ? (
+        <ul className="conflict-warnings" aria-label={`${pool.name} warnings`}>
+          {pool.conflicts.map((c) => (
+            <li key={`${c.driveAId}|${c.driveBId}`} className="conflict-warning">
+              <AlertTriangleIcon size={15} />
+              <span>{poolConflictText(c)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {pool.smallestMemberBytes !== null ? (
         <p className="pool-fit">
           Smallest member {formatBytes(pool.smallestMemberBytes)} · {pool.sparesFit}{' '}

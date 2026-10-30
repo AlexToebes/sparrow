@@ -429,6 +429,19 @@ function describe(s: Side): { title: string; detail: string | null } {
     }
     case 'reinstated':
       return { title: 'Reinstated as a spare', detail: note };
+    case 'conflict-added':
+    case 'conflict-removed': {
+      // R78: this drive's own event names the other drive (its serial as it was) and the reason.
+      const e = s.mine.find((m) => m.type === a.kind);
+      const other = str(e?.payload.otherSerial) ?? 'another drive';
+      return {
+        title:
+          a.kind === 'conflict-added'
+            ? `Marked as not recommended with ${other}`
+            : `No longer marked as not recommended with ${other}`,
+        detail: str(e?.payload.reason),
+      };
+    }
     case 'health-polled': {
       const h = healthChange(s);
       if (!h) return { title: 'Health changed', detail: null };

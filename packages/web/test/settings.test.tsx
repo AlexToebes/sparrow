@@ -158,6 +158,17 @@ describe('R43, R44: import UI', () => {
     expect(await screen.findByText(message)).toBeVisible();
   });
 
+  it('R42, R78: versions 3 and 4 both reach the confirm step', async () => {
+    mock();
+    renderApp(<App />, '/settings');
+    await pickFile(exportFile); // version 3: no drive conflicts, still importable
+    expect(await screen.findByRole('dialog', { name: /replace all data/i })).toBeVisible();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await pickFile(exportFile.replace('"schemaVersion":3', '"schemaVersion":4'), 'v4.json');
+    expect(await screen.findByRole('dialog', { name: /replace all data/i })).toBeVisible();
+  });
+
   it('R43: an old or newer export version is refused before the confirm step, with no request', async () => {
     mock();
     renderApp(<App />, '/settings');

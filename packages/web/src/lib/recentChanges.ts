@@ -56,6 +56,8 @@ export const KIND_ICON: Record<ActivityKind, FeedIcon> = {
   'health-polled': 'health',
   'layout-updated': 'layout',
   'pool-edited': 'pool',
+  'conflict-added': 'drive',
+  'conflict-removed': 'drive',
 };
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
@@ -404,6 +406,21 @@ function describeDrive(a: Activity): Part[] {
     }
     case 'reinstated':
       return sentence(drive(first), ' reinstated as a spare');
+    case 'conflict-added':
+    case 'conflict-removed': {
+      // R78: one event per drive; the pair is the two drives the activity names.
+      const [x, y] = a.events;
+      const reason = str(x?.payload.reason);
+      return sentence(
+        drive(x),
+        ' and ',
+        drive(y),
+        a.kind === 'conflict-added'
+          ? ' marked as not recommended together'
+          : ' no longer marked as not recommended together',
+        reason && ` (${reason.replace(/^./, (c) => c.toLowerCase())})`,
+      );
+    }
     case 'pool-joined':
     case 'pool-left':
     case 'pool-role-changed':
