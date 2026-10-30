@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { dateSchema, idSchema, timestampSchema } from './common.js';
+import { poolConflictSchema } from './conflict.js';
 import { membershipRoleSchema } from './enums.js';
 import { poolSchema } from './pool.js';
 
@@ -73,6 +74,8 @@ export const poolSummarySchema = poolSchema.extend({
   smallestMemberBytes: z.number().nullable(),
   /** R12: how many spares on the shelf fit a bay of this pool. */
   sparesFit: z.number().int().min(0),
+  /** R78: pairs of current members that are not recommended together; empty when none. */
+  conflicts: z.array(poolConflictSchema).default([]),
 });
 export type PoolSummary = z.infer<typeof poolSummarySchema>;
 

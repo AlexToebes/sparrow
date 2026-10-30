@@ -3,6 +3,7 @@ import type { AppDb } from '../db/client.js';
 import { backupRoutes } from './backup.js';
 import { compatibilityRoutes } from './compatibility.js';
 import { configInfoRoutes } from './config-info.js';
+import { conflictRoutes } from './conflicts.js';
 import { assignmentRoutes } from './assignment.js';
 import { driveRoutes } from './drives.js';
 import { inboxRoutes } from './inbox.js';
@@ -46,4 +47,6 @@ export const routeModules: FastifyPluginAsync<{ db: AppDb }>[] = [
   compatibilityRoutes,
   // Post-MVP 17: first-run setup wizard (R77)
   setupRoutes,
+  // Post-MVP 23: drives not recommended together (R78)
+  conflictRoutes,
 ];

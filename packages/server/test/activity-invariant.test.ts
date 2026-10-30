@@ -347,6 +347,21 @@ const CASES: Case[] = [
       status: 409,
     },
   },
+  {
+    route: 'POST /api/drives/:id/conflicts',
+    url: (w) => `/api/drives/${w.shelf}/conflicts`,
+    payload: (w) => ({ otherDriveId: w.shelf2, reason: 'Same batch' }),
+    fails: {
+      url: (w) => `/api/drives/${w.shelf}/conflicts`,
+      payload: (w) => ({ otherDriveId: w.shelf }),
+      status: 400,
+    },
+  },
+  {
+    route: 'DELETE /api/drives/:id/conflicts/:otherId',
+    url: (w) => `/api/drives/${w.shelf}/conflicts/${w.shelf2}`,
+    fails: { url: (w) => `/api/drives/${w.shelf}/conflicts/${w.installed}`, status: 404 },
+  },
 ];
 
 /**
@@ -376,6 +391,9 @@ describe('R14: every mutating route records exactly one activity', () => {
     async (_route, c) => {
       const w = world();
       // The undismiss case needs something dismissed first (a setup action, not the call under test).
+      if (c.route.startsWith('DELETE /api/drives/:id/conflicts')) {
+        await inject('POST', `/api/drives/${w.shelf}/conflicts`, { otherDriveId: w.shelf2 });
+      }
       if (c.route.endsWith('/undismiss')) {
         await inject('POST', `/api/drives/${w.shelf}/suggestions/dismiss`, { fields: ['model'] });
       }
@@ -439,6 +457,7 @@ describe('R14: every mutating route records exactly one activity', () => {
       '/api/drives',
       `/api/drives/${w.installed}`,
       `/api/drives/${w.installed}/history`,
+      `/api/drives/${w.installed}/conflicts`,
       `/api/drives/${w.shelf}/suggestions`,
       '/api/suggestions',
       '/api/pools',

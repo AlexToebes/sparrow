@@ -12,6 +12,7 @@ import type { AppDb } from '../db/client.js';
 import { drives, installations, pools, slots } from '../db/schema.js';
 import { recordActivity, type Reader } from './activities.js';
 import { poolFitSummary } from './compatibility.js';
+import { poolConflicts } from './conflicts.js';
 import { listDrives } from './drives.js';
 import { conflict, invalid } from './errors.js';
 import { requirePool } from './memberships.js';
@@ -37,6 +38,8 @@ const summarize = (db: Reader, pool: Pool, memberCount: number): PoolSummary => 
   sizeCheck: poolSizeCheck(memberCount, pool.expectedMembers),
   // R12: the usable per-disk size and how many spares on the shelf fit a bay of this pool.
   ...poolFitSummary(db, pool.id, listDrives(db, { status: 'spare' })),
+  // R78: pairs of current members that are not recommended together.
+  conflicts: poolConflicts(db, pool.id),
 });
 
 /** A drive installed in a bay that belongs to the pool (the pool is a property of the installation). */

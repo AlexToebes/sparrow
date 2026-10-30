@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { idSchema } from './common.js';
+import { spareConflictSchema } from './conflict.js';
 import { driveTypeSchema } from './enums.js';
 
 // GET /api/slots/:id/compatibility (R12): advice on which spares fit a bay. Computed on every read,
@@ -20,6 +21,11 @@ export const spareCompatibilitySchema = z.object({
   reason: z.string(),
   /** Set for `too-small`: the smallest capacity that would fit. */
   neededBytes: z.number().nullable(),
+  /**
+   * R78: current members of the target pool (not the drive being replaced) this spare is not
+   * recommended with. Advice beside the verdict; it never changes the verdict.
+   */
+  conflicts: z.array(spareConflictSchema).default([]),
 });
 export type SpareCompatibility = z.infer<typeof spareCompatibilitySchema>;
 

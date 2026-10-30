@@ -1,13 +1,22 @@
 import { normalizeSerial, type StoredActivity, type StoredEvent } from '@sparrow/shared';
 import type { AppDb } from '../db/client.js';
-import { drives, enclosures, grids, installations, pools, slots } from '../db/schema.js';
+import {
+  driveConflicts,
+  drives,
+  enclosures,
+  grids,
+  installations,
+  pools,
+  slots,
+} from '../db/schema.js';
+import { orderedPair } from './conflicts.js';
 
 // R14 (reversibility): the activity log is complete, so any past state of the records can be rebuilt
 // by applying events forward, and any later state taken back by undoing them in reverse. This module
 // is that proof in code: it is used by tests only for now (a future "state as of" view could use it).
 //
 // It models the tables the log describes: enclosures, grids, slots, drives (their own fields),
-// installations (with pool and pool role) and pools. Observations of the drive's state
+// installations (with pool and pool role), pools and drive conflicts (R78). Observations of the drive's state
 // (`health-changed`) and `suggestion-dismissed` touch none of them and are skipped. `updatedAt`
 // columns are bookkeeping and are not tracked.
 
@@ -21,6 +30,8 @@ export interface ReplayState {
   /** Keyed by drive id (the installation's key). */
   installations: Map<string, Rec>;
   pools: Map<string, Rec>;
+  /** R78: keyed by `driveAId|driveBId` (the lower id first). */
+  driveConflicts: Map<string, Rec>;
 }
 
 export const emptyState = (): ReplayState => ({
@@ -30,6 +41,7 @@ export const emptyState = (): ReplayState => ({
   drives: new Map(),
   installations: new Map(),
   pools: new Map(),
+  driveConflicts: new Map(),
 });
 
 const strip = (rec: Rec): Rec => {
@@ -52,6 +64,9 @@ export function snapshotState(db: AppDb): ReplayState {
   for (const r of db.select().from(drives).all()) s.drives.set(r.id, strip(r));
   for (const r of db.select().from(installations).all()) s.installations.set(r.driveId, { ...r });
   for (const r of db.select().from(pools).all()) s.pools.set(r.id, strip(r));
+  for (const r of db.select().from(driveConflicts).all()) {
+    s.driveConflicts.set(`${r.driveAId}|${r.driveBId}`, { ...r });
+  }
   return s;
 }
 
@@ -66,6 +81,7 @@ export function plain(s: ReplayState): Record<keyof ReplayState, Rec[]> {
     drives: sorted(s.drives),
     installations: sorted(s.installations),
     pools: sorted(s.pools),
+    driveConflicts: sorted(s.driveConflicts),
   };
 }
 
@@ -91,6 +107,12 @@ const retirementFields = (reason: unknown, date: unknown, note: unknown): Rec =>
   retirementDate: date,
   retirementNote: note,
 });
+
+/** The key and row of the pair an R78 event is about: this event's drive and the other one. */
+function pairOf(e: StoredEvent, createdAt: unknown, reason: unknown): [string, Rec] {
+  const [driveAId, driveBId] = orderedPair(String(e.driveId), String(e.payload.otherDriveId));
+  return [`${driveAId}|${driveBId}`, { driveAId, driveBId, reason, createdAt }];
+}
 
 /** Applies one event forward. */
 export function applyEvent(s: ReplayState, a: StoredActivity, e: StoredEvent): void {
@@ -191,6 +213,16 @@ export function applyEvent(s: ReplayState, a: StoredActivity, e: StoredEvent): v
       break;
     case 'pool-deleted':
       s.pools.delete(String(p.id));
+      break;
+    case 'conflict-added': {
+      // A pair has one event per drive; the second finds the row already there (the same row).
+      // The row's createdAt is the moment of the activity (core/conflicts.ts records both alike).
+      const [key, row] = pairOf(e, a.recordedAt, p.reason);
+      s.driveConflicts.set(key, row);
+      break;
+    }
+    case 'conflict-removed':
+      s.driveConflicts.delete(pairOf(e, null, null)[0]);
       break;
     case 'health-changed':
     case 'suggestion-dismissed':
@@ -293,6 +325,14 @@ export function undoEvent(s: ReplayState, a: StoredActivity, e: StoredEvent): vo
     case 'pool-deleted':
       s.pools.set(String(p.id), strip(p));
       break;
+    case 'conflict-added':
+      s.driveConflicts.delete(pairOf(e, null, null)[0]);
+      break;
+    case 'conflict-removed': {
+      const [key, row] = pairOf(e, p.createdAt, p.reason);
+      s.driveConflicts.set(key, row);
+      break;
+    }
     case 'health-changed':
     case 'suggestion-dismissed':
       break;

@@ -11,6 +11,7 @@ import { getSlot } from '../db/layout-repo.js';
 import { drives, installations } from '../db/schema.js';
 import type { Reader } from './activities.js';
 import { defaultsFor } from './assignment.js';
+import { spareConflictsWithPool } from './conflicts.js';
 import { findDrive, listDrives } from './drives.js';
 import { notFound } from './errors.js';
 import { installationInSlot } from './installations.js';
@@ -60,17 +61,17 @@ export function commonPoolType(members: DriveFacts[]): DriveType | null {
   return types.size === 1 ? [...types][0]! : null;
 }
 
+/** A spare's verdict without its identity or its (separate) conflict advice. */
+export type SpareVerdict = Omit<SpareCompatibility, 'driveId' | 'conflicts'>;
+
 const verdict = (
   v: CompatibilityVerdict,
   reason: string,
   neededBytes: number | null = null,
-): Omit<SpareCompatibility, 'driveId'> => ({ verdict: v, reason, neededBytes });
+): SpareVerdict => ({ verdict: v, reason, neededBytes });
 
 /** R12: how one spare compares with a target. Pure. A known type mismatch wins over an unknown size. */
-export function checkSpare(
-  spare: DriveFacts,
-  target: FitTarget,
-): Omit<SpareCompatibility, 'driveId'> {
+export function checkSpare(spare: DriveFacts, target: FitTarget): SpareVerdict {
   if (spare.driveType && target.driveType && spare.driveType !== target.driveType) {
     return verdict('different-type', `${spare.driveType}, but this bay holds ${target.driveType}`);
   }
@@ -148,6 +149,17 @@ export function getSlotCompatibility(appDb: AppDb, slotId: string): SlotCompatib
       if (size !== null) target = { ...target, sizeBytes: size, basis: 'pool' };
     }
 
+    const shelf = listDrives(db, { status: 'spare' });
+    // R78: advice beside the verdict, never part of it. The drive being replaced is on its way out, so
+    // it is not counted; an empty bay has no outgoing drive.
+    const conflicts = poolId
+      ? spareConflictsWithPool(
+          db,
+          poolId,
+          shelf.map((s) => s.id),
+          live?.driveId,
+        )
+      : new Map();
     return {
       slotId,
       target: {
@@ -157,9 +169,10 @@ export function getSlotCompatibility(appDb: AppDb, slotId: string): SlotCompatib
         poolName,
         serial: occupant.serial,
       },
-      spares: listDrives(db, { status: 'spare' }).map((s) => ({
+      spares: shelf.map((s) => ({
         driveId: s.id,
         ...checkSpare(s, target),
+        conflicts: conflicts.get(s.id) ?? [],
       })),
     };
   });

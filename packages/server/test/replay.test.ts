@@ -13,6 +13,7 @@ import {
   sendForRma,
 } from '../src/core/assignment.js';
 import { exportData } from '../src/core/backup.js';
+import { addConflict, removeConflict } from '../src/core/conflicts.js';
 import { createDrive, updateDrive } from '../src/core/drives.js';
 import { recordHealthChanges } from '../src/core/health-history.js';
 import { createFromObservation, importRetired, linkObservation } from '../src/core/inbox.js';
@@ -59,7 +60,15 @@ const snapshot = (observations: Observation[]) =>
   });
 
 const activities = (): StoredActivity[] => exportData(db()).data.activities;
-const empty = { enclosures: [], grids: [], slots: [], drives: [], installations: [], pools: [] };
+const empty = {
+  enclosures: [],
+  grids: [],
+  slots: [],
+  drives: [],
+  installations: [],
+  pools: [],
+  driveConflicts: [],
+};
 
 /**
  * A scenario that uses every activity kind and every event type. Each step is one user action; after
@@ -193,6 +202,11 @@ function runScenario(): { states: ReturnType<typeof plain>[]; counts: number[] }
   step(() =>
     recordHealthChanges(db(), [obs('F', { health: 'warning' })], '2026-03-05T00:00:00.000Z'),
   ); // health-polled
+
+  // R78: pairs of drives that are not recommended together, one activity of two events each.
+  step(() => addConflict(db(), ids.a!, { otherDriveId: ids.b!, reason: 'Same batch' })); // conflict-added
+  step(() => addConflict(db(), ids.c!, { otherDriveId: ids.b! })); // no reason
+  step(() => removeConflict(db(), ids.b!, ids.a!)); // conflict-removed (keeps the reason for undo)
 
   // Layout and pool deletions, with full records in the log.
   step(() => layout.updateSlotLabel(s[7]!, { label: 'Spare bay' })); // slot-relabeled
