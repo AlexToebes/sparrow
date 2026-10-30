@@ -12,7 +12,7 @@ Source of truth for behavior: `REQUIREMENTS.md` (requirement IDs like R27, defau
 
 | Concern | Choice |
 |---|---|
-| Language | TypeScript (strict), Node 24, ESM |
+| Language | TypeScript (strict), Node 26, ESM |
 | Package manager | pnpm (workspaces), pinned via the `packageManager` field in the root `package.json`; no npm or yarn lockfiles |
 | Layout | pnpm workspace: `packages/shared`, `packages/server`, `packages/web` (`pnpm-workspace.yaml`) |
 | Backend | Fastify, one process serving `/api/*` and the built web bundle |
@@ -21,7 +21,7 @@ Source of truth for behavior: `REQUIREMENTS.md` (requirement IDs like R27, defau
 | Frontend | React + Vite, Mantine, TanStack Query, React Router |
 | Tests | Vitest (all packages), React Testing Library for UI |
 | Lint | ESLint + Prettier |
-| Image | Multi-stage Dockerfile on `node:24-slim` (not Alpine, to avoid native module issues on arm64), non-root user |
+| Image | Multi-stage Dockerfile on `node:26-slim` (not Alpine, to avoid native module issues on arm64), non-root user |
 
 Do not add a dependency that is not in this table without a stated reason in the commit message. Prefer the standard library.
 

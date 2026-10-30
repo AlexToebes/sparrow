@@ -121,7 +121,7 @@ Settings > About shows the running version and the commit it was built from, for
 
 ## Development
 
-Requirements: Node.js 22.12 or newer (the image uses Node 24) and pnpm (the version is pinned in `package.json`; `corepack enable` picks it up).
+Requirements: Node.js 26 or newer (the image uses Node 26) and pnpm (the version is pinned in `package.json`; `corepack enable` picks it up).
 
 ```bash
 pnpm install --frozen-lockfile
@@ -133,7 +133,7 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build
 - `pnpm build` compiles `packages/shared` and `packages/server` to `dist/` and bundles `packages/web` to `packages/web/dist`. After a build, `node packages/server/dist/main.js` serves the API and the UI on one port (`WEB_DIST_DIR` overrides the bundle location; the image sets it to `/app/web`).
 - Dependabot (`.github/dependabot.yml`) opens weekly update PRs for npm packages, GitHub Actions and the pinned Docker base image, with minor and patch updates grouped.
 - Tests (`pnpm test`) run against the TypeScript sources through a `source` export condition, so no build is needed first.
-- Build the image locally with `docker build -t sparrow .`. It is multi-stage on `node:24-slim`, runs as the non-root `node` user, listens on `PORT` (3000), keeps data in the `/data` volume and has a health check on `/api/health`.
+- Build the image locally with `docker build -t sparrow .`. It is multi-stage on `node:26-slim`, runs as the non-root `node` user, listens on `PORT` (3000), keeps data in the `/data` volume and has a health check on `/api/health`.
 
 See `REQUIREMENTS.md` for the full requirements, and `AGENTS.md` and `IMPLEMENTATION_PLAN.md` for how the project is built.
 
