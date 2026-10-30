@@ -9,6 +9,7 @@ import { createDrive, updateDrive } from '../src/core/drives.js';
 import { DomainError } from '../src/core/errors.js';
 import { createLayoutService } from '../src/core/layout.js';
 import { createOldLayout } from './old-layout.js';
+import { addConflict } from '../src/core/conflicts.js';
 import { createPool } from '../src/core/pools.js';
 import { openDatabase, type AppDb, type OpenedDatabase } from '../src/db/client.js';
 import { providerSnapshot } from '../src/db/schema.js';
@@ -75,17 +76,28 @@ function seedRealistic(): void {
 /** The export with exportedAt removed, so two exports of the same data compare equal. */
 const withoutTime = (file: ExportFile) => ({ ...file, exportedAt: 'x' });
 
+const invalidFrom = (fn: () => unknown): DomainError => {
+  try {
+    fn();
+  } catch (err) {
+    if (err instanceof DomainError) return err;
+    throw err;
+  }
+  throw new Error('expected import to fail');
+};
+
 describe('R41, R42: export', () => {
   it('R42: carries the format marker, schema version and the record arrays', () => {
     seedRealistic();
     const file = exportData(db(), new Date('2026-10-10T12:00:00.000Z'));
     expect(file.format).toBe('sparrow-export');
-    expect(file.schemaVersion).toBe(3);
+    expect(file.schemaVersion).toBe(4);
     expect(file.exportedAt).toBe('2026-10-10T12:00:00.000Z');
     expect(Object.keys(file.data).sort()).toEqual(
       [
         'activities',
         'appMeta',
+        'driveConflicts',
         'drives',
         'enclosures',
         'grids',
@@ -244,6 +256,116 @@ describe('R43: round trip', () => {
   });
 });
 
+describe('R78: drive conflicts in export and import', () => {
+  const pairs = () => {
+    seedRealistic();
+    const [a, b, c] = ['OLD-1', 'new-1', 'SP-9'].map(
+      (serial) => exportData(db()).data.drives.find((d) => d.serial === serial)!.id,
+    ) as [string, string, string];
+    addConflict(db(), a, { otherDriveId: b, reason: 'Same batch' }); // a retired drive may be paired
+    addConflict(db(), b, { otherDriveId: c });
+    return { a, b, c };
+  };
+
+  it('R78: the export carries each pair once, in canonical order, with its reason', () => {
+    const { a, b, c } = pairs();
+    const rows = exportData(db()).data.driveConflicts;
+    expect(rows).toHaveLength(2);
+    for (const r of rows) expect(r.driveAId < r.driveBId).toBe(true);
+    expect(
+      rows.find((r) => [r.driveAId, r.driveBId].sort().join() === [a, b].sort().join()),
+    ).toMatchObject({
+      reason: 'Same batch',
+    });
+    expect(
+      rows.find((r) => [r.driveAId, r.driveBId].sort().join() === [b, c].sort().join()),
+    ).toMatchObject({
+      reason: null,
+    });
+  });
+
+  it('R78: round trip: export, import into a fresh database, export again: deep-equal except exportedAt', () => {
+    pairs();
+    const file = exportData(db());
+    const fresh = openDatabase(':memory:');
+    try {
+      const { counts } = importData(fresh.db, JSON.parse(JSON.stringify(file)), { backupDir });
+      expect(counts.driveConflicts).toBe(2);
+      expect(withoutTime(exportData(fresh.db))).toEqual(withoutTime(file));
+    } finally {
+      fresh.sqlite.close();
+    }
+  });
+
+  it('R78: an import replaces the pairs that were there', () => {
+    pairs();
+    const empty = exportData(openDatabase(':memory:').db);
+    importData(db(), empty, { backupDir });
+    expect(exportData(db()).data.driveConflicts).toEqual([]);
+  });
+
+  it('R42, R78: a version 3 file (no driveConflicts) still imports, with no pairs, and replaces old pairs', () => {
+    pairs();
+    const source = openDatabase(':memory:');
+    try {
+      const v3 = JSON.parse(JSON.stringify(exportData(source.db)));
+      v3.schemaVersion = 3;
+      delete v3.data.driveConflicts;
+      const result = importData(db(), v3, { backupDir });
+      expect(result.counts.driveConflicts).toBe(0);
+      expect(exportData(db()).data.driveConflicts).toEqual([]);
+      expect(exportData(db()).schemaVersion).toBe(4);
+    } finally {
+      source.sqlite.close();
+    }
+  });
+
+  it('R78: a version 3 file with real data imports and exports as version 4', () => {
+    seedRealistic();
+    const v3 = JSON.parse(JSON.stringify(exportData(db())));
+    v3.schemaVersion = 3;
+    delete v3.data.driveConflicts;
+    const fresh = openDatabase(':memory:');
+    try {
+      importData(fresh.db, v3, { backupDir });
+      const again = exportData(fresh.db);
+      expect(again.schemaVersion).toBe(4);
+      expect(again.data.drives).toEqual(exportData(db()).data.drives);
+    } finally {
+      fresh.sqlite.close();
+    }
+  });
+
+  it('R78: a version 4 file without driveConflicts is invalid; a pair of unknown, equal or unordered drives is rejected', () => {
+    const { a, b } = pairs();
+    const before = exportData(db());
+    const missing = JSON.parse(JSON.stringify(before));
+    delete missing.data.driveConflicts;
+    expect(invalidFrom(() => importData(db(), missing, { backupDir })).message).toBe(
+      'Export file failed validation',
+    );
+    const [lo, hi] = [a, b].sort() as [string, string];
+    const cases: [string, { driveAId: string; driveBId: string }][] = [
+      ['an unknown drive', { driveAId: lo, driveBId: 'zzz-unknown' }],
+      ['the same drive twice', { driveAId: lo, driveBId: lo }],
+      ['the wrong order', { driveAId: hi, driveBId: lo }],
+    ];
+    for (const [, pair] of cases) {
+      const bad = JSON.parse(JSON.stringify(before));
+      bad.data.driveConflicts = [{ ...pair, reason: null, createdAt: '2026-10-30T00:00:00.000Z' }];
+      expect(invalidFrom(() => importData(db(), bad, { backupDir })).message).toMatch(
+        /broken references/,
+      );
+    }
+    const twice = JSON.parse(JSON.stringify(before));
+    twice.data.driveConflicts = [...twice.data.driveConflicts, twice.data.driveConflicts[0]];
+    expect(invalidFrom(() => importData(db(), twice, { backupDir })).message).toMatch(
+      /broken references/,
+    );
+    expect(withoutTime(exportData(db()))).toEqual(withoutTime(before));
+  });
+});
+
 describe('R44: automatic backup', () => {
   it('writes a valid export of the pre-import data to exports/ before replacing it', () => {
     seedRealistic();
@@ -277,6 +399,7 @@ describe('R44: automatic backup', () => {
         slots: file.data.slots.length,
         drives: file.data.drives.length,
         pools: file.data.pools.length,
+        driveConflicts: file.data.driveConflicts.length,
         installations: file.data.installations.length,
         activities: file.data.activities.length,
         events: file.data.activities.reduce((n, a) => n + a.events.length, 0),
@@ -328,15 +451,6 @@ describe('R43: failed imports leave data untouched', () => {
   const expectUnchanged = (before: ExportFile) => {
     expect(withoutTime(exportData(db()))).toEqual(withoutTime(before));
   };
-  const invalidFrom = (fn: () => unknown): DomainError => {
-    try {
-      fn();
-    } catch (err) {
-      if (err instanceof DomainError) return err;
-      throw err;
-    }
-    throw new Error('expected import to fail');
-  };
 
   it('rejects non-export input without writing a backup', () => {
     seedRealistic();
@@ -358,11 +472,11 @@ describe('R43: failed imports leave data untouched', () => {
   it('rejects a newer schema version with a clear message', () => {
     seedRealistic();
     const before = exportData(db());
-    const file = { ...exportData(db()), schemaVersion: 4 };
+    const file = { ...exportData(db()), schemaVersion: 5 };
     const err = invalidFrom(() => importData(db(), file, { backupDir }));
     expect(err.code).toBe('invalid');
     expect(err.message).toBe(
-      'This export was made by a newer Sparrow (schema 4); this version supports up to 3.',
+      'This export was made by a newer Sparrow (schema 5); this version supports up to 4.',
     );
     expectUnchanged(before);
   });

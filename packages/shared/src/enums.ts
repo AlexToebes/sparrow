@@ -35,6 +35,8 @@ export const EVENT_TYPES = [
   'pool-created',
   'pool-updated',
   'pool-deleted',
+  'conflict-added',
+  'conflict-removed',
 ] as const;
 /** One user (or system) action; the unit the history is read in (R14). */
 export const ACTIVITY_KINDS = [
@@ -61,6 +63,8 @@ export const ACTIVITY_KINDS = [
   'health-polled',
   'layout-updated',
   'pool-edited',
+  'conflict-added',
+  'conflict-removed',
 ] as const;
 export const HEALTH_VALUES = ['ok', 'warning', 'failed', 'unknown'] as const;
 export const OBSERVATION_STATES = ['active', 'decommissioned'] as const;

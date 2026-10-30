@@ -13,6 +13,9 @@ import {
   storedDriveSchema,
   storedEventSchema,
   exportFileSchema,
+  addConflictInputSchema,
+  poolConflictText,
+  spareConflictText,
   EXPORT_SCHEMA_VERSION,
   gridSchema,
   normalizeSerial,
@@ -312,11 +315,11 @@ describe('pool, installation, activity schemas', () => {
     expect(activitySchema.safeParse(activity).success).toBe(false);
   });
 
-  it('R41, R42: the export is schema version 3 and carries installations and activities', () => {
-    expect(EXPORT_SCHEMA_VERSION).toBe(3);
+  it('R41, R42, R78: the export is schema version 4 and carries installations, activities and driveConflicts', () => {
+    expect(EXPORT_SCHEMA_VERSION).toBe(4);
     const file = {
       format: 'sparrow-export',
-      schemaVersion: 3,
+      schemaVersion: 4,
       exportedAt: ts,
       data: {
         enclosures: [],
@@ -325,13 +328,43 @@ describe('pool, installation, activity schemas', () => {
         drives: [],
         installations: [],
         pools: [],
+        driveConflicts: [],
         activities: [activity],
         appMeta: [],
       },
     };
     expect(exportFileSchema.safeParse(file).success).toBe(true);
+    expect(exportFileSchema.safeParse({ ...file, schemaVersion: 3 }).success).toBe(false);
     expect(exportFileSchema.safeParse({ ...file, schemaVersion: 2 }).success).toBe(false);
     expect(exportFileSchema.safeParse({ ...file, schemaVersion: 1 }).success).toBe(false);
+  });
+});
+
+describe('R78: drive conflicts', () => {
+  it('the input trims the reason and turns empty into null; too long is refused', () => {
+    expect(addConflictInputSchema.parse({ otherDriveId: 'x', reason: '  Same batch ' })).toEqual({
+      otherDriveId: 'x',
+      reason: 'Same batch',
+    });
+    expect(addConflictInputSchema.parse({ otherDriveId: 'x', reason: '   ' }).reason).toBeNull();
+    expect(addConflictInputSchema.parse({ otherDriveId: 'x' }).reason).toBeNull();
+    expect(
+      addConflictInputSchema.safeParse({ otherDriveId: 'x', reason: 'a'.repeat(201) }).success,
+    ).toBe(false);
+    expect(addConflictInputSchema.safeParse({ otherDriveId: 'x', extra: 1 }).success).toBe(false);
+  });
+
+  it('words the pool and spare warnings', () => {
+    expect(poolConflictText({ serialA: 'WD-A', serialB: 'WD-B', reason: 'Same batch' })).toBe(
+      'WD-A and WD-B are not recommended together (same batch)',
+    );
+    expect(poolConflictText({ serialA: 'WD-A', serialB: 'WD-B', reason: null })).toBe(
+      'WD-A and WD-B are not recommended together',
+    );
+    expect(spareConflictText({ serial: 'WD-B', reason: 'Same batch' })).toBe(
+      'Not recommended with WD-B: same batch',
+    );
+    expect(spareConflictText({ serial: 'WD-B', reason: null })).toBe('Not recommended with WD-B');
   });
 });
 

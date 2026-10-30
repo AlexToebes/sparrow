@@ -4,6 +4,7 @@ import { asc } from 'drizzle-orm';
 import {
   EXPORT_FORMAT,
   EXPORT_SCHEMA_VERSION,
+  MIN_IMPORT_SCHEMA_VERSION,
   exportFileSchema,
   normalizeSerial,
   type ExportData,
@@ -13,6 +14,7 @@ import type { AppDb } from '../db/client.js';
 import {
   activities,
   appMeta,
+  driveConflicts,
   drives,
   enclosures,
   events,
@@ -32,6 +34,7 @@ export interface ImportCounts {
   slots: number;
   drives: number;
   pools: number;
+  driveConflicts: number;
   installations: number;
   activities: number;
   events: number;
@@ -81,6 +84,11 @@ export function exportData(db: AppDb, now: Date = new Date()): ExportFile {
     drives: db.select().from(drives).orderBy(asc(drives.createdAt), asc(drives.id)).all(),
     installations: db.select().from(installations).orderBy(asc(installations.driveId)).all(),
     pools: db.select().from(pools).orderBy(asc(pools.createdAt), asc(pools.id)).all(),
+    driveConflicts: db
+      .select()
+      .from(driveConflicts)
+      .orderBy(asc(driveConflicts.driveAId), asc(driveConflicts.driveBId))
+      .all(),
     activities: exportActivities(db),
     appMeta: db.select().from(appMeta).orderBy(asc(appMeta.key)).all(),
   };
@@ -112,11 +120,25 @@ function checkVersion(input: unknown): void {
       `This export was made by a newer Sparrow (schema ${version}); this version supports up to ${EXPORT_SCHEMA_VERSION}.`,
     );
   }
-  if (version < EXPORT_SCHEMA_VERSION) {
+  if (version < MIN_IMPORT_SCHEMA_VERSION) {
     throw invalid(
       "This export was made by a pre-release build with an older format (before the activity log) and can't be imported; start fresh.",
     );
   }
+}
+
+/**
+ * R42, R78: a version 3 file (before drive conflicts) is upgraded in memory to version 4 with no
+ * pairs, so old exports keep importing. Anything else is returned unchanged.
+ */
+function upgradeToCurrent(input: unknown): unknown {
+  const file = input as { schemaVersion: number; data?: unknown };
+  if (file.schemaVersion !== 3) return input;
+  const data =
+    typeof file.data === 'object' && file.data !== null && !Array.isArray(file.data)
+      ? { driveConflicts: [], ...(file.data as object) }
+      : file.data;
+  return { ...file, schemaVersion: EXPORT_SCHEMA_VERSION, data };
 }
 
 /** Every id is unique per table and every foreign key points at an existing row in the file. */
@@ -169,6 +191,17 @@ function checkReferences(data: ExportData): string[] {
       if (e.driveId !== null) check(`event ${e.id}`, e.driveId, driveIds, 'drive');
     }
   }
+  // R78: a pair names two different drives of the file, in canonical order, once.
+  const pairs = new Set<string>();
+  for (const c of data.driveConflicts) {
+    const name = `drive conflict ${c.driveAId} / ${c.driveBId}`;
+    check(name, c.driveAId, driveIds, 'drive');
+    check(name, c.driveBId, driveIds, 'drive');
+    if (c.driveAId >= c.driveBId)
+      problems.push(`${name}: the drives must be two different ones in order`);
+    if (pairs.has(`${c.driveAId}|${c.driveBId}`)) problems.push(`${name}: listed twice`);
+    pairs.add(`${c.driveAId}|${c.driveBId}`);
+  }
   const metaKeys = new Set<string>();
   for (const m of data.appMeta) {
     if (metaKeys.has(m.key)) problems.push(`appMeta: duplicate key ${m.key}`);
@@ -189,7 +222,7 @@ export function importData(db: AppDb, input: unknown, opts: ImportOptions): Impo
   checkVersion(input);
 
   // 2. Full structural validation, then referential integrity, all before touching the DB.
-  const parsed = exportFileSchema.safeParse(input);
+  const parsed = exportFileSchema.safeParse(upgradeToCurrent(input));
   if (!parsed.success) {
     throw invalid('Export file failed validation', parsed.error.issues);
   }
@@ -226,6 +259,7 @@ export function importData(db: AppDb, input: unknown, opts: ImportOptions): Impo
       tx.delete(appMeta).run();
       tx.delete(activities).run(); // the events go with their activity (ON DELETE CASCADE)
       tx.delete(installations).run();
+      tx.delete(driveConflicts).run();
       tx.delete(drives).run();
       tx.delete(slots).run();
       tx.delete(grids).run();
@@ -242,6 +276,7 @@ export function importData(db: AppDb, input: unknown, opts: ImportOptions): Impo
           .values({ ...row, serialNormalized: normalizeSerial(row.serial) })
           .run();
       }
+      for (const row of data.driveConflicts) tx.insert(driveConflicts).values(row).run();
       for (const row of data.installations) tx.insert(installations).values(row).run();
       for (const { events: items, ...activity } of data.activities) {
         tx.insert(activities).values(activity).run(); // seq is preserved
@@ -270,6 +305,7 @@ export function importData(db: AppDb, input: unknown, opts: ImportOptions): Impo
       slots: data.slots.length,
       drives: data.drives.length,
       pools: data.pools.length,
+      driveConflicts: data.driveConflicts.length,
       installations: data.installations.length,
       activities: data.activities.length,
       events: data.activities.reduce((n, a) => n + a.events.length, 0),

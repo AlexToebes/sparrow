@@ -1,5 +1,13 @@
 import { sql, type SQL } from 'drizzle-orm';
-import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import {
+  check,
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
 import {
   ACTIVITY_KINDS,
   DRIVE_CONDITIONS,
@@ -156,6 +164,34 @@ export const installations = sqliteTable(
       sql`(${t.poolId} IS NULL) = (${t.poolRole} IS NULL)`,
     ),
     check('installations_pool_role_enum', inListOrNull('pool_role', MEMBERSHIP_ROLES)),
+  ],
+);
+
+// R78: two drives that are not recommended together (same batch, same purchase...). A symmetric pair is
+// stored ONCE in canonical order (drive_a_id < drive_b_id), so a pair cannot exist twice and a drive
+// cannot conflict with itself. It is the current situation only; adding and removing pairs is in the
+// activity log. Drives are never deleted (D5), hence RESTRICT. Retired drives keep their pairs; the
+// advice simply ignores them.
+export const driveConflicts = sqliteTable(
+  'drive_conflicts',
+  {
+    driveAId: text('drive_a_id')
+      .notNull()
+      .references(() => drives.id, { onDelete: 'restrict' }),
+    driveBId: text('drive_b_id')
+      .notNull()
+      .references(() => drives.id, { onDelete: 'restrict' }),
+    reason: text('reason'),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.driveAId, t.driveBId] }),
+    index('drive_conflicts_drive_b_idx').on(t.driveBId),
+    check('drive_conflicts_ordered', sql`${t.driveAId} < ${t.driveBId}`),
+    check(
+      'drive_conflicts_reason_length',
+      sql`${t.reason} IS NULL OR (length(${t.reason}) >= 1 AND length(${t.reason}) <= 200)`,
+    ),
   ],
 );
 

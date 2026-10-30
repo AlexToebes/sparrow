@@ -214,7 +214,7 @@ describe('R60: retirement date is optional (not recorded rather than guessed)', 
         retirementDate: null,
       });
       expect(again.data.drives[0]).not.toHaveProperty('status');
-      expect(again.schemaVersion).toBe(3);
+      expect(again.schemaVersion).toBe(4);
     } finally {
       fresh.sqlite.close();
       rmSync(tmp, { recursive: true, force: true });
