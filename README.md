@@ -117,7 +117,7 @@ Sparrow uses [semantic versioning](https://semver.org). A release is made by pus
 
 Image tags: `:1.0.0` (an exact release), `:1.0` (the latest 1.0.x patch), `:latest` (the newest build of `main`, not necessarily a release) and `:sha-xxxxxxx` (one exact build). For a NAS, pin your compose file to `:1.0` (or a full version such as `:1.0.0`) and upgrade deliberately by changing the tag, rather than following `:latest`.
 
-Settings > About shows the running version and the commit it was built from, for example "Sparrow 1.0.0 · commit 4f9feb7". Database migrations run at startup and upgrade the database in place, so an upgrade is: change the tag, pull, restart. Downgrading is not supported; restore an export or a copy of `/data` instead.
+Settings > About shows the running version and the commit it was built from, for example "Sparrow 1.1.0 · commit 4f9feb7". Database migrations run at startup and upgrade the database in place, so an upgrade is: change the tag, pull, restart. Downgrading is not supported; restore an export or a copy of `/data` instead.
 
 ## Development
 
